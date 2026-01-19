@@ -84,21 +84,24 @@ export const CallModal: React.FC<CallModalProps> = ({
 
     // Handle video track playback for web
     // Note: On web, the Agora SDK handles video rendering through the client/tracks
-    // The engine prop may be null on web - video playback is handled by the useAgoraCall hook
+    // The engine prop contains { localVideoTrack, client } on web (not the native Agora engine)
     useEffect(() => {
         if (!visible || !isVideoCall) return;
 
-        // Only try to play if engine is provided and has the expected methods
-        if (!engine) {
-            console.log('[CallModal Web] No engine provided - video handled by hook');
-            return;
-        }
+        console.log('[CallModal Web] Video playback effect triggered, engine:', engine, 'remoteUsers:', remoteUsers, 'isVideoEnabled:', isVideoEnabled);
+
+        // On web, engine may contain { localVideoTrack, client } or be null
+        // We need to handle both cases
+        const localTrack = engine?.localVideoTrack;
+        const client = engine?.client;
 
         const playRemoteVideo = async () => {
-            if (remoteVideoRef.current && remoteUsers.length > 0) {
+            if (remoteVideoRef.current && remoteUsers.length > 0 && client) {
                 try {
-                    const remoteUser = engine.remoteUsers?.find((u: any) => u.uid === remoteUsers[0]);
+                    const remoteUser = client.remoteUsers?.find((u: any) => u.uid === remoteUsers[0]);
+                    console.log('[CallModal Web] Looking for remote user:', remoteUsers[0], 'found:', remoteUser);
                     if (remoteUser?.videoTrack) {
+                        console.log('[CallModal Web] Playing remote video track');
                         remoteUser.videoTrack.play(remoteVideoRef.current);
                     }
                 } catch (err) {
@@ -108,12 +111,15 @@ export const CallModal: React.FC<CallModalProps> = ({
         };
 
         const playLocalVideo = async () => {
-            if (localVideoRef.current && engine?.localVideoTrack) {
+            if (localVideoRef.current && localTrack) {
                 try {
-                    engine.localVideoTrack.play(localVideoRef.current);
+                    console.log('[CallModal Web] Playing local video track');
+                    localTrack.play(localVideoRef.current);
                 } catch (err) {
                     console.error('[CallModal Web] Failed to play local video:', err);
                 }
+            } else {
+                console.log('[CallModal Web] Cannot play local video - ref:', !!localVideoRef.current, 'track:', !!localTrack);
             }
         };
 

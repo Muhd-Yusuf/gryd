@@ -61,6 +61,9 @@ interface UseAgoraCallOptions {
 }
 
 export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
+    // Log to confirm web hook is being used (not the native stub)
+    console.log('[useAgoraCall.web.ts] Web Agora hook initialized - real Agora SDK');
+
     const [callState, setCallState] = useState<CallState>('idle');
     const [callType, setCallType] = useState<CallType>('audio');
     const [currentCall, setCurrentCall] = useState<CallSession | null>(null);
@@ -70,6 +73,9 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const [remoteUsers, setRemoteUsers] = useState<number[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [callDuration, setCallDuration] = useState(0);
+    // State for tracks to trigger re-renders when tracks are created
+    const [localVideoTrack, setLocalVideoTrack] = useState<ICameraVideoTrack | null>(null);
+    const [client, setClient] = useState<IAgoraRTCClient | null>(null);
 
     const clientRef = useRef<IAgoraRTCClient | null>(null);
     const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
@@ -144,6 +150,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             });
 
             clientRef.current = client;
+            setClient(client); // Update state to trigger re-renders
             return client;
         } catch (err: any) {
             console.error('[Agora Web] Failed to initialize client:', err);
@@ -187,15 +194,28 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     // Create local tracks
     const createLocalTracks = useCallback(async (type: CallType) => {
         try {
+            console.log('[Agora Web] Creating local tracks for call type:', type);
+
             // Create audio track
             const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
             localAudioTrackRef.current = audioTrack;
+            console.log('[Agora Web] Audio track created successfully');
 
             // Create video track if video call
+            let videoTrack = null;
             if (type === 'video') {
-                const videoTrack = await AgoraRTC.createCameraVideoTrack();
-                localVideoTrackRef.current = videoTrack;
-                setIsVideoEnabled(true);
+                try {
+                    videoTrack = await AgoraRTC.createCameraVideoTrack();
+                    localVideoTrackRef.current = videoTrack;
+                    setLocalVideoTrack(videoTrack); // Update state to trigger re-renders
+                    setIsVideoEnabled(true);
+                    console.log('[Agora Web] Video track created successfully');
+                } catch (videoErr: any) {
+                    console.error('[Agora Web] Failed to create video track:', videoErr);
+                    // Continue with audio-only if video fails
+                    setIsVideoEnabled(false);
+                    setLocalVideoTrack(null);
+                }
             }
 
             return { audioTrack, videoTrack: localVideoTrackRef.current };
@@ -217,6 +237,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             localVideoTrackRef.current.close();
             localVideoTrackRef.current = null;
         }
+        setLocalVideoTrack(null); // Reset state
     }, []);
 
     // Start a DM call
@@ -279,14 +300,18 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
     // Answer incoming call (callId and callType passed from CallContext)
     const answer = useCallback(async (callId: string, callTypeArg?: CallType) => {
+        console.log('[Agora Web] answer() called with callId:', callId, 'callType:', callTypeArg);
         try {
             setError(null);
             setCallState('connecting');
+            console.log('[Agora Web] Set callState to connecting');
             const type = callTypeArg || 'audio';
             setCallType(type);
             setCallDuration(0);
 
+            console.log('[Agora Web] Calling apiAnswerCall...');
             const response = await apiAnswerCall(callId);
+            console.log('[Agora Web] apiAnswerCall response:', response);
             if (!response.success) {
                 setError(response.error || 'Failed to answer call');
                 setCallState('idle');
@@ -294,12 +319,14 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             }
 
             const { channelName, token, uid, appId } = response.data;
+            console.log('[Agora Web] Got channel info:', { channelName, uid, appId });
 
             // Initialize client and create tracks
             const client = await initClient();
             const { audioTrack, videoTrack } = await createLocalTracks(type);
 
             // Join channel
+            console.log('[Agora Web] Joining channel as callee...');
             await client.join(appId, channelName, token, uid);
             console.log('[Agora Web] Joined channel as callee:', channelName);
 
@@ -307,9 +334,10 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             const tracksToPublish = [audioTrack];
             if (videoTrack) {
                 tracksToPublish.push(videoTrack);
+                console.log('[Agora Web] Including video track in publish');
             }
             await client.publish(tracksToPublish);
-            console.log('[Agora Web] Published local tracks');
+            console.log('[Agora Web] Published local tracks, count:', tracksToPublish.length);
 
             setCurrentCall({
                 callId,
@@ -323,6 +351,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             });
 
             setCallState('connected');
+            console.log('[Agora Web] Set callState to connected');
             startDurationTimer();
             return response.data;
         } catch (err: any) {
@@ -482,12 +511,17 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         toggleSpeaker,
         switchCamera,
 
-        // Track references for video rendering
-        localVideoTrack: localVideoTrackRef.current,
-        client: clientRef.current,
+        // Track references for video rendering (use state values for reactivity)
+        localVideoTrack,
+        client,
 
-        // Engine reference (null on web, but we provide client instead)
-        engine: null,
+        // Engine object containing tracks and client for CallModal.web.tsx
+        // On web, this contains { localVideoTrack, client } instead of native Agora engine
+        // Using state values ensures component re-renders when tracks are created
+        engine: {
+            localVideoTrack,
+            client,
+        },
     };
 };
 

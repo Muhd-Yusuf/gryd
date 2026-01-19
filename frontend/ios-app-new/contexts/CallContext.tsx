@@ -27,6 +27,7 @@ export interface ActiveCall {
     callType: 'audio' | 'video';
     startedAt: number; // Timestamp when call was started
     isConnected?: boolean; // True when Agora has successfully connected
+    isAnswering?: boolean; // True when we're in the process of answering (receiver side)
 }
 
 interface CallContextType {
@@ -154,6 +155,13 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
                         break;
                     }
 
+                    // If we're in the process of answering (receiver side), ignore missed/declined events
+                    // The answer process is async and stale events could arrive before Agora connects
+                    if (activeCallRef.current.isAnswering && (event === 'call_missed' || event === 'call_declined')) {
+                        console.log('[CallContext] Ignoring', event, 'event - we are in the process of answering');
+                        break;
+                    }
+
                     const callIdMatches = activeCallRef.current.callId === data.callId;
                     // Check if this event is from after our call started (not a stale event)
                     const eventTimestamp = data.timestamp || 0;
@@ -181,13 +189,18 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
         handledCallIdsRef.current.add(incomingCall.callId);
 
         // Set active call for tracking (used for redirect on end)
-        setActiveCall({
+        // Set isAnswering: true to prevent stale events from redirecting during answer process
+        const newActiveCall = {
             callId: incomingCall.callId,
             peerId: incomingCall.callerId,
             peerName: incomingCall.callerName,
             callType: incomingCall.callType,
             startedAt: Date.now(),
-        });
+            isAnswering: true,
+        };
+        setActiveCall(newActiveCall);
+        // Update ref immediately so event handlers see the change right away
+        activeCallRef.current = newActiveCall;
 
         // Navigate to the DM screen with the caller to handle the call
         // The DM screen's useAgoraCall hook will handle actually answering
@@ -221,10 +234,10 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
 
     // Mark the active call as connected (prevents stale events from closing call)
     const markCallConnected = useCallback(() => {
-        setActiveCall(prev => prev ? { ...prev, isConnected: true } : null);
+        setActiveCall(prev => prev ? { ...prev, isConnected: true, isAnswering: false } : null);
         // Also update the ref immediately so event handlers see the change
         if (activeCallRef.current) {
-            activeCallRef.current = { ...activeCallRef.current, isConnected: true };
+            activeCallRef.current = { ...activeCallRef.current, isConnected: true, isAnswering: false };
         }
         console.log('[CallContext] Marked active call as connected');
     }, []);

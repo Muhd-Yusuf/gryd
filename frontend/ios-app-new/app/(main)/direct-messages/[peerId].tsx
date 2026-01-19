@@ -132,7 +132,13 @@ const blobToDataUrl = (blob: Blob) =>
 
 const normalizeAttachments = (message: Message) => {
     const raw = Array.isArray(message.attachments) ? message.attachments : [];
-    return raw
+
+    // Debug: log raw attachments to understand their structure
+    if (raw.length > 0) {
+        console.log('[DM] Raw attachments for message:', message._id, JSON.stringify(raw));
+    }
+
+    const result = raw
         .map((item) => {
             if (!item) return null;
             if (typeof item === 'string') {
@@ -141,14 +147,46 @@ const normalizeAttachments = (message: Message) => {
                 if (lowerItem.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)) {
                     return { type: 'image' as const, value: item, uri: item };
                 }
+                // Check for audio files (voice notes) - including cloudinary URLs
+                if (lowerItem.match(/\.(mp3|wav|webm|m4a|ogg|aac)(\?|$)/i) || lowerItem.includes('/video/upload/') || lowerItem.includes('/raw/upload/')) {
+                    return { type: 'audio' as const, value: item, uri: item };
+                }
+                // Check for cloudinary image URLs
+                if (lowerItem.includes('/image/upload/')) {
+                    return { type: 'image' as const, value: item, uri: item };
+                }
                 return { type: 'sticker' as const, value: item, uri: item };
             }
-            const typed = item as Attachment & { uri?: string };
-            // Preserve the original type and set uri appropriately
-            const uri = typed.uri || (typed.type === 'emoji' ? twemojiUrl(typed.value) : typed.value);
-            return { ...typed, uri };
+
+            // Handle object attachments
+            const typed = item as Attachment & { uri?: string; url?: string; src?: string; secure_url?: string };
+
+            // Get the URL from various possible properties
+            const attachmentUrl = typed.value || typed.uri || typed.url || typed.src || typed.secure_url || '';
+
+            // Determine type if not specified
+            let attachmentType = typed.type;
+            if (!attachmentType && attachmentUrl) {
+                const lowerUrl = attachmentUrl.toLowerCase();
+                if (lowerUrl.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || lowerUrl.includes('/image/upload/')) {
+                    attachmentType = 'image';
+                } else if (lowerUrl.match(/\.(mp3|wav|webm|m4a|ogg|aac)(\?|$)/i) || lowerUrl.includes('/video/upload/') || lowerUrl.includes('/raw/upload/')) {
+                    attachmentType = 'audio';
+                }
+            }
+
+            // Set uri appropriately
+            const uri = typed.uri || (attachmentType === 'emoji' ? twemojiUrl(typed.value) : attachmentUrl);
+
+            return { ...typed, type: attachmentType, value: attachmentUrl, uri };
         })
         .filter(Boolean) as Array<Attachment & { uri?: string }>;
+
+    // Debug logging for attachments
+    if (result.length > 0) {
+        console.log('[DM] Normalized attachments:', message._id, result);
+    }
+    return result;
 };
 
 const groupMessagesByDate = (messages: Message[]) => {
@@ -342,7 +380,13 @@ const DirectMessageChatScreen = () => {
             setError('');
             try {
                 const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${peerId}`);
-                setMessages(response?.data || []);
+                const msgs = response?.data || [];
+                // Debug: Log messages with attachments
+                const msgsWithAttachments = msgs.filter((m: Message) => m.attachments && m.attachments.length > 0);
+                if (msgsWithAttachments.length > 0) {
+                    console.log('[DM] Messages with attachments loaded:', msgsWithAttachments.length, msgsWithAttachments);
+                }
+                setMessages(msgs);
             } catch (err: any) {
                 setMessages([]);
                 setError(err.message || 'Failed to load direct messages.');
@@ -922,6 +966,7 @@ const DirectMessageChatScreen = () => {
                                                                 key={`${message._id}-img-${idx}`}
                                                                 source={{ uri: attachment.uri }}
                                                                 style={styles.attachmentImage}
+                                                                resizeMode="cover"
                                                             />
                                                         );
                                                     }
@@ -931,6 +976,7 @@ const DirectMessageChatScreen = () => {
                                                                 key={`${message._id}-img-${idx}`}
                                                                 source={{ uri: attachment.value }}
                                                                 style={styles.attachmentImage}
+                                                                resizeMode="cover"
                                                             />
                                                         );
                                                     }
