@@ -1,0 +1,15 @@
+# Secrets
+.env
+**/.env
+
+# Node
+node_modules/
+**/node_modules/
+
+# Logs
+*.log
+
+# Local tooling
+.claude/
+tmpclaude-*
+nul
