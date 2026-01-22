@@ -1,0 +1,11 @@
+{
+  "framework": null,
+  "buildCommand": "cd frontend/ios-app-new && npm install && npx expo export --platform web",
+  "outputDirectory": "frontend/ios-app-new/dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
