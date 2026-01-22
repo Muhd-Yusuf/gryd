@@ -323,6 +323,10 @@ const defineModels = (connection) => {
             type: Date,
             default: null,
         },
+        contentSnapshot: {
+            type: Schema.Types.Mixed,
+            default: null,
+        },
         createdAt: {
             type: Date,
             default: Date.now,

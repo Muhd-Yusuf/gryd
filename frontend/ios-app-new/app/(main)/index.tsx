@@ -12,6 +12,8 @@ import {
     Platform,
     Modal,
     Animated,
+    Alert,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -29,10 +31,11 @@ import {
 } from 'lucide-react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, initiateChannelCall, uploadFile } from '../../lib/api';
+import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, initiateChannelCall, uploadFile, logout } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
+import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
@@ -51,6 +54,7 @@ type Channel = {
 type Subgrid = {
     _id: string;
     name?: string;
+    logoUrl?: string;
 };
 
 type Post = {
@@ -144,6 +148,8 @@ const normalizeAttachments = (attachments?: Array<Attachment | string>) => {
         .filter(Boolean) as Array<Attachment & { uri?: string }>;
 };
 
+const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', 'Other'];
+
 const TenantCommunityScreen = () => {
     const { colors, mode, toggleTheme } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
@@ -172,9 +178,28 @@ const TenantCommunityScreen = () => {
     const [textChannelsOpen, setTextChannelsOpen] = useState(true);
     const [voiceChannelsOpen, setVoiceChannelsOpen] = useState(true);
     const [activeRail, setActiveRail] = useState('home');
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [feedMenuOpen, setFeedMenuOpen] = useState<string | null>(null);
+    const [feedMenuPosition, setFeedMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+    const [feedMenuItem, setFeedMenuItem] = useState<any>(null);
+    const [reportModalOpen, setReportModalOpen] = useState(false);
+    const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
+    const [reportNotes, setReportNotes] = useState('');
+    const [reportTarget, setReportTarget] = useState<{ id: string; type: 'post' | 'message' } | null>(null);
+    const [reportSubmitting, setReportSubmitting] = useState(false);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'post' | 'message' } | null>(null);
+    const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const router = useRouter();
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+            router.replace('/login');
+        } catch (err) {
+            console.error('Logout failed:', err);
+        }
+    };
 
     // Attachment and recording state
     const [attachments, setAttachments] = useState<Array<{ uri: string; name: string; type: string }>>([]);
@@ -220,8 +245,6 @@ const TenantCommunityScreen = () => {
     useEffect(() => {
         const loadSubgrids = async () => {
             if (!tenantId) return;
-            setLoading(true);
-            setError('');
             try {
                 const response = await communityGet(`/tenants/${tenantId}/subgrids`);
                 const list = response?.data || [];
@@ -230,9 +253,7 @@ const TenantCommunityScreen = () => {
                     setActiveSubgridId(list[0]._id);
                 }
             } catch (err: any) {
-                setError(err.message || 'Failed to load subgrids.');
-            } finally {
-                setLoading(false);
+                console.error('Failed to load subgrids:', err.message);
             }
         };
 
@@ -248,8 +269,6 @@ const TenantCommunityScreen = () => {
                 setMemberCount(0);
                 return;
             }
-            setLoading(true);
-            setError('');
             try {
                 const results = await Promise.allSettled([
                     communityGet(`/subgrids/${activeSubgridId}/channels`),
@@ -284,9 +303,7 @@ const TenantCommunityScreen = () => {
                     setFriendUsers({});
                 }
             } catch (err: any) {
-                setError(err.message || 'Failed to load community data.');
-            } finally {
-                setLoading(false);
+                console.error('Failed to load community data:', err.message);
             }
         };
 
@@ -806,6 +823,102 @@ const TenantCommunityScreen = () => {
         });
     }, [messages, posts]);
 
+    const openReportModal = (id: string, type: 'post' | 'message') => {
+        setReportTarget({ id, type });
+        setReportReason(REPORT_REASONS[0]);
+        setReportNotes('');
+        setReportModalOpen(true);
+    };
+
+    // Handle opening feed action menu with floating position
+    const handleOpenFeedMenu = (event: any, item: any, isPost: boolean) => {
+        if (feedMenuOpen === item._id) {
+            setFeedMenuOpen(null);
+            setFeedMenuItem(null);
+            return;
+        }
+        const target = event.currentTarget || event.target;
+        if (target && target.getBoundingClientRect) {
+            const rect = target.getBoundingClientRect();
+            setFeedMenuPosition({
+                top: rect.bottom + 5,
+                right: window.innerWidth - rect.right,
+            });
+        }
+        setFeedMenuItem({ ...item, isPost });
+        setFeedMenuOpen(item._id);
+    };
+
+    const closeFeedMenu = () => {
+        setFeedMenuOpen(null);
+        setFeedMenuItem(null);
+    };
+
+    const submitReport = async () => {
+        if (!activeSubgridId || !reportTarget) return;
+        const reason = reportReason === 'Other' ? reportNotes.trim() : reportReason;
+        if (!reason) {
+            if (Platform.OS === 'web') {
+                window.alert('Please select a report reason.');
+            } else {
+                Alert.alert('Missing reason', 'Please select a report reason.');
+            }
+            return;
+        }
+        setReportSubmitting(true);
+        try {
+            const path =
+                reportTarget.type === 'post'
+                    ? `/subgrids/${activeSubgridId}/posts/${reportTarget.id}/flag`
+                    : `/subgrids/${activeSubgridId}/messages/${reportTarget.id}/flag`;
+            await communityPost(path, { reason });
+            setReportModalOpen(false);
+            setReportTarget(null);
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to submit report.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to submit report.');
+            }
+        } finally {
+            setReportSubmitting(false);
+        }
+    };
+
+    // Delete handler for posts/messages (only own content)
+    const openDeleteModal = (id: string, type: 'post' | 'message') => {
+        setDeleteTarget({ id, type });
+        setDeleteModalOpen(true);
+    };
+
+    const submitDelete = async () => {
+        if (!activeSubgridId || !deleteTarget) return;
+        setDeleteSubmitting(true);
+        try {
+            const path =
+                deleteTarget.type === 'post'
+                    ? `/subgrids/${activeSubgridId}/posts/${deleteTarget.id}`
+                    : `/subgrids/${activeSubgridId}/messages/${deleteTarget.id}`;
+            await communityDelete(path);
+            // Update local state
+            if (deleteTarget.type === 'post') {
+                setPosts((prev) => prev.filter((p) => p._id !== deleteTarget.id));
+            } else {
+                setMessages((prev) => prev.filter((m) => m._id !== deleteTarget.id));
+            }
+            setDeleteModalOpen(false);
+            setDeleteTarget(null);
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to delete content.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to delete content.');
+            }
+        } finally {
+            setDeleteSubmitting(false);
+        }
+    };
+
     // Like handler for posts
     const handleLikePost = async (postId: string, isLiked: boolean) => {
         if (!activeSubgridId || likeLoading) return;
@@ -881,7 +994,7 @@ const TenantCommunityScreen = () => {
     };
 
     // Show empty state when no tenants/subgrids
-    if (!loading && !tenantId && !error) {
+    if (!tenantId && !error) {
         return (
             <SafeAreaView style={styles.safe}>
                 <View style={styles.emptyState}>
@@ -900,7 +1013,7 @@ const TenantCommunityScreen = () => {
         );
     }
 
-    if (!loading && subgrids.length === 0 && tenantId && !error) {
+    if (subgrids.length === 0 && tenantId && !error) {
         return (
             <SafeAreaView style={styles.safe}>
                 <View style={styles.emptyState}>
@@ -930,7 +1043,15 @@ const TenantCommunityScreen = () => {
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
                         <View style={styles.leftRail}>
                             <TouchableOpacity style={styles.railLogo} onPress={() => router.push('/(main)')}>
-                                <MaterialIcons name="grid-view" size={20} color="#FFFFFF" />
+                                {activeSubgrid ? (
+                                    activeSubgrid.logoUrl ? (
+                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                                    ) : (
+                                        <Text style={styles.railLogoText}>
+                                            {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
+                                        </Text>
+                                    )
+                                ) : null}
                             </TouchableOpacity>
                             {railItems.map((item) => {
                                 const isActive = activeRail === item.id;
@@ -960,7 +1081,7 @@ const TenantCommunityScreen = () => {
                                 />
                             </TouchableOpacity>
                             <View style={{ flex: 1 }} />
-                            <TouchableOpacity style={styles.exitButton}>
+                            <TouchableOpacity style={styles.exitButton} onPress={handleLogout}>
                                 <MaterialIcons name="close" size={18} color="#FFFFFF" />
                             </TouchableOpacity>
                         </View>
@@ -992,7 +1113,6 @@ const TenantCommunityScreen = () => {
                             </View>
 
                             {!!error && <Text style={styles.errorText}>{error}</Text>}
-                            {loading && <Text style={styles.helperText}>Loading channels...</Text>}
 
                             <ScrollView contentContainerStyle={styles.channelList}>
                                 {/* Text Channels */}
@@ -1101,6 +1221,7 @@ const TenantCommunityScreen = () => {
                                     const likeCount = item.likeCount ?? 0;
                                     const commentCount = item.commentCount ?? 0;
                                     const reshareCount = item.reshareCount ?? 0;
+                                    const isPost = !!item.authorId;
                                     return (
                                     <View key={item._id} style={styles.feedCard}>
                                         <View style={styles.feedHeader}>
@@ -1113,6 +1234,14 @@ const TenantCommunityScreen = () => {
                                                 <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
                                                 <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
                                             </View>
+                                            <View style={styles.feedHeaderActions}>
+                                                <TouchableOpacity
+                                                    style={styles.feedMenuButton}
+                                                    onPress={(e) => handleOpenFeedMenu(e, item, isPost)}
+                                                >
+                                                    <MoreHorizontal size={16} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                            </View>
                                         </View>
                                         {!!item.body && (
                                             <Text style={styles.feedText} numberOfLines={4}>
@@ -1123,18 +1252,15 @@ const TenantCommunityScreen = () => {
                                         {normalizeAttachments(item.attachments).length > 0 && (
                                             <View style={styles.attachmentStack}>
                                                 {normalizeAttachments(item.attachments).map((attachment, idx) => {
-                                                    if (attachment.type === 'audio') {
+                                                    if (attachment.type === 'audio' || attachment.type === 'voice') {
                                                         return (
-                                                            <TouchableOpacity
+                                                            <VoiceMessagePlayer
                                                                 key={`${item._id}-audio-${idx}`}
-                                                                style={styles.audioBubble}
-                                                                onPress={() => handlePlayAudio(attachment.value)}
-                                                            >
-                                                                <View style={styles.audioDot} />
-                                                                <Text style={styles.audioText}>
-                                                                    Voice note {formatDuration(attachment.durationMs)}
-                                                                </Text>
-                                                            </TouchableOpacity>
+                                                                source={attachment.value}
+                                                                durationMs={attachment.durationMs}
+                                                                colors={colors}
+                                                                compact
+                                                            />
                                                         );
                                                     }
                                                     if (attachment.type === 'image') {
@@ -1358,6 +1484,125 @@ const TenantCommunityScreen = () => {
                 </View>
             </View>
 
+            {/* Floating Feed Action Menu */}
+            {feedMenuOpen && feedMenuItem && (
+                <>
+                    <Pressable
+                        style={styles.floatingMenuOverlay}
+                        onPress={closeFeedMenu}
+                    />
+                    <View style={[styles.floatingMenuDropdown, { top: feedMenuPosition.top, right: feedMenuPosition.right }]}>
+                        {/* Show Delete option only for own posts/messages */}
+                        {(feedMenuItem.authorId === userId || feedMenuItem.senderId === userId) && (
+                            <TouchableOpacity
+                                style={styles.floatingMenuItem}
+                                onPress={() => {
+                                    openDeleteModal(feedMenuItem._id, feedMenuItem.isPost ? 'post' : 'message');
+                                    closeFeedMenu();
+                                }}
+                            >
+                                <MaterialIcons name="delete" size={16} color="#EF4444" />
+                                <Text style={[styles.floatingMenuItemText, { color: '#EF4444' }]}>Delete</Text>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            style={styles.floatingMenuItem}
+                            onPress={() => {
+                                openReportModal(feedMenuItem._id, feedMenuItem.isPost ? 'post' : 'message');
+                                closeFeedMenu();
+                            }}
+                        >
+                            <MaterialIcons name="flag" size={16} color={colors.textMuted} />
+                            <Text style={styles.floatingMenuItemText}>Report</Text>
+                        </TouchableOpacity>
+                    </View>
+                </>
+            )}
+
+            {/* Report Modal */}
+            <Modal visible={reportModalOpen} transparent animationType="fade" onRequestClose={() => setReportModalOpen(false)}>
+                <View style={styles.reportOverlay}>
+                    <TouchableOpacity style={styles.reportBackdrop} activeOpacity={1} onPress={() => setReportModalOpen(false)} />
+                    <View style={styles.reportCard}>
+                        <View style={styles.reportHeader}>
+                            <Text style={styles.reportTitle}>Report content</Text>
+                            <TouchableOpacity onPress={() => setReportModalOpen(false)}>
+                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.reportSubtitle}>Select a reason for this report.</Text>
+                        <View style={styles.reportReasonGrid}>
+                            {REPORT_REASONS.map((reason) => (
+                                <TouchableOpacity
+                                    key={reason}
+                                    style={[styles.reportReasonChip, reportReason === reason && styles.reportReasonChipActive]}
+                                    onPress={() => setReportReason(reason)}
+                                >
+                                    <Text style={[styles.reportReasonText, reportReason === reason && styles.reportReasonTextActive]}>
+                                        {reason}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        {reportReason === 'Other' && (
+                            <View style={styles.reportNotesWrap}>
+                                <Text style={styles.reportNotesLabel}>Reason details</Text>
+                                <TextInput
+                                    style={styles.reportNotesInput}
+                                    value={reportNotes}
+                                    onChangeText={setReportNotes}
+                                    placeholder="Share more details..."
+                                    placeholderTextColor={colors.textMuted}
+                                    multiline
+                                />
+                            </View>
+                        )}
+                        <View style={styles.reportActions}>
+                            <TouchableOpacity style={styles.reportCancelBtn} onPress={() => setReportModalOpen(false)}>
+                                <Text style={styles.reportCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.reportSubmitBtn, reportSubmitting && styles.reportSubmitBtnDisabled]}
+                                onPress={submitReport}
+                                disabled={reportSubmitting}
+                            >
+                                <Text style={styles.reportSubmitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Delete Confirmation Modal */}
+            <Modal visible={deleteModalOpen} transparent animationType="fade" onRequestClose={() => setDeleteModalOpen(false)}>
+                <View style={styles.reportOverlay}>
+                    <TouchableOpacity style={styles.reportBackdrop} activeOpacity={1} onPress={() => setDeleteModalOpen(false)} />
+                    <View style={styles.reportCard}>
+                        <View style={styles.reportHeader}>
+                            <Text style={styles.reportTitle}>Delete {deleteTarget?.type === 'post' ? 'Post' : 'Message'}?</Text>
+                            <TouchableOpacity onPress={() => setDeleteModalOpen(false)}>
+                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.reportSubtitle}>
+                            This will permanently delete this {deleteTarget?.type}. This action cannot be undone.
+                        </Text>
+                        <View style={styles.reportActions}>
+                            <TouchableOpacity style={styles.reportCancelBtn} onPress={() => setDeleteModalOpen(false)}>
+                                <Text style={styles.reportCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.reportSubmitBtn, { backgroundColor: '#EF4444' }, deleteSubmitting && styles.reportSubmitBtnDisabled]}
+                                onPress={submitDelete}
+                                disabled={deleteSubmitting}
+                            >
+                                <Text style={styles.reportSubmitText}>{deleteSubmitting ? 'Deleting...' : 'Delete'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
             {/* Emoji Picker Modal */}
             <Modal visible={showEmojiPicker} transparent animationType="fade" onRequestClose={() => setShowEmojiPicker(false)}>
                 <TouchableOpacity
@@ -1472,6 +1717,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 8,
+        },
+        railLogoImage: {
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+        },
+        railLogoText: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: '#FFFFFF',
         },
         railButton: {
             width: 48,
@@ -1689,6 +1944,75 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         feedHeaderInfo: {
             flex: 1,
         },
+        feedHeaderActions: {
+            position: 'relative',
+        },
+        feedMenuButton: {
+            padding: 4,
+        },
+        feedMenuDropdown: {
+            position: 'absolute',
+            top: 24,
+            right: 0,
+            backgroundColor: colors.surface,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 6,
+            minWidth: 120,
+            zIndex: 20,
+        },
+        feedMenuItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+        },
+        feedMenuText: {
+            fontSize: 12,
+            color: colors.text,
+        },
+        // Floating menu styles for proper z-index handling
+        floatingMenuOverlay: {
+            position: 'fixed' as any,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9998,
+            backgroundColor: 'transparent',
+        },
+        floatingMenuDropdown: {
+            position: 'fixed' as any,
+            backgroundColor: colors.surface,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 10,
+            zIndex: 9999,
+            minWidth: 140,
+            paddingVertical: 4,
+        },
+        floatingMenuItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+        },
+        floatingMenuItemText: {
+            fontSize: 14,
+            color: colors.text,
+        },
         avatar: {
             width: 40,
             height: 40,
@@ -1889,6 +2213,116 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             backgroundColor: '#5865F2',
             borderRadius: 20,
             padding: 10,
+        },
+        reportOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+        },
+        reportBackdrop: {
+            ...StyleSheet.absoluteFillObject,
+        },
+        reportCard: {
+            width: '100%',
+            maxWidth: 420,
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            padding: 20,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        reportHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 8,
+        },
+        reportTitle: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        reportSubtitle: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginBottom: 14,
+        },
+        reportReasonGrid: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        reportReasonChip: {
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+        },
+        reportReasonChipActive: {
+            backgroundColor: '#111111',
+            borderColor: '#111111',
+        },
+        reportReasonText: {
+            fontSize: 12,
+            color: colors.text,
+        },
+        reportReasonTextActive: {
+            color: '#FFFFFF',
+            fontWeight: '600',
+        },
+        reportNotesWrap: {
+            marginTop: 16,
+        },
+        reportNotesLabel: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.textMuted,
+            marginBottom: 6,
+        },
+        reportNotesInput: {
+            minHeight: 80,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 10,
+            padding: 12,
+            color: colors.text,
+            backgroundColor: colors.surfaceMuted,
+            textAlignVertical: 'top',
+        },
+        reportActions: {
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            gap: 12,
+            marginTop: 18,
+        },
+        reportCancelBtn: {
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 18,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        reportCancelText: {
+            fontSize: 12,
+            color: colors.text,
+        },
+        reportSubmitBtn: {
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 18,
+            backgroundColor: '#111111',
+        },
+        reportSubmitBtnDisabled: {
+            opacity: 0.6,
+        },
+        reportSubmitText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         emojiModalOverlay: {
             flex: 1,

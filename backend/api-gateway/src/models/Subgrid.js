@@ -9,7 +9,8 @@ const subgridSchema = new mongoose.Schema({
     },
     name: {
         type: String,
-        required: true,
+        required: false,
+        default: '',
         trim: true,
     },
     slug: {
@@ -121,7 +122,7 @@ subgridSchema.statics.generateInviteCode = function () {
 };
 
 // Pre-save hook to generate invite code if not set
-subgridSchema.pre('save', async function (next) {
+subgridSchema.pre('save', async function () {
     if (!this.inviteCode) {
         const Subgrid = this.constructor;
         let code;
@@ -134,7 +135,6 @@ subgridSchema.pre('save', async function (next) {
         }
         this.inviteCode = code;
     }
-    next();
 });
 
 subgridSchema.index({ tenantId: 1, slug: 1 }, { unique: true });

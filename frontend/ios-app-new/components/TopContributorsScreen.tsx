@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    Image,
     Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -44,10 +45,17 @@ type ContributorStats = {
     messageCount: number;
 };
 
+type Subgrid = {
+    _id: string;
+    name?: string;
+    logoUrl?: string;
+};
+
 export default function TopContributorsScreen() {
     const { colors, mode, toggleTheme } = useTheme();
     const router = useRouter();
 
+    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [activeSubgridId, setActiveSubgridId] = useState<string | null>(null);
     const [members, setMembers] = useState<Member[]>([]);
     const [posts, setPosts] = useState<Post[]>([]);
@@ -57,6 +65,11 @@ export default function TopContributorsScreen() {
     const [currentUserId, setCurrentUserId] = useState<string>('');
     const [error, setError] = useState<string>('');
     const [loading, setLoading] = useState(true);
+
+    const activeSubgrid = useMemo(
+        () => subgrids.find((s) => s._id === activeSubgridId) || null,
+        [subgrids, activeSubgridId]
+    );
 
     // Load initial data
     useEffect(() => {
@@ -75,9 +88,10 @@ export default function TopContributorsScreen() {
                 }
 
                 const subgridsRes = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const subgrids = subgridsRes?.data || [];
-                if (subgrids.length > 0) {
-                    setActiveSubgridId(subgrids[0]._id);
+                const subgridsList = subgridsRes?.data || [];
+                setSubgrids(subgridsList);
+                if (subgridsList.length > 0) {
+                    setActiveSubgridId(subgridsList[0]._id);
                 }
             } catch (err: any) {
                 console.error('[TopContributors] Failed to load data:', err);
@@ -164,7 +178,7 @@ export default function TopContributorsScreen() {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
-    const currentUser = members.find(m => m.user?._id === currentUserId || m.userId === currentUserId);
+    const currentUser = members.find(m => String(m.user?._id) === String(currentUserId) || String(m.userId) === String(currentUserId));
     const currentUserName = currentUser?.user?.firstName
         ? `${currentUser.user.firstName}${currentUser.user.lastName ? ' ' + currentUser.user.lastName : ''}`.trim()
         : 'User';
@@ -244,6 +258,11 @@ export default function TopContributorsScreen() {
             fontSize: 10,
             fontWeight: '700',
             color: '#FFFFFF',
+        },
+        serverIconImage: {
+            width: 48,
+            height: 48,
+            borderRadius: 24,
         },
         railIconBtn: {
             width: 48,
@@ -577,17 +596,22 @@ export default function TopContributorsScreen() {
                 {/* Icon Rail */}
                 <View style={styles.iconRail}>
                     <TouchableOpacity style={styles.serverIcon} onPress={() => router.push('/admin')}>
-                        <Text style={styles.serverIconText}>RBFCU</Text>
+                        {activeSubgrid ? (
+                            activeSubgrid.logoUrl ? (
+                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
+                            ) : (
+                                <Text style={styles.serverIconText}>
+                                    {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
+                                </Text>
+                            )
+                        ) : null}
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
                         <MaterialIcons name="message" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.railIconBtn}>
-                        <MaterialIcons name="settings" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
                     <View style={{ flex: 1 }} />
-                    <TouchableOpacity style={styles.railIconBtn}>
-                        <MaterialIcons name="star" size={18} color={colors.textMuted} />
+                    <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
+                        <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
                         {mode === 'dark' ? (

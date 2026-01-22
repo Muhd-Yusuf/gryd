@@ -22,7 +22,6 @@ import {
     communityGet,
     communityPost,
     communityDelete,
-    getTenantId,
     getUserId,
     resolveTenantId,
     getAuthUser,
@@ -30,11 +29,14 @@ import {
     subscribeToCallEventsAsync,
     answerCall,
     declineCall,
-    initiateDMCall,
 } from '../lib/api';
 import { Audio } from 'expo-av';
-import { Attachment, twemojiUrl, formatDuration } from '../lib/chatMedia';
+import { Attachment, twemojiUrl } from '../lib/chatMedia';
 import UserAvatar from './UserAvatar';
+import { useAgoraCall } from '../hooks/useAgoraCall';
+import { useCallContext } from '../contexts/CallContext';
+import CallModal from './CallModal';
+import VoiceMessagePlayer from './VoiceMessagePlayer';
 
 // Incoming call notification type
 type IncomingCallNotification = {
@@ -49,8 +51,12 @@ type IncomingCallNotification = {
     appId: string;
 };
 
-type Friend = {
-    oderId?: string;
+type Channel = {
+    _id: string;
+    name?: string;
+    type?: string;
+    visibility?: string;
+    status?: string;
 };
 
 type UserProfile = {
@@ -58,6 +64,7 @@ type UserProfile = {
     firstName?: string;
     lastName?: string;
     email?: string;
+    username?: string;
     createdAt?: string;
     avatarUrl?: string;
 };
@@ -70,6 +77,13 @@ type DirectMessage = {
     createdAt?: string;
     kind?: string;
     attachments?: Array<Attachment | string>;
+    // Call history fields
+    callType?: 'video' | 'voice';
+    callDuration?: number;
+    callStatus?: 'ended' | 'missed' | 'declined';
+    isOutgoing?: boolean;
+    isMissed?: boolean;
+    isDeclined?: boolean;
 };
 
 type Member = {
@@ -78,24 +92,40 @@ type Member = {
     firstName?: string;
     lastName?: string;
     email?: string;
+    username?: string;
     avatarUrl?: string;
+    role?: string;
+    status?: string;
+    createdAt?: string;
     user?: {
         _id?: string;
         firstName?: string;
         lastName?: string;
         email?: string;
+        username?: string;
         createdAt?: string;
+        avatarUrl?: string;
     };
+};
+
+type Subgrid = {
+    _id: string;
+    name?: string;
+    logoUrl?: string;
 };
 
 export default function DirectMessagesScreen() {
     const { colors, mode, toggleTheme } = useTheme();
     const router = useRouter();
 
+    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [activeSubgridId, setActiveSubgridId] = useState<string | null>(null);
     const [friends, setFriends] = useState<string[]>([]);
     const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>({});
     const [members, setMembers] = useState<Member[]>([]);
+    const [channels, setChannels] = useState<Channel[]>([]);
+    const [mutualFriends, setMutualFriends] = useState<string[]>([]);
+    const [mutualFriendUsers, setMutualFriendUsers] = useState<Record<string, UserProfile>>({});
     const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
     const [messages, setMessages] = useState<DirectMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
@@ -103,12 +133,6 @@ export default function DirectMessagesScreen() {
     const [currentUserInfo, setCurrentUserInfo] = useState<{ firstName?: string; lastName?: string; email?: string; avatarUrl?: string } | null>(null);
     const scrollViewRef = useRef<ScrollView>(null);
 
-    // Call state
-    const [callType, setCallType] = useState<'audio' | 'video' | null>(null);
-    const [callError, setCallError] = useState('');
-    const [muted, setMuted] = useState(false);
-    const [cameraOff, setCameraOff] = useState(false);
-    const activeStreamRef = useRef<any>(null);
 
     // Incoming call state
     const [incomingCall, setIncomingCall] = useState<IncomingCallNotification | null>(null);
@@ -121,6 +145,9 @@ export default function DirectMessagesScreen() {
     const [isRecording, setIsRecording] = useState(false);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [uploading, setUploading] = useState(false);
+    const [addFriendOpen, setAddFriendOpen] = useState(false);
+    const [addFriendSearch, setAddFriendSearch] = useState('');
+    const [addingFriendId, setAddingFriendId] = useState<string | null>(null);
     const recordingInterval = useRef<NodeJS.Timeout | null>(null);
     const mediaRecorderRef = useRef<any | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -137,6 +164,46 @@ export default function DirectMessagesScreen() {
         '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👋', '🤚', '🖐️', '✋',
         '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '💕', '💖',
     ];
+
+    const activeSubgrid = useMemo(
+        () => subgrids.find((s) => s._id === activeSubgridId) || null,
+        [subgrids, activeSubgridId]
+    );
+
+    // Agora call hook for inline calling (matching member dashboard behavior)
+    const { startActiveCall, markCallConnected, endCall: contextEndCall } = useCallContext();
+
+    const onCallEnded = useCallback((callId: string, reason: string) => {
+        console.log('[DirectMessages] Call ended:', callId, reason);
+        // Refresh messages to show call history
+        if (activeSubgridId && selectedFriendId) {
+            communityGet(`/subgrids/${activeSubgridId}/direct-messages?peerId=${selectedFriendId}`)
+                .then(response => setMessages(response?.data || []))
+                .catch(() => {});
+        }
+    }, [activeSubgridId, selectedFriendId]);
+
+    const onCallError = useCallback((err: Error) => {
+        Alert.alert('Call Error', err.message);
+    }, []);
+
+    const agoraCallOptions = useMemo(() => ({
+        onCallEnded,
+        onError: onCallError,
+    }), [onCallEnded, onCallError]);
+
+    const agoraCall = useAgoraCall(agoraCallOptions);
+
+    // Check if call modal should be visible
+    const isCallModalVisible = agoraCall.callState !== 'idle';
+
+    // Update CallContext when Agora call becomes connected
+    useEffect(() => {
+        if (agoraCall.callState === 'connected' && agoraCall.currentCall?.callId) {
+            console.log('[DirectMessages] Agora connected, calling markCallConnected()');
+            markCallConnected();
+        }
+    }, [agoraCall.callState, agoraCall.currentCall?.callId, markCallConnected]);
 
     // Load initial data
     useEffect(() => {
@@ -163,9 +230,10 @@ export default function DirectMessagesScreen() {
                 }
 
                 const subgridsRes = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const subgrids = subgridsRes?.data || [];
-                if (subgrids.length > 0) {
-                    setActiveSubgridId(subgrids[0]._id);
+                const subgridsList = subgridsRes?.data || [];
+                setSubgrids(subgridsList);
+                if (subgridsList.length > 0) {
+                    setActiveSubgridId(subgridsList[0]._id);
                 }
             } catch (error) {
                 console.error('[DirectMessages] Failed to load initial data:', error);
@@ -174,29 +242,46 @@ export default function DirectMessagesScreen() {
         loadData();
     }, []);
 
+    const refreshFriends = useCallback(async (subgridId: string) => {
+        try {
+            const response = await communityGet(`/subgrids/${subgridId}/friends`);
+            const friendIds = response?.data?.friends || [];
+            const users = response?.data?.users || {};
+            const normalizedIds = Array.isArray(friendIds) ? friendIds : [];
+            setFriends(normalizedIds);
+            setFriendUsers(users);
+            if (normalizedIds.length > 0 && !selectedFriendId) {
+                setSelectedFriendId(normalizedIds[0]);
+            } else if (selectedFriendId && !normalizedIds.includes(selectedFriendId)) {
+                setSelectedFriendId(normalizedIds[0] || null);
+            }
+        } catch (error) {
+            console.error('[DirectMessages] Failed to load friends:', error);
+            setFriends([]);
+            setFriendUsers({});
+        }
+    }, [selectedFriendId]);
+
     // Load friends and members when subgrid changes
     useEffect(() => {
         if (!activeSubgridId) return;
 
+        refreshFriends(activeSubgridId);
+
         Promise.allSettled([
-            communityGet(`/subgrids/${activeSubgridId}/friends`),
             communityGet(`/subgrids/${activeSubgridId}/members`),
-        ]).then(([friendsRes, membersRes]) => {
-            if (friendsRes.status === 'fulfilled') {
-                const friendIds = friendsRes.value?.data?.friends || [];
-                const users = friendsRes.value?.data?.users || {};
-                setFriends(Array.isArray(friendIds) ? friendIds : []);
-                setFriendUsers(users);
-                if (friendIds.length > 0 && !selectedFriendId) {
-                    setSelectedFriendId(friendIds[0]);
-                }
-            }
+            communityGet(`/subgrids/${activeSubgridId}/channels`),
+        ]).then(([membersRes, channelsRes]) => {
             if (membersRes.status === 'fulfilled') {
                 const rawMembers = membersRes.value?.data;
                 setMembers(Array.isArray(rawMembers) ? rawMembers : []);
             }
+            if (channelsRes.status === 'fulfilled') {
+                const rawChannels = channelsRes.value?.data;
+                setChannels(Array.isArray(rawChannels) ? rawChannels : []);
+            }
         });
-    }, [activeSubgridId]);
+    }, [activeSubgridId, refreshFriends]);
 
     // Load messages when friend changes
     useEffect(() => {
@@ -205,13 +290,38 @@ export default function DirectMessagesScreen() {
         communityGet(`/subgrids/${activeSubgridId}/direct-messages?peerId=${selectedFriendId}`)
             .then((res) => {
                 const msgs = res?.data || [];
+                console.log('[DirectMessages] Fetched messages:', JSON.stringify(msgs.slice(0, 3), null, 2));
                 setMessages(Array.isArray(msgs) ? msgs : []);
                 setTimeout(() => {
                     scrollViewRef.current?.scrollToEnd({ animated: true });
                 }, 100);
             })
-            .catch(() => setMessages([]));
+            .catch((err) => {
+                console.error('[DirectMessages] Error fetching messages:', err);
+                setMessages([]);
+            });
     }, [activeSubgridId, selectedFriendId]);
+
+    useEffect(() => {
+        if (!activeSubgridId || !selectedFriendId) {
+            setMutualFriends([]);
+            setMutualFriendUsers({});
+            return;
+        }
+
+        communityGet(`/subgrids/${activeSubgridId}/friends/${selectedFriendId}/mutual`)
+            .then((response) => {
+                const friendIds = response?.data?.friends || [];
+                const users = response?.data?.users || {};
+                setMutualFriends(Array.isArray(friendIds) ? friendIds : []);
+                setMutualFriendUsers(users || {});
+            })
+            .catch((error) => {
+                console.error('[DirectMessages] Failed to load mutual friends:', error);
+                setMutualFriends([]);
+                setMutualFriendUsers({});
+            });
+    }, [activeSubgridId, selectedFriendId, friends]);
 
     // Subscribe to call events via SSE
     useEffect(() => {
@@ -257,15 +367,11 @@ export default function DirectMessagesScreen() {
                     }).start(() => {
                         setIncomingCall(null);
                     });
-                    // Also end any active call
-                    if (callType !== null) {
-                        handleEndCall();
-                    }
                     break;
 
                 case 'user_busy':
                     console.log('[DirectMessages] User busy:', data);
-                    setCallError('User is busy on another call');
+                    Alert.alert('User Busy', 'User is busy on another call');
                     break;
             }
         };
@@ -298,13 +404,19 @@ export default function DirectMessagesScreen() {
         try {
             const response = await answerCall(incomingCall.callId);
             if (response?.success) {
-                // Navigate to voice channel
+                // Navigate to voice channel with all required Agora params
                 router.push({
                     pathname: '/voice-channel',
                     params: {
                         callId: incomingCall.callId,
-                        channelName: incomingCall.channelName,
+                        agoraChannelName: incomingCall.channelName,
                         callType: incomingCall.callType,
+                        token: incomingCall.token,
+                        uid: String(incomingCall.uid),
+                        appId: incomingCall.appId,
+                        displayName: `Call with ${incomingCall.callerName}`,
+                        peerName: incomingCall.callerName,
+                        peerAvatar: incomingCall.callerAvatar || '',
                     },
                 });
             } else {
@@ -361,10 +473,52 @@ export default function DirectMessagesScreen() {
         return `@user${friendId.slice(-6)}`;
     };
 
+    const getMemberId = (member: Member) => member.userId || member.user?._id || member._id || '';
+
+    const getMemberName = (member: Member) => {
+        const firstName = member.firstName || member.user?.firstName || '';
+        const lastName = member.lastName || member.user?.lastName || '';
+        const email = member.email || member.user?.email || '';
+        const name = [firstName, lastName].filter(Boolean).join(' ').trim();
+        return name || email || 'Unknown User';
+    };
+
+    const getMemberMeta = (member: Member) => {
+        return member.username || member.user?.username || member.email || member.user?.email || '';
+    };
+
+    const formatMemberRole = (role?: string) => {
+        switch ((role || '').toLowerCase()) {
+            case 'subgrid_admin':
+            case 'admin':
+            case 'owner':
+                return 'Credit Union Admin';
+            case 'moderator':
+                return 'Moderator';
+            case 'member':
+            default:
+                return 'Credit Union Member';
+        }
+    };
+
+    const isAdminRole = (role?: string | null) => {
+        const value = String(role || '').toLowerCase();
+        return value === 'subgrid_admin' || value === 'owner' || value === 'admin';
+    };
+
+    const getMemberRole = (id?: string | null) => {
+        if (!id) return '';
+        const idStr = String(id);
+        const member = members.find((item) =>
+            String(item.userId) === idStr || String(item._id) === idStr || String(item.user?._id) === idStr
+        );
+        return member?.role || '';
+    };
+
     const memberMap = useMemo(() => {
         const map: Record<string, Member> = {};
         members.forEach((member) => {
-            const id = member.userId || member._id;
+            const id = member.userId || member.user?._id || member._id;
             if (id) {
                 map[id] = member;
             }
@@ -377,8 +531,39 @@ export default function DirectMessagesScreen() {
         if (id === currentUserId) {
             return currentUserInfo?.avatarUrl || memberMap[id]?.avatarUrl || null;
         }
-        return friendUsers[id]?.avatarUrl || memberMap[id]?.avatarUrl || null;
+        return friendUsers[id]?.avatarUrl || mutualFriendUsers[id]?.avatarUrl || memberMap[id]?.avatarUrl || null;
     };
+
+    const getMutualFriendName = (friendId: string) => {
+        const user = mutualFriendUsers[friendId] || friendUsers[friendId];
+        if (user) {
+            const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+            return name || user.email || 'Unknown User';
+        }
+        const member = memberMap[friendId];
+        if (member) {
+            return getMemberName(member);
+        }
+        return 'Unknown User';
+    };
+
+    const commonForums = useMemo(() => {
+        if (!selectedFriendId) return [];
+        const currentRole = getMemberRole(currentUserId);
+        const friendRole = getMemberRole(selectedFriendId);
+        const allowAdmin = isAdminRole(currentRole) && isAdminRole(friendRole);
+        return channels
+            .filter((channel) => channel.status !== 'archived')
+            .filter((channel) => channel.type !== 'voice')
+            .filter((channel) => {
+                if (channel.visibility === 'admin') {
+                    return allowAdmin;
+                }
+                return true;
+            })
+            .map((channel) => channel.name)
+            .filter(Boolean) as string[];
+    }, [channels, selectedFriendId, currentUserId, members]);
 
     const getSenderName = (senderId: string) => {
         if (senderId === currentUserId) return 'You';
@@ -391,7 +576,13 @@ export default function DirectMessagesScreen() {
 
     const normalizeAttachments = (message: DirectMessage) => {
         const raw = Array.isArray(message.attachments) ? message.attachments : [];
-        return raw
+
+        // Debug: log raw attachments to understand their structure
+        if (raw.length > 0) {
+            console.log('[DirectMessages] Raw attachments for message:', message._id, JSON.stringify(raw));
+        }
+
+        const result = raw
             .map((item) => {
                 if (!item) return null;
                 if (typeof item === 'string') {
@@ -400,29 +591,46 @@ export default function DirectMessagesScreen() {
                     if (lowerItem.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)) {
                         return { type: 'image' as const, value: item, uri: item };
                     }
+                    // Check for audio files (voice notes) - including cloudinary URLs
+                    if (lowerItem.match(/\.(mp3|wav|webm|m4a|ogg|aac)(\?|$)/i) || lowerItem.includes('/video/upload/') || lowerItem.includes('/raw/upload/')) {
+                        return { type: 'audio' as const, value: item, uri: item };
+                    }
+                    // Check for cloudinary image URLs
+                    if (lowerItem.includes('/image/upload/')) {
+                        return { type: 'image' as const, value: item, uri: item };
+                    }
                     return { type: 'sticker' as const, value: item, uri: item };
                 }
-                const typed = item as Attachment & { uri?: string };
-                // Preserve the original type and set uri appropriately
-                const uri = typed.uri || (typed.type === 'emoji' ? twemojiUrl(typed.value) : typed.value);
-                return { ...typed, uri };
+
+                // Handle object attachments
+                const typed = item as Attachment & { uri?: string; url?: string; src?: string; secure_url?: string };
+
+                // Get the URL from various possible properties
+                const attachmentUrl = typed.value || typed.uri || typed.url || typed.src || typed.secure_url || '';
+
+                // Determine type if not specified
+                let attachmentType = typed.type;
+                if (!attachmentType && attachmentUrl) {
+                    const lowerUrl = attachmentUrl.toLowerCase();
+                    if (lowerUrl.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || lowerUrl.includes('/image/upload/')) {
+                        attachmentType = 'image';
+                    } else if (lowerUrl.match(/\.(mp3|wav|webm|m4a|ogg|aac)(\?|$)/i) || lowerUrl.includes('/video/upload/') || lowerUrl.includes('/raw/upload/')) {
+                        attachmentType = 'audio';
+                    }
+                }
+
+                // Set uri appropriately
+                const uri = typed.uri || (attachmentType === 'emoji' ? twemojiUrl(typed.value) : attachmentUrl);
+
+                return { ...typed, type: attachmentType, value: attachmentUrl, uri };
             })
             .filter(Boolean) as Array<Attachment & { uri?: string }>;
-    };
 
-    const handlePlayAudio = async (source?: string) => {
-        if (!source) return;
-        if (Platform.OS === 'web') {
-            const audio = new (globalThis as any).Audio(source);
-            audio.play();
-        } else {
-            try {
-                const { sound } = await Audio.Sound.createAsync({ uri: source });
-                await sound.playAsync();
-            } catch (err) {
-                console.error('Failed to play audio:', err);
-            }
+        // Debug logging for attachments
+        if (result.length > 0) {
+            console.log('[DirectMessages] Normalized attachments:', message._id, result);
         }
+        return result;
     };
 
     const formatDate = (dateStr?: string) => {
@@ -431,17 +639,20 @@ export default function DirectMessagesScreen() {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
-    const formatDateTime = (dateStr?: string) => {
+    const formatTimeOnly = (dateStr?: string) => {
         if (!dateStr) return '';
         const date = new Date(dateStr);
-        return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleTimeString('en-US', {
             hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
+            minute: '2-digit'
         });
+    };
+
+    const formatCallDuration = (seconds?: number) => {
+        if (!seconds) return '0 min';
+        const mins = Math.floor(seconds / 60);
+        return `${mins} min`;
     };
 
     const handleSendMessage = async () => {
@@ -516,6 +727,21 @@ export default function DirectMessagesScreen() {
         }
     };
 
+    const handleAddFriend = async (recipientId: string) => {
+        if (!activeSubgridId || !recipientId) return;
+        try {
+            setAddingFriendId(recipientId);
+            await communityPost(`/subgrids/${activeSubgridId}/friend-requests`, { recipientId });
+            await refreshFriends(activeSubgridId);
+            setSelectedFriendId(recipientId);
+        } catch (error: any) {
+            console.error('Failed to add friend:', error);
+            Alert.alert('Error', error?.message || 'Failed to add friend');
+        } finally {
+            setAddingFriendId(null);
+        }
+    };
+
     const handleRemoveFriend = async () => {
         if (!activeSubgridId || !selectedFriendId) return;
         try {
@@ -538,77 +764,41 @@ export default function DirectMessagesScreen() {
         }
     };
 
-    // Call handlers
+    // Call handlers - using inline CallModal like member dashboard (NOT navigating to voice-channel)
     const handleStartCall = async (type: 'audio' | 'video') => {
         if (!selectedFriendId) {
             Alert.alert('Error', 'Please select a friend to call');
             return;
         }
 
-        setCallError('');
+        const callStartedAt = Date.now();
+        const friendName = getFriendName(selectedFriendId);
 
-        try {
-            // Initiate the call via API
-            console.log('[DirectMessages] Initiating DM call to:', selectedFriendId, 'type:', type);
-            const response = await initiateDMCall(selectedFriendId, type, activeSubgridId || undefined);
+        console.log('[DirectMessages] Starting inline call to:', selectedFriendId, 'type:', type);
 
-            if (!response?.success) {
-                setCallError(response?.error || 'Failed to initiate call');
-                Alert.alert('Call Failed', response?.error || 'Unable to start call. Please try again.');
-                return;
-            }
+        // Use agoraCall.startCall which handles everything inline (no navigation)
+        // Pass undefined instead of empty string for subgridId to avoid MongoDB validation error
+        const result = await agoraCall.startCall(selectedFriendId, type, activeSubgridId || undefined);
 
-            const { callId, channelName, caller } = response.data;
-            const { token, uid, appId } = caller;
-
-            console.log('[DirectMessages] Call initiated, navigating to voice channel:', callId);
-
-            // Navigate to voice channel for the call
-            router.push({
-                pathname: '/voice-channel',
-                params: {
-                    callId,
-                    agoraChannelName: channelName,
-                    token,
-                    uid: String(uid),
-                    appId,
-                    displayName: `Call with ${getFriendName(selectedFriendId)}`,
-                    callType: type,
-                },
+        // Set active call in context after we have the callId from backend
+        if (result?.callId) {
+            startActiveCall({
+                callId: result.callId,
+                peerId: selectedFriendId,
+                peerName: friendName,
+                callType: type,
+                startedAt: callStartedAt,
             });
-        } catch (err: any) {
-            console.error('[DirectMessages] Start call error:', err);
-            setCallError(err.message || 'Unable to start call');
-            Alert.alert('Call Failed', err.message || 'Unable to start call. Please try again.');
         }
     };
 
-    const handleEndCall = () => {
-        if (activeStreamRef.current) {
-            activeStreamRef.current.getTracks().forEach((track: any) => track.stop());
-            activeStreamRef.current = null;
-        }
-        setCallType(null);
-        setCallError('');
-        setMuted(false);
-        setCameraOff(false);
-    };
-
-    const toggleMute = () => {
-        const stream = activeStreamRef.current;
-        if (stream) {
-            stream.getAudioTracks().forEach((track: any) => { track.enabled = !track.enabled; });
-            setMuted((prev) => !prev);
-        }
-    };
-
-    const toggleCamera = () => {
-        const stream = activeStreamRef.current;
-        if (stream) {
-            stream.getVideoTracks().forEach((track: any) => { track.enabled = !track.enabled; });
-            setCameraOff((prev) => !prev);
-        }
-    };
+    // Handle ending a call - cleanup Agora and notify backend
+    const handleHangup = useCallback(async () => {
+        // First hangup the Agora call (leave channel, cleanup tracks)
+        await agoraCall.hangup();
+        // Then end the call in context (API call + redirect)
+        await contextEndCall();
+    }, [agoraCall, contextEndCall]);
 
     // File/Image picker handlers
     const handlePickFile = async () => {
@@ -867,19 +1057,42 @@ export default function DirectMessagesScreen() {
         return groups;
     };
 
-    const getMutualFriends = () => {
-        if (!Array.isArray(friends)) return [];
-        return friends.slice(1, 3);
-    };
-
     const selectedFriendUser = selectedFriendId ? friendUsers[selectedFriendId] : null;
     const selectedFriendName = selectedFriendId ? getFriendName(selectedFriendId) : '';
     const selectedFriendUsername = selectedFriendId ? getFriendUsername(selectedFriendId) : '';
+    const selectedFriendMember = selectedFriendId ? memberMap[selectedFriendId] : null;
+    const selectedFriendAbout = formatMemberRole(selectedFriendMember?.role);
+    const selectedFriendSince =
+        selectedFriendMember?.createdAt ||
+        selectedFriendMember?.user?.createdAt ||
+        selectedFriendUser?.createdAt ||
+        '';
     const messageGroups = groupMessagesByDate(messages);
-    const mutualFriends = getMutualFriends();
     const currentUserName = currentUserInfo
         ? [currentUserInfo.firstName, currentUserInfo.lastName].filter(Boolean).join(' ').trim() || currentUserInfo.email || 'User'
         : 'User';
+
+    const addFriendCandidates = useMemo(() => {
+        const friendSet = new Set(friends);
+        const query = addFriendSearch.trim().toLowerCase();
+        return members
+            .map((member) => {
+                const id = getMemberId(member);
+                return {
+                    member,
+                    id,
+                    name: getMemberName(member),
+                    meta: getMemberMeta(member),
+                };
+            })
+            .filter((item) => {
+                if (!item.id || item.id === currentUserId) return false;
+                if (friendSet.has(item.id)) return false;
+                if (!query) return true;
+                return `${item.name} ${item.meta}`.toLowerCase().includes(query);
+            })
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [members, friends, currentUserId, addFriendSearch]);
 
     const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -908,17 +1121,22 @@ export default function DirectMessagesScreen() {
                 {/* Icon Rail */}
                 <View style={styles.iconRail}>
                     <TouchableOpacity style={styles.serverIcon} onPress={() => router.push('/admin')}>
-                        <Text style={styles.serverIconText}>RBFCU</Text>
+                        {activeSubgrid ? (
+                            activeSubgrid.logoUrl ? (
+                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
+                            ) : (
+                                <Text style={styles.serverIconText}>
+                                    {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
+                                </Text>
+                            )
+                        ) : null}
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
                         <MaterialIcons name="message" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.railIconBtn}>
-                        <MaterialIcons name="settings" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
                     <View style={{ flex: 1 }} />
-                    <TouchableOpacity style={styles.railIconBtn}>
-                        <MaterialIcons name="star" size={18} color={colors.textMuted} />
+                    <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
+                        <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
                         {mode === 'dark' ? (
@@ -936,7 +1154,7 @@ export default function DirectMessagesScreen() {
                         <View style={styles.sidebarHeaderLeft}>
                             <Text style={styles.sidebarTitle}>Direct message</Text>
                         </View>
-                        <TouchableOpacity style={styles.sidebarHeaderIcon}>
+                        <TouchableOpacity style={styles.sidebarHeaderIcon} onPress={() => setAddFriendOpen(true)}>
                             <MaterialIcons name="add" size={16} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
@@ -1039,7 +1257,9 @@ export default function DirectMessagesScreen() {
                                     </Text>
                                     <View style={styles.commonForums}>
                                         <Text style={styles.commonLabel}>Forum in common:</Text>
-                                        <Text style={styles.commonValue}>General, Financial Tips</Text>
+                                        <Text style={styles.commonValue}>
+                                            {commonForums.length > 0 ? commonForums.join(', ') : 'None'}
+                                        </Text>
                                     </View>
                                     <View style={styles.actionButtons}>
                                         <TouchableOpacity style={styles.removeButton} onPress={handleRemoveFriend}>
@@ -1064,40 +1284,75 @@ export default function DirectMessagesScreen() {
                                                 const senderName = getSenderName(msg.senderId || '');
                                                 const isOwnMessage = msg.senderId === currentUserId;
                                                 const attachmentList = normalizeAttachments(msg);
-                                                return (
-                                                    <View key={msg._id} style={styles.messageItem}>
-                                                        <UserAvatar
-                                                            uri={getAvatarUrl(msg.senderId)}
-                                                            name={senderName}
-                                                            style={styles.messageAvatar}
-                                                        />
-                                                        <View style={styles.messageContent}>
-                                                            <View style={styles.messageHeader}>
-                                                                <Text style={styles.messageSender}>{senderName}</Text>
-                                                                <Text style={styles.messageTime}>{formatDateTime(msg.createdAt)}</Text>
-                                                                {isOwnMessage ? (
-                                                                    <TouchableOpacity
-                                                                        style={styles.messageDeleteButton}
-                                                                        onPress={() => handleDeleteMessage(msg._id)}
-                                                                    >
-                                                                        <MaterialIcons name="delete-outline" size={16} color={colors.textMuted} />
-                                                                    </TouchableOpacity>
-                                                                ) : null}
+
+                                                // Debug: log each message's content
+                                                console.log('[DirectMessages] Rendering msg:', msg._id, 'body:', msg.body, 'attachments:', attachmentList.length, 'kind:', msg.kind);
+
+                                                // Render call history entry (like WhatsApp)
+                                                if (msg.callType || msg.kind === 'call') {
+                                                    const isOutgoing = msg.isOutgoing || msg.senderId === currentUserId;
+                                                    const isMissed = msg.isMissed || msg.callStatus === 'missed';
+                                                    const isDeclined = msg.isDeclined || msg.callStatus === 'declined';
+                                                    const callIcon = msg.callType === 'video' ? 'videocam' : 'phone';
+                                                    const arrowIcon = isOutgoing ? 'call-made' : 'call-received';
+                                                    const arrowColor = isMissed || isDeclined ? '#EF4444' : '#22C55E';
+
+                                                    let callLabel = msg.callType === 'video' ? 'Video call' : 'Voice call';
+                                                    if (isMissed) {
+                                                        callLabel = isOutgoing ? 'Cancelled' : 'Missed';
+                                                    } else if (isDeclined) {
+                                                        callLabel = isOutgoing ? 'Not answered' : 'Declined';
+                                                    }
+
+                                                    return (
+                                                        <View key={msg._id} style={styles.callHistoryItem}>
+                                                            <View style={[styles.callHistoryIcon, (isMissed || isDeclined) && styles.callHistoryIconMissed]}>
+                                                                <MaterialIcons name={callIcon} size={18} color={(isMissed || isDeclined) ? '#EF4444' : colors.primary} />
                                                             </View>
-                                                            {!!msg.body && <Text style={styles.messageBody}>{msg.body}</Text>}
+                                                            <View style={styles.callHistoryInfo}>
+                                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                                    <MaterialIcons name={arrowIcon} size={14} color={arrowColor} />
+                                                                    <Text style={[styles.callHistoryType, (isMissed || isDeclined) && styles.callHistoryTypeMissed]}>
+                                                                        {callLabel}
+                                                                    </Text>
+                                                                </View>
+                                                                <Text style={styles.callHistoryDuration}>
+                                                                    {(isMissed || isDeclined) ? formatTimeOnly(msg.createdAt) : formatCallDuration(msg.callDuration)}
+                                                                </Text>
+                                                            </View>
+                                                            <TouchableOpacity
+                                                                style={styles.callHistoryAction}
+                                                                onPress={() => handleStartCall(msg.callType === 'video' ? 'video' : 'audio')}
+                                                            >
+                                                                <MaterialIcons name={callIcon} size={20} color={colors.primary} />
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <View key={msg._id} style={[styles.messageRow, isOwnMessage && styles.messageRowSelf]}>
+                                                        {!isOwnMessage && (
+                                                            <UserAvatar
+                                                                uri={getAvatarUrl(msg.senderId)}
+                                                                name={senderName}
+                                                                style={styles.messageAvatar}
+                                                            />
+                                                        )}
+                                                        <View style={[styles.messageBubble, isOwnMessage ? styles.messageBubbleSelf : styles.messageBubbleOther]}>
+                                                            {!isOwnMessage && (
+                                                                <Text style={styles.messageSenderName}>{senderName}</Text>
+                                                            )}
+                                                            {!!msg.body && <Text style={[styles.messageText, isOwnMessage && styles.messageTextSelf]}>{msg.body}</Text>}
                                                             {attachmentList.map((attachment, idx) => {
-                                                                if (attachment.type === 'audio') {
+                                                                if (attachment.type === 'audio' || attachment.type === 'voice') {
                                                                     return (
-                                                                        <TouchableOpacity
+                                                                        <VoiceMessagePlayer
                                                                             key={`${msg._id}-audio-${idx}`}
-                                                                            style={styles.msgAudioBubble}
-                                                                            onPress={() => handlePlayAudio(attachment.value)}
-                                                                        >
-                                                                            <MaterialIcons name="play-arrow" size={20} color={colors.text} />
-                                                                            <Text style={styles.msgAudioText}>
-                                                                                Voice note {formatDuration(attachment.durationMs)}
-                                                                            </Text>
-                                                                        </TouchableOpacity>
+                                                                            source={attachment.value}
+                                                                            durationMs={attachment.durationMs}
+                                                                            colors={colors}
+                                                                        />
                                                                     );
                                                                 }
                                                                 if (attachment.type === 'image') {
@@ -1129,7 +1384,16 @@ export default function DirectMessagesScreen() {
                                                                 }
                                                                 return null;
                                                             })}
+                                                            <Text style={[styles.messageTimeStamp, isOwnMessage && styles.messageTimeStampSelf]}>{formatTimeOnly(msg.createdAt)}</Text>
                                                         </View>
+                                                        {isOwnMessage && (
+                                                            <TouchableOpacity
+                                                                style={styles.messageDeleteBtn}
+                                                                onPress={() => handleDeleteMessage(msg._id)}
+                                                            >
+                                                                <MaterialIcons name="delete-outline" size={16} color={colors.textMuted} />
+                                                            </TouchableOpacity>
+                                                        )}
                                                     </View>
                                                 );
                                             })}
@@ -1252,18 +1516,18 @@ export default function DirectMessagesScreen() {
 
                             <View style={styles.sidebarSection}>
                                 <Text style={styles.sidebarSectionLabel}>About me</Text>
-                                <Text style={styles.sidebarSectionValue}>Credit Union Member</Text>
+                                <Text style={styles.sidebarSectionValue}>{selectedFriendAbout}</Text>
                             </View>
 
                             <View style={styles.sidebarSection}>
                                 <Text style={styles.sidebarSectionLabel}>Member since</Text>
-                                <Text style={styles.sidebarSectionValue}>{selectedFriendUser?.createdAt ? formatDate(selectedFriendUser.createdAt) : 'Unknown'}</Text>
+                                <Text style={styles.sidebarSectionValue}>{selectedFriendSince ? formatDate(selectedFriendSince) : 'Unknown'}</Text>
                             </View>
 
                             <View style={styles.mutualSection}>
                                 <Text style={styles.mutualTitle}>Mutual Friends - {(mutualFriends || []).length}</Text>
-                                {(mutualFriends || []).map((friendId, index) => {
-                                    const name = getFriendName(friendId);
+                                {(mutualFriends || []).map((friendId) => {
+                                    const name = getMutualFriendName(friendId);
                                     return (
                                         <View key={friendId} style={styles.mutualItem}>
                                             <UserAvatar
@@ -1280,6 +1544,68 @@ export default function DirectMessagesScreen() {
                     </View>
                 )}
             </View>
+
+            {/* Add Friend Modal */}
+            <Modal visible={addFriendOpen} transparent animationType="fade" onRequestClose={() => setAddFriendOpen(false)}>
+                <Pressable style={styles.addFriendOverlay} onPress={() => setAddFriendOpen(false)}>
+                    <Pressable style={styles.addFriendModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.addFriendHeader}>
+                            <Text style={styles.addFriendTitle}>Add Friends</Text>
+                            <TouchableOpacity style={styles.addFriendClose} onPress={() => setAddFriendOpen(false)}>
+                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.addFriendSearch}>
+                            <MaterialIcons name="search" size={16} color={colors.textMuted} />
+                            <TextInput
+                                style={styles.addFriendSearchInput}
+                                placeholder="Search members..."
+                                placeholderTextColor={colors.textSubtle}
+                                value={addFriendSearch}
+                                onChangeText={setAddFriendSearch}
+                            />
+                            {addFriendSearch.length > 0 && (
+                                <TouchableOpacity onPress={() => setAddFriendSearch('')}>
+                                    <MaterialIcons name="close" size={16} color={colors.textMuted} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                        <ScrollView style={styles.addFriendList} showsVerticalScrollIndicator={false}>
+                            {addFriendCandidates.length === 0 ? (
+                                <Text style={styles.addFriendEmpty}>No members to add.</Text>
+                            ) : (
+                                addFriendCandidates.map(({ member, id, name, meta }) => {
+                                    const isAdding = addingFriendId === id;
+                                    return (
+                                        <View key={id} style={styles.addFriendRow}>
+                                            <UserAvatar
+                                                uri={getAvatarUrl(id) || member.avatarUrl || member.user?.avatarUrl}
+                                                name={name}
+                                                style={styles.addFriendAvatar}
+                                            />
+                                            <View style={styles.addFriendInfo}>
+                                                <Text style={styles.addFriendName}>{name}</Text>
+                                                {!!meta && <Text style={styles.addFriendMeta}>{meta}</Text>}
+                                            </View>
+                                            <TouchableOpacity
+                                                style={[styles.addFriendAction, isAdding && styles.addFriendActionDisabled]}
+                                                onPress={() => handleAddFriend(id)}
+                                                disabled={isAdding}
+                                            >
+                                                <MaterialIcons
+                                                    name={isAdding ? 'hourglass-empty' : 'person-add'}
+                                                    size={18}
+                                                    color={isAdding ? colors.textMuted : colors.text}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })
+                            )}
+                        </ScrollView>
+                    </Pressable>
+                </Pressable>
+            </Modal>
 
             {/* Emoji Picker Modal */}
             <Modal visible={showEmojiPicker} transparent animationType="fade" onRequestClose={() => setShowEmojiPicker(false)}>
@@ -1306,67 +1632,6 @@ export default function DirectMessagesScreen() {
                         </ScrollView>
                     </Pressable>
                 </Pressable>
-            </Modal>
-
-            {/* Call Modal */}
-            <Modal visible={callType !== null} transparent animationType="fade" onRequestClose={handleEndCall}>
-                <View style={styles.callModalOverlay}>
-                    <View style={styles.callCard}>
-                        <TouchableOpacity style={styles.callCloseButton} onPress={handleEndCall}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <Text style={styles.callTitle}>
-                            {callType === 'video' ? 'Video Call' : 'Voice Call'} with {selectedFriendId ? getFriendName(selectedFriendId) : 'Friend'}
-                        </Text>
-                        {!!callError && <Text style={styles.callError}>{callError}</Text>}
-
-                        {callType === 'video' ? (
-                            <View style={styles.videoCallContainer}>
-                                <View style={styles.mainVideoWrap}>
-                                    <UserAvatar
-                                        uri={getAvatarUrl(selectedFriendId || undefined)}
-                                        name={selectedFriendId ? getFriendName(selectedFriendId) : 'Friend'}
-                                        style={styles.mainVideoAvatar}
-                                    />
-                                    <Text style={styles.videoParticipantName}>{selectedFriendId ? getFriendName(selectedFriendId) : 'Friend'}</Text>
-                                </View>
-                                <View style={styles.selfVideoWrap}>
-                                    <UserAvatar
-                                        uri={getAvatarUrl(currentUserId)}
-                                        name="You"
-                                        style={styles.selfVideoAvatar}
-                                    />
-                                    <Text style={styles.selfVideoName}>You</Text>
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={styles.audioCallContainer}>
-                                <View style={styles.callAvatarWrap}>
-                                    <UserAvatar
-                                        uri={getAvatarUrl(selectedFriendId || undefined)}
-                                        name={selectedFriendId ? getFriendName(selectedFriendId) : 'Friend'}
-                                        style={styles.callAvatar}
-                                    />
-                                </View>
-                                <Text style={styles.callParticipantName}>{selectedFriendId ? getFriendName(selectedFriendId) : 'Friend'}</Text>
-                            </View>
-                        )}
-
-                        <View style={styles.callActions}>
-                            <TouchableOpacity style={styles.callActionButton} onPress={toggleMute}>
-                                {muted ? <MaterialIcons name="mic-off" size={20} color="#EF4444" /> : <MaterialIcons name="mic" size={20} color={colors.text} />}
-                            </TouchableOpacity>
-                            {callType === 'video' && (
-                                <TouchableOpacity style={styles.callActionButton} onPress={toggleCamera}>
-                                    {cameraOff ? <MaterialIcons name="videocam-off" size={20} color="#EF4444" /> : <MaterialIcons name="videocam" size={20} color={colors.text} />}
-                                </TouchableOpacity>
-                            )}
-                            <TouchableOpacity style={styles.endCallButton} onPress={handleEndCall}>
-                                <MaterialIcons name="call-end" size={20} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
             </Modal>
 
             {/* Incoming Call Notification */}
@@ -1420,6 +1685,32 @@ export default function DirectMessagesScreen() {
                     </View>
                 </Animated.View>
             )}
+
+            {/* Call Modal - Agora-based inline calling (matching member dashboard behavior) */}
+            <CallModal
+                visible={isCallModalVisible}
+                callState={agoraCall.callState}
+                callType={agoraCall.callType}
+                currentCall={agoraCall.currentCall}
+                incomingCall={null}
+                isMuted={agoraCall.isMuted}
+                isVideoEnabled={agoraCall.isVideoEnabled}
+                isSpeakerOn={agoraCall.isSpeakerOn}
+                remoteUsers={agoraCall.remoteUsers}
+                callDuration={agoraCall.callDuration}
+                error={agoraCall.error}
+                peerName={selectedFriendName}
+                peerAvatar={friendUsers[selectedFriendId || '']?.avatarUrl}
+                selfAvatar={currentUserInfo?.avatarUrl}
+                engine={agoraCall.engine}
+                onAnswer={() => {}}
+                onDecline={() => {}}
+                onHangup={handleHangup}
+                onToggleMute={agoraCall.toggleMute}
+                onToggleVideo={agoraCall.toggleVideo}
+                onToggleSpeaker={agoraCall.toggleSpeaker}
+                onSwitchCamera={agoraCall.switchCamera}
+            />
         </View>
     );
 }
@@ -1500,6 +1791,11 @@ const createStyles = (colors: any) =>
             fontSize: 10,
             fontWeight: '700',
             color: '#FFFFFF',
+        },
+        serverIconImage: {
+            width: 48,
+            height: 48,
+            borderRadius: 24,
         },
         railIconBtn: {
             width: 48,
@@ -1777,11 +2073,63 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             marginBottom: 16,
         },
+        // WhatsApp-style message row and bubble
+        messageRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            marginBottom: 8,
+            paddingHorizontal: 12,
+        },
+        messageRowSelf: {
+            justifyContent: 'flex-end',
+        },
+        messageBubble: {
+            maxWidth: '75%',
+            borderRadius: 16,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            paddingBottom: 6,
+        },
+        messageBubbleSelf: {
+            backgroundColor: colors.primary,
+            borderBottomRightRadius: 4,
+        },
+        messageBubbleOther: {
+            backgroundColor: colors.surfaceMuted,
+            borderBottomLeftRadius: 4,
+        },
+        messageSenderName: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.primary,
+            marginBottom: 4,
+        },
+        messageText: {
+            fontSize: 15,
+            color: colors.text,
+            lineHeight: 20,
+        },
+        messageTextSelf: {
+            color: '#FFFFFF',
+        },
+        messageTimeStamp: {
+            fontSize: 10,
+            color: colors.textMuted,
+            marginTop: 4,
+            alignSelf: 'flex-end',
+        },
+        messageTimeStampSelf: {
+            color: 'rgba(255, 255, 255, 0.7)',
+        },
+        messageDeleteBtn: {
+            marginLeft: 8,
+            padding: 4,
+        },
         messageAvatar: {
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            marginRight: 12,
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            marginRight: 8,
         },
         messageContent: {
             flex: 1,
@@ -1851,6 +2199,52 @@ const createStyles = (colors: any) =>
             fontSize: 13,
             color: colors.text,
             maxWidth: 150,
+        },
+        // Call history styles
+        callHistoryItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 12,
+            marginBottom: 12,
+            gap: 12,
+        },
+        callHistoryIcon: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        callHistoryIconMissed: {
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        },
+        callHistoryInfo: {
+            flex: 1,
+        },
+        callHistoryType: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        callHistoryTypeMissed: {
+            color: '#EF4444',
+        },
+        callHistoryDuration: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 2,
+        },
+        callHistoryAction: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         inputContainer: {
             flexDirection: 'column',
@@ -2035,6 +2429,100 @@ const createStyles = (colors: any) =>
             fontSize: 14,
             color: colors.text,
         },
+        addFriendOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+        },
+        addFriendModal: {
+            width: '100%',
+            maxWidth: 420,
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            padding: 16,
+            maxHeight: 480,
+        },
+        addFriendHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 12,
+        },
+        addFriendTitle: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        addFriendClose: {
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.surfaceMuted,
+        },
+        addFriendSearch: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            height: 40,
+            marginBottom: 12,
+        },
+        addFriendSearchInput: {
+            flex: 1,
+            fontSize: 14,
+            color: colors.text,
+            ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
+        },
+        addFriendList: {
+            maxHeight: 360,
+        },
+        addFriendRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 8,
+        },
+        addFriendAvatar: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            marginRight: 12,
+        },
+        addFriendInfo: {
+            flex: 1,
+        },
+        addFriendName: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        addFriendMeta: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 2,
+        },
+        addFriendAction: {
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.surfaceMuted,
+        },
+        addFriendActionDisabled: {
+            opacity: 0.6,
+        },
+        addFriendEmpty: {
+            fontSize: 13,
+            color: colors.textMuted,
+            textAlign: 'center',
+            paddingVertical: 24,
+        },
         bottomBar: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -2094,131 +2582,6 @@ const createStyles = (colors: any) =>
         emptyText: {
             fontSize: 14,
             color: colors.textMuted,
-        },
-        // Call Modal styles
-        callModalOverlay: {
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 20,
-        },
-        callCard: {
-            width: '100%',
-            maxWidth: 400,
-            backgroundColor: colors.surface,
-            borderRadius: 24,
-            padding: 24,
-            alignItems: 'center',
-            gap: 20,
-            position: 'relative',
-        },
-        callCloseButton: {
-            position: 'absolute',
-            top: 16,
-            right: 16,
-            padding: 4,
-        },
-        callTitle: {
-            fontSize: 18,
-            fontWeight: '700',
-            color: colors.text,
-        },
-        callError: {
-            fontSize: 13,
-            color: '#EF4444',
-        },
-        audioCallContainer: {
-            alignItems: 'center',
-            gap: 16,
-        },
-        callAvatarWrap: {
-            width: 140,
-            height: 140,
-            borderRadius: 70,
-            borderWidth: 3,
-            borderColor: colors.border,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
-        },
-        callAvatar: {
-            width: 120,
-            height: 120,
-            borderRadius: 60,
-        },
-        callParticipantName: {
-            fontSize: 16,
-            fontWeight: '600',
-            color: colors.text,
-        },
-        videoCallContainer: {
-            width: '100%',
-            aspectRatio: 0.7,
-            borderRadius: 16,
-            overflow: 'hidden',
-            position: 'relative',
-            backgroundColor: '#1a1a1a',
-        },
-        mainVideoWrap: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        mainVideoAvatar: {
-            width: 140,
-            height: 140,
-            borderRadius: 70,
-        },
-        videoParticipantName: {
-            fontSize: 16,
-            fontWeight: '600',
-            color: '#FFFFFF',
-            marginTop: 16,
-        },
-        selfVideoWrap: {
-            position: 'absolute',
-            top: 16,
-            right: 16,
-            width: 110,
-            height: 150,
-            borderRadius: 12,
-            backgroundColor: '#2a2a2a',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderWidth: 2,
-            borderColor: '#3a3a3a',
-        },
-        selfVideoAvatar: {
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-        },
-        selfVideoName: {
-            fontSize: 12,
-            fontWeight: '500',
-            color: '#FFFFFF',
-            marginTop: 8,
-        },
-        callActions: {
-            flexDirection: 'row',
-            gap: 16,
-        },
-        callActionButton: {
-            width: 52,
-            height: 52,
-            borderRadius: 26,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
-        },
-        endCallButton: {
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#EF4444',
         },
         // Chat input feature styles
         inputRow: {

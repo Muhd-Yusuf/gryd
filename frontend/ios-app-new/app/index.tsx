@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { Redirect } from 'expo-router';
 import { isAuthenticated, getAuthUser } from '../lib/api';
 
@@ -15,7 +15,7 @@ export default function Index() {
             try {
                 const auth = await isAuthenticated();
                 if (!auth) {
-                    setRedirectTo('/welcome');
+                    setRedirectTo(Platform.OS === 'web' ? '/login' : '/welcome');
                     return;
                 }
 
@@ -29,7 +29,7 @@ export default function Index() {
                     setRedirectTo('/(main)');
                 }
             } catch {
-                setRedirectTo('/welcome');
+                setRedirectTo(Platform.OS === 'web' ? '/login' : '/welcome');
             } finally {
                 setChecking(false);
             }

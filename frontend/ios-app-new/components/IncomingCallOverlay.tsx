@@ -29,7 +29,6 @@ export const IncomingCallOverlay: React.FC = () => {
 
     // Function to stop ringtone
     const stopRingtone = useCallback(() => {
-        console.log('[IncomingCallOverlay] Stopping ringtone');
         if (ringIntervalRef.current) {
             clearInterval(ringIntervalRef.current);
             ringIntervalRef.current = null;
@@ -97,13 +96,11 @@ export const IncomingCallOverlay: React.FC = () => {
                     oscillator.frequency.value = oscillator.frequency.value === 440 ? 0 : 440;
                 }, 1000);
 
-                console.log('[IncomingCallOverlay] Ringtone started');
-
                 return () => {
                     stopRingtone();
                 };
             } catch (e) {
-                console.log('[IncomingCallOverlay] Could not play ringtone:', e);
+                // Could not play ringtone
             }
         }
     }, [incomingCall, stopRingtone]);

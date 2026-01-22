@@ -75,6 +75,9 @@ export const CallModal: React.FC<CallModalProps> = ({
     const styles = useMemo(() => createStyles(colors), [colors]);
     const remoteVideoRef = useRef<HTMLDivElement | null>(null);
     const localVideoRef = useRef<HTMLDivElement | null>(null);
+    // Track which tracks have been played to prevent re-playing (causes loops)
+    const playedLocalTrackRef = useRef<any>(null);
+    const playedRemoteUserRef = useRef<number | null>(null);
 
     const isIncoming = !!incomingCall && callState === 'idle';
     const isConnecting = callState === 'initiating' || callState === 'ringing' || callState === 'connecting';
@@ -88,21 +91,29 @@ export const CallModal: React.FC<CallModalProps> = ({
     useEffect(() => {
         if (!visible || !isVideoCall) return;
 
-        console.log('[CallModal Web] Video playback effect triggered, engine:', engine, 'remoteUsers:', remoteUsers, 'isVideoEnabled:', isVideoEnabled);
-
         // On web, engine may contain { localVideoTrack, client } or be null
         // We need to handle both cases
         const localTrack = engine?.localVideoTrack;
         const client = engine?.client;
 
+        console.log('[CallModal Web] Video effect running - visible:', visible, 'isVideoCall:', isVideoCall, 'hasLocalTrack:', !!localTrack, 'remoteUsers:', remoteUsers.length);
+
         const playRemoteVideo = async () => {
             if (remoteVideoRef.current && remoteUsers.length > 0 && client) {
                 try {
                     const remoteUser = client.remoteUsers?.find((u: any) => u.uid === remoteUsers[0]);
-                    console.log('[CallModal Web] Looking for remote user:', remoteUsers[0], 'found:', remoteUser);
+                    console.log('[CallModal Web] Looking for remote user:', remoteUsers[0], 'found:', remoteUser, 'hasVideoTrack:', !!remoteUser?.videoTrack);
+
+                    // Check if we already played this specific track
                     if (remoteUser?.videoTrack) {
+                        // Only skip if we've already played this exact user's track
+                        if (playedRemoteUserRef.current === remoteUsers[0]) {
+                            console.log('[CallModal Web] Already played remote video for user:', remoteUsers[0]);
+                            return;
+                        }
                         console.log('[CallModal Web] Playing remote video track');
                         remoteUser.videoTrack.play(remoteVideoRef.current);
+                        playedRemoteUserRef.current = remoteUsers[0];
                     }
                 } catch (err) {
                     console.error('[CallModal Web] Failed to play remote video:', err);
@@ -111,10 +122,17 @@ export const CallModal: React.FC<CallModalProps> = ({
         };
 
         const playLocalVideo = async () => {
+            // Skip if we've already played this exact track
+            if (localTrack && playedLocalTrackRef.current === localTrack) {
+                console.log('[CallModal Web] Already played local video track');
+                return;
+            }
             if (localVideoRef.current && localTrack) {
                 try {
-                    console.log('[CallModal Web] Playing local video track');
+                    console.log('[CallModal Web] Playing local video track, track id:', localTrack?.getTrackId?.());
                     localTrack.play(localVideoRef.current);
+                    playedLocalTrackRef.current = localTrack;
+                    console.log('[CallModal Web] Local video track playing successfully');
                 } catch (err) {
                     console.error('[CallModal Web] Failed to play local video:', err);
                 }
@@ -123,9 +141,19 @@ export const CallModal: React.FC<CallModalProps> = ({
             }
         };
 
-        playRemoteVideo();
+        // Play local video immediately, even before connection
         playLocalVideo();
+        // Play remote video when available
+        playRemoteVideo();
     }, [visible, isVideoCall, engine, remoteUsers, isVideoEnabled]);
+
+    // Reset played track refs when call ends or modal closes
+    useEffect(() => {
+        if (!visible || callState === 'idle' || callState === 'ended') {
+            playedLocalTrackRef.current = null;
+            playedRemoteUserRef.current = null;
+        }
+    }, [visible, callState]);
 
     const getStatusText = () => {
         if (error) return error;
@@ -193,19 +221,26 @@ export const CallModal: React.FC<CallModalProps> = ({
             <View style={styles.container}>
                 {isVideoCall ? (
                     <View style={styles.videoContainer}>
-                        {remoteUsers.length > 0 ? (
-                            <div
-                                ref={remoteVideoRef}
-                                style={{ width: '100%', height: '100%', backgroundColor: '#000' }}
-                            />
-                        ) : (
+                        {/* Remote video - always render the div for video calls so it's ready when track arrives */}
+                        <div
+                            ref={remoteVideoRef}
+                            style={{
+                                width: '100%',
+                                height: '100%',
+                                backgroundColor: '#000',
+                                display: remoteUsers.length > 0 ? 'block' : 'none'
+                            }}
+                        />
+                        {/* Placeholder when no remote video yet */}
+                        {remoteUsers.length === 0 && (
                             <View style={styles.videoPlaceholder}>
                                 <UserAvatar uri={peerAvatar} name={peerName} style={styles.videoPlaceholderAvatar} />
                                 <Text style={styles.videoPlaceholderName}>{peerName}</Text>
                                 <Text style={styles.statusText}>{getStatusText()}</Text>
                             </View>
                         )}
-                        {isVideoEnabled && isConnected && (
+                        {/* Local video - show whenever video is enabled (not just when connected) */}
+                        {isVideoEnabled && (
                             <View style={styles.localVideoContainer}>
                                 <div
                                     ref={localVideoRef}

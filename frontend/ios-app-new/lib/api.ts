@@ -39,6 +39,7 @@ const TENANT_ID = process.env.EXPO_PUBLIC_TENANT_ID || '';
 
 let resolvedUserId = USER_ID;
 let resolvedTenantId = TENANT_ID;
+let resolvedUserRole: string = USER_ROLE;
 let authToken: string | null = null;
 let bootstrapPromise: Promise<void> | null = null;
 
@@ -46,13 +47,18 @@ let bootstrapPromise: Promise<void> | null = null;
 // AUTHENTICATION API
 // ===================
 
+export type UserRole = 'member' | 'stakeholder' | 'admin' | 'super_admin';
+export type StakeholderBadge = 'stakeholder' | 'vendor' | 'partner' | 'sponsor' | 'investor';
+
 export interface AuthUser {
     userId: string;
     email: string;
     firstName: string;
     lastName: string;
-    role: string;
+    role: UserRole;
+    stakeholderBadge?: StakeholderBadge;
     avatarUrl?: string;
+    tenantId?: string;
 }
 
 // Initialize auth from storage (call on app start)
@@ -67,6 +73,12 @@ export const initAuth = async (): Promise<AuthUser | null> => {
             authToken = tokenStr;
             const user = JSON.parse(userStr) as AuthUser;
             resolvedUserId = user.userId;
+            if (user.tenantId) {
+                resolvedTenantId = user.tenantId;
+            }
+            if (user.role) {
+                resolvedUserRole = user.role;
+            }
             return user;
         }
     } catch (err) {
@@ -84,6 +96,12 @@ export const setAuthUser = async (token: string, user: AuthUser): Promise<void> 
         ]);
         authToken = token;
         resolvedUserId = user.userId;
+        if (user.tenantId) {
+            resolvedTenantId = user.tenantId;
+        }
+        if (user.role) {
+            resolvedUserRole = user.role;
+        }
     } catch (err) {
         console.error('[Auth] Failed to store auth:', err);
         throw err;
@@ -241,16 +259,23 @@ export const authLoginWithRole = async (data: {
     email: string;
     password: string;
 }): Promise<{ token: string; user: AuthUser; redirectTo: string }> => {
+    console.log('[authLoginWithRole] Sending request to /auth/login-with-role');
     const response = await safeFetch('/auth/login-with-role', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
     });
+    console.log('[authLoginWithRole] Response status:', response.status, response.ok);
     const result = await parseJson(response);
+    console.log('[authLoginWithRole] Parsed result:', JSON.stringify(result));
     if (!response.ok) {
         throw new Error(result?.message || 'Login failed');
     }
     const userData = result?.data;
+    if (!userData || !userData.userId) {
+        console.error('[authLoginWithRole] Invalid login response - missing data or userId:', result);
+        throw new Error(result?.message || 'Invalid response from server');
+    }
     const user: AuthUser = {
         userId: userData.userId,
         email: userData.email,
@@ -259,6 +284,7 @@ export const authLoginWithRole = async (data: {
         role: userData.role,
         avatarUrl: userData.avatarUrl,
     };
+    console.log('[authLoginWithRole] Success, redirectTo:', result.redirectTo);
     return { token: result.token, user, redirectTo: result.redirectTo || '/(main)' };
 };
 
@@ -267,7 +293,11 @@ export const validateInviteCode = async (code: string): Promise<{
     subgridId: string;
     subgridName: string;
     clientName?: string;
+    description?: string;
     logoUrl?: string;
+    coverImageUrl?: string;
+    memberCount?: number;
+    onlineCount?: number;
 }> => {
     const response = await safeFetch(`/auth/validate-code/${code}`, {
         method: 'GET',
@@ -338,6 +368,280 @@ export const authSignupSuperAdmin = async (data: {
     return { token: result.token, user, redirectTo: result.redirectTo, message: result.message };
 };
 
+// ===================
+// OTP-BASED AUTHENTICATION
+// ===================
+
+// Send OTP to email (for signup verification)
+export const authSendOtp = async (data: { email: string }): Promise<{ message: string }> => {
+    const response = await safeFetch('/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Failed to send verification code');
+    }
+    return { message: result.message };
+};
+
+// Verify OTP (for signup verification)
+export const authVerifyOtp = async (data: { email: string; otp: string }): Promise<{ verified: boolean; message: string }> => {
+    const response = await safeFetch('/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Invalid verification code');
+    }
+    return { verified: result.verified, message: result.message };
+};
+
+// Signup member with invite code (passwordless - OTP based)
+export const authSignupMember = async (data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    username?: string;
+    inviteCode: string;
+    avatarUrl?: string;
+}): Promise<{ token: string; user: AuthUser; message: string }> => {
+    const response = await safeFetch('/auth/signup-member', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Signup failed');
+    }
+    const userData = result?.data;
+    const user: AuthUser = {
+        userId: userData.userId,
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        role: userData.role,
+        avatarUrl: userData.avatarUrl,
+        tenantId: userData.tenantId,
+    };
+    return { token: result.token, user, message: result.message };
+};
+
+// Request OTP for login
+export const authLoginOtpRequest = async (data: { email: string }): Promise<{ message: string }> => {
+    const response = await safeFetch('/auth/login-otp-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Failed to send verification code');
+    }
+    return { message: result.message };
+};
+
+// Verify OTP for login
+export const authLoginOtpVerify = async (data: {
+    email: string;
+    otp: string;
+}): Promise<{ token: string; user: AuthUser; redirectTo: string }> => {
+    const response = await safeFetch('/auth/login-otp-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Login failed');
+    }
+    const userData = result?.data;
+    const user: AuthUser = {
+        userId: userData.userId,
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        role: userData.role,
+        stakeholderBadge: userData.stakeholderBadge,
+        avatarUrl: userData.avatarUrl,
+    };
+    return { token: result.token, user, redirectTo: result.redirectTo || '/(main)' };
+};
+
+// ===================
+// STAKEHOLDER AUTHENTICATION
+// ===================
+
+// Validate stakeholder invite token
+export const validateStakeholderInvite = async (token: string): Promise<{
+    email: string;
+    subgridId: string;
+    subgridName: string;
+    clientName?: string;
+    logoUrl?: string;
+    stakeholderBadge: StakeholderBadge;
+}> => {
+    const response = await safeFetch(`/auth/validate-stakeholder-invite/${token}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Invalid or expired invitation');
+    }
+    return result.data;
+};
+
+// Signup stakeholder with invite token
+export const authSignupStakeholder = async (data: {
+    inviteToken: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    username?: string;
+    avatarUrl?: string;
+    stakeholderBadge?: StakeholderBadge;
+}): Promise<{ token: string; user: AuthUser; message: string }> => {
+    const response = await safeFetch('/auth/signup-stakeholder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Signup failed');
+    }
+    const userData = result?.data;
+    const user: AuthUser = {
+        userId: userData.userId,
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        role: userData.role,
+        stakeholderBadge: userData.stakeholderBadge,
+        avatarUrl: userData.avatarUrl,
+        tenantId: userData.tenantId,
+    };
+    return { token: result.token, user, message: result.message };
+};
+
+// Invite a stakeholder (admin only)
+export const inviteStakeholder = async (data: {
+    email: string;
+    subgridId: string;
+    stakeholderBadge?: StakeholderBadge;
+}): Promise<{ message: string; inviteToken?: string }> => {
+    const response = await safeFetch('/auth/invite-stakeholder', {
+        method: 'POST',
+        headers: buildHeaders({}),
+        body: JSON.stringify(data),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Failed to send invitation');
+    }
+    return { message: result.message, inviteToken: result.inviteToken };
+};
+
+// ===================
+// CU ADMIN SETUP (from Super Admin invite)
+// ===================
+
+// Validate CU Admin setup token
+export const validateSetupToken = async (
+    token: string,
+    tenantId: string
+): Promise<{
+    email: string;
+    customerName: string;
+    tenantId: string;
+    subgridId: string | null;
+    subgridName: string;
+    logoUrl: string;
+}> => {
+    const response = await safeFetch(`/auth/validate-setup/${token}?tenant=${tenantId}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Invalid or expired setup link');
+    }
+    return result.data;
+};
+
+// Complete CU Admin account setup
+export const completeSetup = async (data: {
+    setupToken: string;
+    tenantId: string;
+    firstName?: string;
+    lastName?: string;
+    username?: string;
+    avatarUrl?: string;
+    // Server customization
+    serverName?: string;
+    serverDescription?: string;
+    serverLogoUrl?: string;
+    serverBannerColor?: string;
+}): Promise<{
+    token: string;
+    user: AuthUser;
+    redirectTo: string;
+    message: string;
+    subgrid?: { _id: string; name: string; inviteCode?: string };
+}> => {
+    const response = await safeFetch('/auth/complete-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Failed to complete setup');
+    }
+    const userData = result.data;
+    const user: AuthUser = {
+        userId: userData.userId,
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        role: userData.role,
+        avatarUrl: userData.avatarUrl,
+    };
+    return {
+        token: result.token,
+        user,
+        redirectTo: result.redirectTo || '/admin',
+        message: result.message,
+        subgrid: userData.subgrid,
+    };
+};
+
+// Get subgrids/servers the current user has access to
+export const getUserSubgrids = async (): Promise<{
+    subgrids: Array<{
+        id: string;
+        name: string;
+        clientName?: string;
+        logoUrl?: string;
+        memberCount?: number;
+    }>;
+}> => {
+    const response = await safeFetch('/auth/my-subgrids', {
+        method: 'GET',
+        headers: buildHeaders({}),
+    });
+    const result = await parseJson(response);
+    if (!response.ok) {
+        throw new Error(result?.message || 'Failed to fetch servers');
+    }
+    return { subgrids: result.data?.subgrids || result.subgrids || [] };
+};
+
 const buildHeaders = (headers = {}) => {
     const baseHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -351,7 +655,7 @@ const buildHeaders = (headers = {}) => {
     const activeUserId = resolvedUserId || USER_ID;
     if (activeUserId) {
         baseHeaders['x-user-id'] = activeUserId;
-        baseHeaders['x-user-role'] = USER_ROLE;
+        baseHeaders['x-user-role'] = resolvedUserRole || USER_ROLE;
     }
 
     return { ...baseHeaders, ...headers };
@@ -618,7 +922,7 @@ export const uploadFile = async (
         method: 'POST',
         headers: {
             'x-user-id': resolvedUserId || USER_ID,
-            'x-user-role': USER_ROLE,
+            'x-user-role': resolvedUserRole || USER_ROLE,
         },
         body: formData,
     });
@@ -670,7 +974,7 @@ export const uploadAvatar = async (file: { uri: string; name: string; type: stri
         method: 'POST',
         headers: {
             'x-user-id': resolvedUserId || USER_ID,
-            'x-user-role': USER_ROLE,
+            'x-user-role': resolvedUserRole || USER_ROLE,
         },
         body: formData,
     });
@@ -704,7 +1008,7 @@ export const uploadVoiceNote = async (
         method: 'POST',
         headers: {
             'x-user-id': resolvedUserId || USER_ID,
-            'x-user-role': USER_ROLE,
+            'x-user-role': resolvedUserRole || USER_ROLE,
         },
         body: formData,
     });
@@ -883,7 +1187,14 @@ export const superAdminDelete = (path: string) =>
     apiFetch(`/super-admin${path}`, { method: 'DELETE' });
 
 // Get super admin overview stats
-export const getSuperAdminOverview = () => superAdminGet('/overview');
+export const getSuperAdminOverview = (options?: { growthDays?: number }) => {
+    const params = new URLSearchParams();
+    if (options?.growthDays) {
+        params.append('growthDays', String(options.growthDays));
+    }
+    const query = params.toString();
+    return superAdminGet(`/overview${query ? `?${query}` : ''}`);
+};
 
 // Get customers (communities/subgrids)
 export const getSuperAdminCustomers = (options?: { q?: string; limit?: number; offset?: number; status?: string }) => {
@@ -931,3 +1242,17 @@ export const getSuperAdminUsers = (options?: { q?: string; limit?: number; offse
     const query = params.toString();
     return superAdminGet(`/users${query ? `?${query}` : ''}`);
 };
+
+// Get team members (admin and super_admin users who help manage the platform)
+export const getSuperAdminTeamMembers = (options?: { q?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (options?.q) params.append('q', options.q);
+    if (options?.limit) params.append('limit', String(options.limit));
+    if (options?.offset) params.append('offset', String(options.offset));
+    const query = params.toString();
+    return superAdminGet(`/team${query ? `?${query}` : ''}`);
+};
+
+// Invite a new team member
+export const inviteSuperAdminTeamMember = (data: { email: string; firstName?: string; lastName?: string; role?: string }) =>
+    superAdminPost('/team/invite', data);

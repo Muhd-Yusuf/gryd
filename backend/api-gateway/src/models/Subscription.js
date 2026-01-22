@@ -9,7 +9,7 @@ const subscriptionSchema = new mongoose.Schema({
     },
     planName: {
         type: String,
-        default: 'Starter',
+        default: 'Premium',
     },
     status: {
         type: String,

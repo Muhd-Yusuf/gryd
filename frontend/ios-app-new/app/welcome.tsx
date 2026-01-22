@@ -12,7 +12,7 @@ import {
     Platform,
     Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../lib/theme';
 import { authLoginWithRole, setAuthUser, validateInviteCode, authSignupWithCode } from '../lib/api';
@@ -37,6 +37,10 @@ export default function WelcomeScreen() {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+
+    if (Platform.OS === 'web') {
+        return <Redirect href="/login" />;
+    }
 
     const handleValidateCode = async () => {
         setError('');

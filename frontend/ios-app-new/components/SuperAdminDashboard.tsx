@@ -22,7 +22,8 @@ import {
     getSuperAdminModeration,
     getSuperAdminConfig,
     updateSuperAdminConfig,
-    getSuperAdminUsers,
+    getSuperAdminTeamMembers,
+    inviteSuperAdminTeamMember,
     getAuthUser,
     logout,
     superAdminPost,
@@ -51,6 +52,7 @@ type ChartData = {
     values: number[];
 };
 
+type GrowthRange = 7 | 30 | 90;
 type Customer = {
     _id: string;
     name: string;
@@ -162,8 +164,7 @@ const SuperAdminDashboard = () => {
     // Navigation state
     const [activeNav, setActiveNav] = useState<NavItem>('overview');
 
-    // Data states
-    const [loading, setLoading] = useState(true);
+    // Data states - no loading overlays for seamless UX
     const [error, setError] = useState('');
 
     // Overview data
@@ -175,6 +176,8 @@ const SuperAdminDashboard = () => {
     });
     const [customerGrowth, setCustomerGrowth] = useState<ChartData>({ labels: [], values: [] });
     const [systemUptime, setSystemUptime] = useState<ChartData>({ labels: [], values: [] });
+    const [growthRange, setGrowthRange] = useState<GrowthRange>(7);
+    const [growthDropdownOpen, setGrowthDropdownOpen] = useState(false);
     const [recentCustomers, setRecentCustomers] = useState<Customer[]>([]);
 
     // Customer stats
@@ -196,6 +199,8 @@ const SuperAdminDashboard = () => {
 
     // Action menu
     const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
+    const [actionMenuPosition, setActionMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+    const [actionMenuCustomer, setActionMenuCustomer] = useState<Customer | null>(null);
 
     // Moderation data
     const [moderationItems, setModerationItems] = useState<ModerationItem[]>([]);
@@ -221,7 +226,9 @@ const SuperAdminDashboard = () => {
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
     const [inviteModalOpen, setInviteModalOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
-    const [inviteRole, setInviteRole] = useState('member');
+    const [inviteFirstName, setInviteFirstName] = useState('');
+    const [inviteLastName, setInviteLastName] = useState('');
+    const [inviteRole, setInviteRole] = useState('admin');
     const [invitingMember, setInvitingMember] = useState(false);
 
     // Notification settings
@@ -289,7 +296,7 @@ const SuperAdminDashboard = () => {
         } else if (activeNav === 'configuration') {
             loadConfigData();
         }
-    }, [activeNav, customerSearch, customerStatusFilter, moderationStatusFilter, currentPage, rowsPerPage]);
+    }, [activeNav, customerSearch, customerStatusFilter, moderationStatusFilter, currentPage, rowsPerPage, growthRange]);
 
     const loadInitialData = async () => {
         try {
@@ -300,26 +307,24 @@ const SuperAdminDashboard = () => {
             setAdminLastName(user?.lastName || '');
             setAdminEmail(user?.email || '');
             setAdminUsername(user?.username || user?.email?.split('@')[0] || '');
-            await loadOverviewData();
             await loadTeamMembers();
         } catch (err: any) {
-            setError(err.message || 'Failed to load data');
-        } finally {
-            setLoading(false);
+            console.error('Failed to load initial data:', err.message);
         }
     };
 
     const loadTeamMembers = async () => {
         try {
-            const response = await getSuperAdminUsers({ limit: 50 });
+            const response = await getSuperAdminTeamMembers({ limit: 50 });
+            console.log('[SuperAdmin] Team members response:', response);
             if (response?.data?.users) {
                 const members: TeamMember[] = response.data.users.map((user: any) => ({
                     _id: user._id,
                     name: [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Unknown',
                     email: user.email,
-                    role: user.role || 'member',
-                    status: user.status || 'active',
-                    avatar: user.avatar,
+                    role: user.role || 'admin',
+                    status: 'active', // Team members are always active
+                    avatar: user.avatarUrl,
                 }));
                 setTeamMembers(members);
             }
@@ -336,13 +341,18 @@ const SuperAdminDashboard = () => {
 
         try {
             setInvitingMember(true);
-            await superAdminPost('/users/invite', {
+            setError('');
+            await inviteSuperAdminTeamMember({
                 email: inviteEmail,
+                firstName: inviteFirstName || undefined,
+                lastName: inviteLastName || undefined,
                 role: inviteRole,
             });
             setInviteModalOpen(false);
             setInviteEmail('');
-            setInviteRole('member');
+            setInviteFirstName('');
+            setInviteLastName('');
+            setInviteRole('admin');
             await loadTeamMembers();
         } catch (err: any) {
             setError(err.message || 'Failed to send invite');
@@ -353,8 +363,7 @@ const SuperAdminDashboard = () => {
 
     const loadOverviewData = async () => {
         try {
-            setLoading(true);
-            const response = await getSuperAdminOverview();
+            const response = await getSuperAdminOverview({ growthDays: growthRange });
             if (response?.data) {
                 setStats(response.data.stats);
                 setCustomerGrowth(response.data.customerGrowth);
@@ -367,15 +376,12 @@ const SuperAdminDashboard = () => {
                 setRecentCustomers(customersResponse.data.customers);
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to load overview');
-        } finally {
-            setLoading(false);
+            console.error('Failed to load overview:', err.message);
         }
     };
 
     const loadCustomersData = async () => {
         try {
-            setLoading(true);
             const response = await getSuperAdminCustomers({
                 q: customerSearch,
                 status: customerStatusFilter !== 'all' ? customerStatusFilter : undefined,
@@ -400,15 +406,12 @@ const SuperAdminDashboard = () => {
                 });
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to load customers');
-        } finally {
-            setLoading(false);
+            console.error('Failed to load customers:', err.message);
         }
     };
 
     const loadModerationData = async () => {
         try {
-            setLoading(true);
             const response = await getSuperAdminModeration({
                 status: moderationStatusFilter !== 'all' ? moderationStatusFilter : undefined,
                 limit: 50,
@@ -418,24 +421,19 @@ const SuperAdminDashboard = () => {
                 setModerationTotal(response.data.total);
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to load moderation queue');
-        } finally {
-            setLoading(false);
+            console.error('Failed to load moderation queue:', err.message);
         }
     };
 
     const loadConfigData = async () => {
         try {
-            setLoading(true);
             const response = await getSuperAdminConfig();
             if (response?.data) {
                 setConfig(response.data);
                 setConfigForm(response.data);
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to load configuration');
-        } finally {
-            setLoading(false);
+            console.error('Failed to load configuration:', err.message);
         }
     };
 
@@ -487,14 +485,20 @@ const SuperAdminDashboard = () => {
     };
 
     const handleCustomerStatusUpdate = async (customerId: string, newStatus: string) => {
+        // Optimistic update - immediately update UI
+        setCustomers(prev => prev.map(c => c._id === customerId ? { ...c, status: newStatus } : c));
+        if (viewingCustomer?._id === customerId) {
+            setViewingCustomer(prev => prev ? { ...prev, status: newStatus } : null);
+        }
+        setActionMenuOpen(null);
+
         try {
             await updateSuperAdminCustomer(customerId, { status: newStatus });
-            setActionMenuOpen(null);
-            loadCustomersData();
-            if (viewingCustomer?._id === customerId) {
-                setViewingCustomer(prev => prev ? { ...prev, status: newStatus } : null);
-            }
+            // Refresh in background to ensure data consistency
+            loadCustomersData(true);
         } catch (err: any) {
+            // Revert optimistic update on error
+            loadCustomersData(true);
             setError(err.message || 'Failed to update customer status');
         }
     };
@@ -514,7 +518,7 @@ const SuperAdminDashboard = () => {
             setAddCustomerModalOpen(false);
             setNewCustomerName('');
             setNewCustomerEmail('');
-            loadCustomersData();
+            loadCustomersData(true);
         } catch (err: any) {
             setError(err.message || 'Failed to add customer');
         } finally {
@@ -551,16 +555,22 @@ const SuperAdminDashboard = () => {
     const handleSuspendCustomer = async () => {
         if (!suspendCustomerId || !suspendConfirmChecked) return;
 
+        const customerId = suspendCustomerId;
+
+        // Optimistic update
+        setCustomers(prev => prev.map(c => c._id === customerId ? { ...c, status: 'suspended' } : c));
+        if (viewingCustomer?._id === customerId) {
+            setViewingCustomer(prev => prev ? { ...prev, status: 'suspended' } : null);
+        }
+        setSuspendModalOpen(false);
+        setSuspendCustomerId(null);
+
         try {
             setSuspendingCustomer(true);
-            await updateSuperAdminCustomer(suspendCustomerId, { status: 'suspended' });
-            setSuspendModalOpen(false);
-            setSuspendCustomerId(null);
-            loadCustomersData();
-            if (viewingCustomer?._id === suspendCustomerId) {
-                setViewingCustomer(prev => prev ? { ...prev, status: 'suspended' } : null);
-            }
+            await updateSuperAdminCustomer(customerId, { status: 'suspended' });
+            loadCustomersData(true);
         } catch (err: any) {
+            loadCustomersData(true);
             setError(err.message || 'Failed to suspend customer');
         } finally {
             setSuspendingCustomer(false);
@@ -569,13 +579,17 @@ const SuperAdminDashboard = () => {
 
     // Handle revoke suspension (activate)
     const handleRevokeSuspension = async (customerId: string) => {
+        // Optimistic update
+        setCustomers(prev => prev.map(c => c._id === customerId ? { ...c, status: 'active' } : c));
+        if (viewingCustomer?._id === customerId) {
+            setViewingCustomer(prev => prev ? { ...prev, status: 'active' } : null);
+        }
+
         try {
             await updateSuperAdminCustomer(customerId, { status: 'active' });
-            loadCustomersData();
-            if (viewingCustomer?._id === customerId) {
-                setViewingCustomer(prev => prev ? { ...prev, status: 'active' } : null);
-            }
+            loadCustomersData(true);
         } catch (err: any) {
+            loadCustomersData(true);
             setError(err.message || 'Failed to revoke suspension');
         }
     };
@@ -592,16 +606,23 @@ const SuperAdminDashboard = () => {
     const handleDeleteCustomer = async () => {
         if (!deleteCustomerId || !deleteConfirmChecked) return;
 
+        const customerId = deleteCustomerId;
+
+        // Optimistic update - remove from list immediately
+        setCustomers(prev => prev.filter(c => c._id !== customerId));
+        setCustomersTotal(prev => prev - 1);
+        setDeleteModalOpen(false);
+        setDeleteCustomerId(null);
+        if (viewingCustomer?._id === customerId) {
+            handleBackToCustomers();
+        }
+
         try {
             setDeletingCustomer(true);
-            await superAdminPost(`/customers/${deleteCustomerId}/delete`, {});
-            setDeleteModalOpen(false);
-            setDeleteCustomerId(null);
-            loadCustomersData();
-            if (viewingCustomer?._id === deleteCustomerId) {
-                handleBackToCustomers();
-            }
+            await superAdminPost(`/customers/${customerId}/delete`, {});
+            loadCustomersData(true);
         } catch (err: any) {
+            loadCustomersData(true);
             setError(err.message || 'Failed to delete customer');
         } finally {
             setDeletingCustomer(false);
@@ -620,14 +641,21 @@ const SuperAdminDashboard = () => {
     const handleUpgradePlan = async () => {
         if (!upgradeCustomerId || !selectedPlan) return;
 
+        const customerId = upgradeCustomerId;
+        const newPlan = selectedPlan;
+
+        // Optimistic update
+        setCustomers(prev => prev.map(c => c._id === customerId ? { ...c, plan: newPlan } : c));
+        setUpgradeModalOpen(false);
+        setUpgradeCustomerId(null);
+        setSelectedPlan('');
+
         try {
             setUpgradingCustomer(true);
-            await superAdminPost(`/customers/${upgradeCustomerId}/upgrade`, { plan: selectedPlan });
-            setUpgradeModalOpen(false);
-            setUpgradeCustomerId(null);
-            setSelectedPlan('');
-            loadCustomersData();
+            await superAdminPost(`/customers/${customerId}/upgrade`, { plan: newPlan });
+            loadCustomersData(true);
         } catch (err: any) {
+            loadCustomersData(true);
             setError(err.message || 'Failed to upgrade customer plan');
         } finally {
             setUpgradingCustomer(false);
@@ -640,6 +668,34 @@ const SuperAdminDashboard = () => {
                 ? prev.filter(id => id !== customerId)
                 : [...prev, customerId]
         );
+    };
+
+    // Handle opening action menu with position
+    const handleOpenActionMenu = (event: any, customer: Customer) => {
+        event.stopPropagation();
+        if (actionMenuOpen === customer._id) {
+            setActionMenuOpen(null);
+            setActionMenuCustomer(null);
+            return;
+        }
+
+        // Get position from event target for web
+        const target = event.currentTarget || event.target;
+        if (target && target.getBoundingClientRect) {
+            const rect = target.getBoundingClientRect();
+            setActionMenuPosition({
+                top: rect.bottom + 5,
+                right: window.innerWidth - rect.right,
+            });
+        }
+        setActionMenuCustomer(customer);
+        setActionMenuOpen(customer._id);
+    };
+
+    // Close action menu
+    const closeActionMenu = () => {
+        setActionMenuOpen(null);
+        setActionMenuCustomer(null);
     };
 
     const buildChartPaths = (values: number[], width = 100, height = 100, padding = 10) => {
@@ -768,7 +824,7 @@ const SuperAdminDashboard = () => {
                     style={[styles.navItem, activeNav === 'overview' && styles.navItemActive]}
                     onPress={() => { setActiveNav('overview'); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons name="dashboard" size={20} color={activeNav === 'overview' ? '#111111' : 'rgba(255,255,255,0.7)'} />
+                    <MaterialIcons name="dashboard" size={20} color={activeNav === 'overview' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
                     <Text style={[styles.navItemText, activeNav === 'overview' && styles.navItemTextActive]}>Overview</Text>
                 </TouchableOpacity>
 
@@ -776,7 +832,7 @@ const SuperAdminDashboard = () => {
                     style={[styles.navItem, activeNav === 'customers' && styles.navItemActive]}
                     onPress={() => { setActiveNav('customers'); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons name="people" size={20} color={activeNav === 'customers' ? '#111111' : 'rgba(255,255,255,0.7)'} />
+                    <MaterialIcons name="people" size={20} color={activeNav === 'customers' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
                     <Text style={[styles.navItemText, activeNav === 'customers' && styles.navItemTextActive]}>Customers</Text>
                 </TouchableOpacity>
 
@@ -784,7 +840,7 @@ const SuperAdminDashboard = () => {
                     style={[styles.navItem, activeNav === 'moderation' && styles.navItemActive]}
                     onPress={() => { setActiveNav('moderation'); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons name="security" size={20} color={activeNav === 'moderation' ? '#111111' : 'rgba(255,255,255,0.7)'} />
+                    <MaterialIcons name="security" size={20} color={activeNav === 'moderation' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
                     <Text style={[styles.navItemText, activeNav === 'moderation' && styles.navItemTextActive]}>Moderations & Safety</Text>
                 </TouchableOpacity>
 
@@ -792,7 +848,7 @@ const SuperAdminDashboard = () => {
                     style={[styles.navItem, activeNav === 'configuration' && styles.navItemActive]}
                     onPress={() => { setActiveNav('configuration'); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons name="settings" size={20} color={activeNav === 'configuration' ? '#111111' : 'rgba(255,255,255,0.7)'} />
+                    <MaterialIcons name="settings" size={20} color={activeNav === 'configuration' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
                     <Text style={[styles.navItemText, activeNav === 'configuration' && styles.navItemTextActive]}>Configuration</Text>
                 </TouchableOpacity>
             </View>
@@ -800,7 +856,7 @@ const SuperAdminDashboard = () => {
             {/* Logout */}
             <View style={styles.sidebarFooter}>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                    <MaterialIcons name="logout" size={20} color="rgba(255,255,255,0.7)" />
+                    <MaterialIcons name="logout" size={20} color={colors.sidebarTextMuted} />
                     <Text style={styles.logoutText}>Logout</Text>
                 </TouchableOpacity>
             </View>
@@ -827,10 +883,7 @@ const SuperAdminDashboard = () => {
                         <MaterialIcons name="notifications-none" size={20} color={colors.textMuted} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.topBarIconButton} onPress={toggleTheme}>
-                        <MaterialIcons name="light-mode" size={20} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.topBarIconButton}>
-                        <MaterialIcons name="dark-mode" size={20} color={colors.textMuted} />
+                        <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={20} color={colors.textMuted} />
                     </TouchableOpacity>
                 </View>
                 <View style={styles.topBarDivider} />
@@ -927,10 +980,10 @@ const SuperAdminDashboard = () => {
                                 <View style={styles.checkbox} />
                             </View>
                             <View style={[styles.tableCell, { flex: 2 }]}>
-                                <Text style={styles.customerName}>{customer.owner?.name || customer.name}</Text>
+                                <Text style={styles.customerName}>{customer.clientName || customer.owner?.name || '-'}</Text>
                                 <Text style={styles.customerEmail}>{customer.owner?.email || ''}</Text>
                             </View>
-                            <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.serverName || customer.name}</Text>
+                            <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.name || '-'}</Text>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{customer.memberCount}</Text>
                             <View style={[styles.tableCell, { flex: 1 }]}>
                                 <View style={[styles.planBadge, customer.plan === 'Premium' ? styles.planPremium : styles.planTrial]}>
@@ -946,7 +999,10 @@ const SuperAdminDashboard = () => {
                                 </View>
                             </View>
                             <View style={[styles.tableCell, { width: 50 }]}>
-                                <TouchableOpacity style={styles.actionMenuButton}>
+                                <TouchableOpacity
+                                    style={styles.actionMenuButton}
+                                    onPress={(e) => handleOpenActionMenu(e, customer)}
+                                >
                                     <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
                                 </TouchableOpacity>
                             </View>
@@ -960,10 +1016,42 @@ const SuperAdminDashboard = () => {
                 <View style={styles.chartCard}>
                     <View style={styles.chartHeader}>
                         <Text style={styles.chartTitle}>Customer Growth</Text>
-                        <TouchableOpacity style={styles.chartDropdown}>
-                            <Text style={styles.chartDropdownText}>7 Days</Text>
-                            <MaterialIcons name="expand-more" size={18} color={colors.text} />
-                        </TouchableOpacity>
+                        <View style={styles.chartDropdownWrapper}>
+                            <TouchableOpacity
+                                style={styles.chartDropdown}
+                                onPress={() => setGrowthDropdownOpen((prev) => !prev)}
+                            >
+                                <Text style={styles.chartDropdownText}>{growthRange} Days</Text>
+                                <MaterialIcons name="expand-more" size={18} color={colors.text} />
+                            </TouchableOpacity>
+                            {growthDropdownOpen && (
+                                <View style={styles.chartDropdownMenu}>
+                                    {[7, 30, 90].map((range) => (
+                                        <TouchableOpacity
+                                            key={range}
+                                            style={[
+                                                styles.chartDropdownItem,
+                                                growthRange === range && styles.chartDropdownItemActive,
+                                            ]}
+                                            onPress={() => {
+                                                setGrowthRange(range as GrowthRange);
+                                                setGrowthDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.chartDropdownItemText,
+                                                    growthRange === range &&
+                                                        styles.chartDropdownItemTextActive,
+                                                ]}
+                                            >
+                                                {range} Days
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
                     </View>
                     {customerGrowth.values.length > 0 ? (
                         renderAreaChart(customerGrowth, '#22c55e', '#22c55e')
@@ -1086,11 +1174,11 @@ const SuperAdminDashboard = () => {
                     </View>
 
                     {customers.map((customer) => (
-                        <View key={customer._id} style={styles.tableRow}>
+                        <TouchableOpacity key={customer._id} style={styles.tableRow} onPress={() => handleViewCustomer(customer)}>
                             <View style={[styles.tableCell, { width: 40 }]}>
                                 <TouchableOpacity
                                     style={[styles.checkbox, selectedCustomers.includes(customer._id) && styles.checkboxChecked]}
-                                    onPress={() => toggleCustomerSelection(customer._id)}
+                                    onPress={(e) => { e.stopPropagation(); toggleCustomerSelection(customer._id); }}
                                 >
                                     {selectedCustomers.includes(customer._id) && (
                                         <MaterialIcons name="check" size={14} color="#fff" />
@@ -1098,7 +1186,7 @@ const SuperAdminDashboard = () => {
                                 </TouchableOpacity>
                             </View>
                             <View style={[styles.tableCell, { flex: 2 }]}>
-                                <Text style={styles.customerName}>{customer.owner?.name || customer.name}</Text>
+                                <Text style={styles.customerName}>{customer.clientName || customer.owner?.name || '-'}</Text>
                                 <Text style={styles.customerEmail}>{customer.owner?.email || ''}</Text>
                             </View>
                             <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.name || '-'}</Text>
@@ -1116,43 +1204,18 @@ const SuperAdminDashboard = () => {
                                     </Text>
                                 </View>
                             </View>
-                            <View style={[styles.tableCell, { width: 50, position: 'relative' }]}>
+                            <View style={[styles.tableCell, { width: 50 }]}>
                                 <TouchableOpacity
                                     style={styles.actionMenuButton}
-                                    onPress={() => setActionMenuOpen(actionMenuOpen === customer._id ? null : customer._id)}
+                                    onPress={(e) => handleOpenActionMenu(e, customer)}
                                 >
                                     <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
                                 </TouchableOpacity>
-
-                                {actionMenuOpen === customer._id && (
-                                    <View style={styles.actionMenu}>
-                                        <TouchableOpacity style={styles.actionMenuItem} onPress={() => { handleViewCustomer(customer); setActionMenuOpen(null); }}>
-                                            <Text style={styles.actionMenuText}>View Customer</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity style={styles.actionMenuItem} onPress={() => openUpgradeModal(customer._id)}>
-                                            <Text style={styles.actionMenuText}>Upgrade Access</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity style={styles.actionMenuItem} onPress={() => { handleCustomerStatusUpdate(customer._id, 'revoked'); setActionMenuOpen(null); }}>
-                                            <Text style={styles.actionMenuText}>Revoke Access</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.actionMenuItem}
-                                            onPress={() => customer.status === 'active' ? openSuspendModal(customer._id) : handleRevokeSuspension(customer._id)}
-                                        >
-                                            <Text style={styles.actionMenuText}>
-                                                {customer.status === 'active' ? 'Suspend Customer' : 'Activate Customer'}
-                                            </Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity style={styles.actionMenuItem} onPress={() => openDeleteModal(customer._id)}>
-                                            <Text style={[styles.actionMenuText, { color: colors.error }]}>Delete Account</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                )}
                             </View>
-                        </View>
+                        </TouchableOpacity>
                     ))}
 
-                    {customers.length === 0 && !loading && (
+                    {customers.length === 0 && (
                         <View style={styles.emptyState}>
                             <MaterialIcons name="people" size={48} color={colors.textMuted} />
                             <Text style={styles.emptyStateText}>No customers found</Text>
@@ -1245,7 +1308,7 @@ const SuperAdminDashboard = () => {
                             <View style={styles.detailGrid}>
                                 <View style={styles.detailGridItem}>
                                     <Text style={styles.detailLabel}>Full Name</Text>
-                                    <Text style={styles.detailValue}>{customerDetailData.customer?.name || viewingCustomer.owner?.name || 'N/A'}</Text>
+                                    <Text style={styles.detailValue}>{customerDetailData.customer?.clientName || viewingCustomer.clientName || 'N/A'}</Text>
                                 </View>
                                 <View style={styles.detailGridItem}>
                                     <Text style={styles.detailLabel}>Email</Text>
@@ -1936,6 +1999,9 @@ const SuperAdminDashboard = () => {
         </Modal>
     );
 
+    // Role dropdown state for invite modal
+    const [inviteRoleDropdownOpen, setInviteRoleDropdownOpen] = useState(false);
+
     // Render Invite Team Member Modal
     const renderInviteModal = () => (
         <Modal
@@ -1955,13 +2021,40 @@ const SuperAdminDashboard = () => {
                         </TouchableOpacity>
                     </View>
 
-                    <Text style={styles.inviteModalTitle}>Invite members</Text>
-                    <Text style={styles.inviteModalSubtitle}>Add your colleagues to give them access to your plan</Text>
+                    <Text style={styles.inviteModalTitle}>Add Team Member</Text>
+                    <Text style={styles.inviteModalSubtitle}>Invite colleagues to help manage the platform</Text>
 
                     <View style={styles.inviteForm}>
+                        {/* Name row */}
+                        <View style={styles.inviteFormRow}>
+                            <View style={[styles.inviteEmailGroup, { flex: 1 }]}>
+                                <Text style={styles.inviteLabel}>First Name</Text>
+                                <TextInput
+                                    style={styles.inviteInput}
+                                    value={inviteFirstName}
+                                    onChangeText={setInviteFirstName}
+                                    placeholder="John"
+                                    placeholderTextColor={colors.textMuted}
+                                    autoCapitalize="words"
+                                />
+                            </View>
+                            <View style={[styles.inviteEmailGroup, { flex: 1, marginLeft: 12 }]}>
+                                <Text style={styles.inviteLabel}>Last Name</Text>
+                                <TextInput
+                                    style={styles.inviteInput}
+                                    value={inviteLastName}
+                                    onChangeText={setInviteLastName}
+                                    placeholder="Doe"
+                                    placeholderTextColor={colors.textMuted}
+                                    autoCapitalize="words"
+                                />
+                            </View>
+                        </View>
+
+                        {/* Email and Role row */}
                         <View style={styles.inviteFormRow}>
                             <View style={styles.inviteEmailGroup}>
-                                <Text style={styles.inviteLabel}>Email address</Text>
+                                <Text style={styles.inviteLabel}>Email address *</Text>
                                 <TextInput
                                     style={styles.inviteInput}
                                     value={inviteEmail}
@@ -1974,25 +2067,41 @@ const SuperAdminDashboard = () => {
                             </View>
                             <View style={styles.inviteRoleGroup}>
                                 <Text style={styles.inviteLabel}>Role</Text>
-                                <TouchableOpacity style={styles.inviteRoleDropdown}>
+                                <TouchableOpacity
+                                    style={styles.inviteRoleDropdown}
+                                    onPress={() => setInviteRoleDropdownOpen(!inviteRoleDropdownOpen)}
+                                >
                                     <Text style={styles.inviteRoleText}>
-                                        {inviteRole.charAt(0).toUpperCase() + inviteRole.slice(1)}
+                                        {inviteRole === 'super_admin' ? 'Super Admin' : 'Admin'}
                                     </Text>
                                     <MaterialIcons name="expand-more" size={20} color={colors.textMuted} />
                                 </TouchableOpacity>
+                                {inviteRoleDropdownOpen && (
+                                    <View style={[styles.inviteRoleDropdownMenu, { position: 'absolute', top: 70, left: 0, right: 0, zIndex: 100 }]}>
+                                        <TouchableOpacity
+                                            style={[styles.inviteRoleOption, inviteRole === 'admin' && styles.inviteRoleOptionActive]}
+                                            onPress={() => { setInviteRole('admin'); setInviteRoleDropdownOpen(false); }}
+                                        >
+                                            <Text style={styles.inviteRoleOptionText}>Admin</Text>
+                                            <Text style={styles.inviteRoleOptionDesc}>Can manage customers and moderation</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.inviteRoleOption, inviteRole === 'super_admin' && styles.inviteRoleOptionActive]}
+                                            onPress={() => { setInviteRole('super_admin'); setInviteRoleDropdownOpen(false); }}
+                                        >
+                                            <Text style={styles.inviteRoleOptionText}>Super Admin</Text>
+                                            <Text style={styles.inviteRoleOptionDesc}>Full platform access including settings</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
                             </View>
                         </View>
-
-                        <TouchableOpacity style={styles.addAnotherButton}>
-                            <MaterialIcons name="add-circle-outline" size={20} color={colors.textMuted} />
-                            <Text style={styles.addAnotherText}>Add another</Text>
-                        </TouchableOpacity>
                     </View>
 
                     <View style={styles.inviteModalActions}>
                         <TouchableOpacity
                             style={styles.inviteCancelButton}
-                            onPress={() => setInviteModalOpen(false)}
+                            onPress={() => { setInviteModalOpen(false); setInviteRoleDropdownOpen(false); }}
                         >
                             <Text style={styles.inviteCancelText}>Cancel</Text>
                         </TouchableOpacity>
@@ -2013,16 +2122,7 @@ const SuperAdminDashboard = () => {
         </Modal>
     );
 
-    // Main render
-    if (loading && !stats.totalCustomers) {
-        return (
-            <View style={[styles.container, styles.loadingContainer]}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.loadingText}>Loading dashboard...</Text>
-            </View>
-        );
-    }
-
+    // Main render - no loading states, data loads seamlessly in background
     return (
         <View style={[styles.container, isMobile && styles.containerMobile]}>
             {/* Sidebar */}
@@ -2054,13 +2154,6 @@ const SuperAdminDashboard = () => {
                         </TouchableOpacity>
                     </View>
                 ) : null}
-
-                {/* Loading Overlay */}
-                {loading && stats.totalCustomers > 0 && (
-                    <View style={styles.loadingOverlay}>
-                        <ActivityIndicator size="small" color={colors.primary} />
-                    </View>
-                )}
             </View>
 
             {/* Add Customer Modal */}
@@ -2078,12 +2171,65 @@ const SuperAdminDashboard = () => {
             {/* Invite Team Member Modal */}
             {renderInviteModal()}
 
-            {/* Click outside to close action menu */}
-            {actionMenuOpen && (
-                <Pressable
-                    style={styles.actionMenuOverlay}
-                    onPress={() => setActionMenuOpen(null)}
-                />
+            {/* Action Menu Overlay and Dropdown */}
+            {actionMenuOpen && actionMenuCustomer && (
+                <>
+                    <Pressable
+                        style={styles.actionMenuOverlay}
+                        onPress={closeActionMenu}
+                    />
+                    <View style={[styles.floatingActionMenu, { top: actionMenuPosition.top, right: actionMenuPosition.right }]}>
+                        <TouchableOpacity
+                            style={styles.actionMenuItem}
+                            onPress={() => { handleViewCustomer(actionMenuCustomer); closeActionMenu(); }}
+                        >
+                            <MaterialIcons name="visibility" size={18} color={colors.text} style={{ marginRight: 10 }} />
+                            <Text style={styles.actionMenuText}>View Customer</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.actionMenuItem}
+                            onPress={() => { openUpgradeModal(actionMenuCustomer._id); closeActionMenu(); }}
+                        >
+                            <MaterialIcons name="upgrade" size={18} color={colors.text} style={{ marginRight: 10 }} />
+                            <Text style={styles.actionMenuText}>Upgrade Access</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.actionMenuItem}
+                            onPress={() => { handleCustomerStatusUpdate(actionMenuCustomer._id, 'revoked'); closeActionMenu(); }}
+                        >
+                            <MaterialIcons name="block" size={18} color={colors.text} style={{ marginRight: 10 }} />
+                            <Text style={styles.actionMenuText}>Revoke Access</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.actionMenuItem}
+                            onPress={() => {
+                                if (actionMenuCustomer.status === 'active') {
+                                    openSuspendModal(actionMenuCustomer._id);
+                                } else {
+                                    handleRevokeSuspension(actionMenuCustomer._id);
+                                }
+                                closeActionMenu();
+                            }}
+                        >
+                            <MaterialIcons
+                                name={actionMenuCustomer.status === 'active' ? 'pause-circle-outline' : 'play-circle-outline'}
+                                size={18}
+                                color={colors.text}
+                                style={{ marginRight: 10 }}
+                            />
+                            <Text style={styles.actionMenuText}>
+                                {actionMenuCustomer.status === 'active' ? 'Suspend Customer' : 'Activate Customer'}
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.actionMenuItem}
+                            onPress={() => { openDeleteModal(actionMenuCustomer._id); closeActionMenu(); }}
+                        >
+                            <MaterialIcons name="delete-outline" size={18} color={colors.error} style={{ marginRight: 10 }} />
+                            <Text style={[styles.actionMenuText, { color: colors.error }]}>Delete Account</Text>
+                        </TouchableOpacity>
+                    </View>
+                </>
             )}
         </View>
     );
@@ -2094,27 +2240,17 @@ const createStyles = (colors: any) =>
         container: {
             flex: 1,
             flexDirection: 'row',
-            backgroundColor: '#f3f4f6',
+            backgroundColor: colors.appBg,
             padding: 16,
             gap: 16,
         },
         containerMobile: {
             padding: 12,
         },
-        loadingContainer: {
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        loadingText: {
-            marginTop: 16,
-            color: colors.textMuted,
-            fontSize: 16,
-        },
-
         // Sidebar
         sidebar: {
             width: 240,
-            backgroundColor: '#0b0b0b',
+            backgroundColor: colors.sidebarBg,
             paddingVertical: 24,
             paddingHorizontal: 18,
             borderRadius: 24,
@@ -2132,19 +2268,19 @@ const createStyles = (colors: any) =>
             height: 34,
             borderRadius: 10,
             borderWidth: 2,
-            borderColor: '#fff',
+            borderColor: colors.sidebarText,
             justifyContent: 'center',
             alignItems: 'center',
         },
         logoHash: {
             fontSize: 18,
             fontWeight: '700',
-            color: '#fff',
+            color: colors.sidebarText,
         },
         logoText: {
             fontSize: 17,
             fontWeight: '700',
-            color: '#fff',
+            color: colors.sidebarText,
             letterSpacing: 1,
         },
         navItems: {
@@ -2159,15 +2295,15 @@ const createStyles = (colors: any) =>
             marginBottom: 8,
         },
         navItemActive: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.sidebarActiveBg,
         },
         navItemText: {
             fontSize: 14,
-            color: 'rgba(255,255,255,0.7)',
+            color: colors.sidebarTextMuted,
             marginLeft: 12,
         },
         navItemTextActive: {
-            color: '#111111',
+            color: colors.sidebarActiveText,
             fontWeight: '600',
         },
         sidebarFooter: {
@@ -2183,7 +2319,7 @@ const createStyles = (colors: any) =>
         },
         logoutText: {
             fontSize: 14,
-            color: 'rgba(255,255,255,0.7)',
+            color: colors.sidebarTextMuted,
             marginLeft: 12,
         },
 
@@ -2194,9 +2330,9 @@ const createStyles = (colors: any) =>
             justifyContent: 'space-between',
             paddingHorizontal: 20,
             paddingVertical: 12,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 24,
             marginHorizontal: 24,
             marginTop: 12,
@@ -2213,9 +2349,9 @@ const createStyles = (colors: any) =>
         searchContainer: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#d1d5db',
+            borderColor: colors.border,
             borderRadius: 999,
             paddingHorizontal: 16,
             paddingVertical: 8,
@@ -2247,14 +2383,14 @@ const createStyles = (colors: any) =>
             borderRadius: 18,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#f3f4f6',
+            backgroundColor: colors.surfaceMuted,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         topBarDivider: {
             width: 1,
             height: 32,
-            backgroundColor: '#e5e7eb',
+            backgroundColor: colors.border,
             marginHorizontal: 12,
         },
         profileSection: {
@@ -2266,16 +2402,16 @@ const createStyles = (colors: any) =>
             width: 36,
             height: 36,
             borderRadius: 18,
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: '#fff',
+            borderColor: colors.surface,
         },
         profileAvatarText: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#fff',
+            color: colors.primaryText,
         },
         profileInfo: {
             alignItems: 'flex-start',
@@ -2283,11 +2419,11 @@ const createStyles = (colors: any) =>
         profileName: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#111827',
+            color: colors.text,
         },
         profileRole: {
             fontSize: 12,
-            color: '#6b7280',
+            color: colors.textMuted,
         },
 
         // Main Content
@@ -2311,12 +2447,12 @@ const createStyles = (colors: any) =>
         pageTitle: {
             fontSize: 24,
             fontWeight: '700',
-            color: '#111827',
+            color: colors.text,
             marginBottom: 4,
         },
         pageSubtitle: {
             fontSize: 14,
-            color: '#6b7280',
+            color: colors.textMuted,
         },
 
         // Stats Cards (Overview)
@@ -2329,14 +2465,14 @@ const createStyles = (colors: any) =>
         statCard: {
             flex: 1,
             minWidth: 220,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 16,
             padding: 16,
             flexDirection: 'row',
             alignItems: 'center',
             gap: 12,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         statIcon: {
             width: 44,
@@ -2348,13 +2484,13 @@ const createStyles = (colors: any) =>
         statInfo: {},
         statLabel: {
             fontSize: 12,
-            color: '#6b7280',
+            color: colors.textMuted,
             marginBottom: 4,
         },
         statValue: {
             fontSize: 22,
             fontWeight: '700',
-            color: '#111827',
+            color: colors.text,
         },
 
         // Customer Stats Cards
@@ -2367,14 +2503,14 @@ const createStyles = (colors: any) =>
         customerStatCard: {
             flex: 1,
             minWidth: 180,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 16,
             padding: 16,
             flexDirection: 'row',
             alignItems: 'center',
             gap: 12,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         customerStatIcon: {
             width: 44,
@@ -2386,13 +2522,13 @@ const createStyles = (colors: any) =>
         customerStatInfo: {},
         customerStatLabel: {
             fontSize: 12,
-            color: '#6b7280',
+            color: colors.textMuted,
             marginBottom: 2,
         },
         customerStatValue: {
             fontSize: 24,
             fontWeight: '700',
-            color: '#111827',
+            color: colors.text,
         },
 
         // Customers Header
@@ -2403,25 +2539,25 @@ const createStyles = (colors: any) =>
             marginBottom: 24,
         },
         addCustomerButton: {
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
             paddingHorizontal: 20,
             paddingVertical: 12,
             borderRadius: 8,
         },
         addCustomerButtonText: {
-            color: '#fff',
+            color: colors.primaryText,
             fontSize: 14,
             fontWeight: '500',
         },
 
         // Table
         tableCard: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 16,
             overflow: 'hidden',
             marginBottom: 24,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         tableHeader: {
             flexDirection: 'row',
@@ -2433,7 +2569,7 @@ const createStyles = (colors: any) =>
         tableTitle: {
             fontSize: 16,
             fontWeight: '600',
-            color: '#111827',
+            color: colors.text,
         },
         viewAllLink: {
             fontSize: 14,
@@ -2443,10 +2579,11 @@ const createStyles = (colors: any) =>
 
         // Customers Table
         customersTableCard: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
+            overflow: 'visible',
         },
         customersTableHeader: {
             flexDirection: 'row',
@@ -2454,12 +2591,12 @@ const createStyles = (colors: any) =>
             alignItems: 'center',
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: '#e5e7eb',
+            borderBottomColor: colors.border,
         },
         customerTableTitle: {
             fontSize: 16,
             fontWeight: '600',
-            color: '#111827',
+            color: colors.text,
         },
         tableControls: {
             flexDirection: 'row',
@@ -2469,9 +2606,9 @@ const createStyles = (colors: any) =>
         tableSearchContainer: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 8,
             paddingHorizontal: 12,
             paddingVertical: 8,
@@ -2486,9 +2623,9 @@ const createStyles = (colors: any) =>
         filterDropdown: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 8,
@@ -2501,9 +2638,9 @@ const createStyles = (colors: any) =>
         exportButton: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 8,
@@ -2516,6 +2653,7 @@ const createStyles = (colors: any) =>
 
         table: {
             padding: 0,
+            overflow: 'visible',
         },
         tableRowHeader: {
             flexDirection: 'row',
@@ -2523,8 +2661,8 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 16,
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: '#e5e7eb',
-            backgroundColor: '#fff',
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surface,
         },
         tableRow: {
             flexDirection: 'row',
@@ -2532,38 +2670,40 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 16,
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: '#f1f5f9',
+            borderBottomColor: colors.border,
+            overflow: 'visible',
+            zIndex: 1,
         },
         tableHeaderCell: {
             fontSize: 12,
             fontWeight: '600',
-            color: '#6b7280',
+            color: colors.textMuted,
         },
         tableCell: {
             fontSize: 14,
-            color: '#111827',
+            color: colors.text,
         },
         checkbox: {
             width: 16,
             height: 16,
             borderRadius: 4,
             borderWidth: 1,
-            borderColor: '#d1d5db',
+            borderColor: colors.border,
             justifyContent: 'center',
             alignItems: 'center',
         },
         checkboxChecked: {
-            backgroundColor: '#111827',
-            borderColor: '#111827',
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
         },
         customerName: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#111827',
+            color: colors.text,
         },
         customerEmail: {
             fontSize: 12,
-            color: '#6b7280',
+            color: colors.textMuted,
             marginTop: 2,
         },
         planBadge: {
@@ -2571,20 +2711,20 @@ const createStyles = (colors: any) =>
             paddingVertical: 3,
             borderRadius: 999,
             borderWidth: 1,
-            borderColor: '#d1d5db',
-            backgroundColor: '#fff',
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
             alignSelf: 'flex-start',
         },
         planTrial: {
-            borderColor: '#d1d5db',
+            borderColor: colors.border,
         },
         planPremium: {
-            borderColor: '#d1d5db',
+            borderColor: colors.border,
         },
         planBadgeText: {
             fontSize: 11,
             fontWeight: '600',
-            color: '#6b7280',
+            color: colors.textMuted,
         },
         statusBadge: {
             flexDirection: 'row',
@@ -2596,13 +2736,13 @@ const createStyles = (colors: any) =>
             gap: 6,
         },
         statusActive: {
-            backgroundColor: '#e7f6ec',
+            backgroundColor: colors.successBg,
         },
         statusPending: {
-            backgroundColor: '#fef3c7',
+            backgroundColor: colors.warningBg,
         },
         statusSuspended: {
-            backgroundColor: '#fee2e2',
+            backgroundColor: colors.dangerBg,
         },
         statusDot: {
             width: 6,
@@ -2610,26 +2750,26 @@ const createStyles = (colors: any) =>
             borderRadius: 3,
         },
         statusDotActive: {
-            backgroundColor: '#22c55e',
+            backgroundColor: colors.successText,
         },
         statusDotPending: {
-            backgroundColor: '#f59e0b',
+            backgroundColor: colors.warningText,
         },
         statusDotSuspended: {
-            backgroundColor: '#ef4444',
+            backgroundColor: colors.dangerText,
         },
         statusBadgeText: {
             fontSize: 11,
             fontWeight: '600',
         },
         statusTextActive: {
-            color: '#16a34a',
+            color: colors.successText,
         },
         statusTextPending: {
-            color: '#d97706',
+            color: colors.warningText,
         },
         statusTextSuspended: {
-            color: '#dc2626',
+            color: colors.dangerText,
         },
 
         // Action Menu
@@ -2638,41 +2778,60 @@ const createStyles = (colors: any) =>
             height: 32,
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             alignItems: 'center',
             justifyContent: 'center',
         },
         actionMenu: {
             position: 'absolute',
-            top: 30,
+            top: '100%',
             right: 0,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 8,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 12,
-            elevation: 8,
-            minWidth: 160,
-            zIndex: 1000,
+            shadowOpacity: 0.25,
+            shadowRadius: 16,
+            elevation: 20,
+            minWidth: 180,
+            zIndex: 9999,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
+            overflow: 'visible',
         },
         actionMenuItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
             paddingHorizontal: 16,
-            paddingVertical: 10,
+            paddingVertical: 12,
         },
         actionMenuText: {
             fontSize: 14,
             color: colors.text,
         },
         actionMenuOverlay: {
-            position: 'absolute',
+            position: 'fixed' as any,
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
-            zIndex: 999,
+            zIndex: 9998,
+            backgroundColor: 'transparent',
+        },
+        floatingActionMenu: {
+            position: 'fixed' as any,
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.25,
+            shadowRadius: 20,
+            elevation: 25,
+            minWidth: 200,
+            zIndex: 9999,
+            borderWidth: 1,
+            borderColor: colors.border,
+            paddingVertical: 8,
         },
 
         // Pagination
@@ -2682,7 +2841,7 @@ const createStyles = (colors: any) =>
             alignItems: 'center',
             padding: 16,
             borderTopWidth: 1,
-            borderTopColor: '#e5e7eb',
+            borderTopColor: colors.border,
         },
         paginationInfo: {
             fontSize: 14,
@@ -2700,7 +2859,7 @@ const createStyles = (colors: any) =>
         rowsDropdown: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#dcfce7',
+            backgroundColor: colors.successBg,
             paddingHorizontal: 12,
             paddingVertical: 4,
             borderRadius: 4,
@@ -2716,10 +2875,10 @@ const createStyles = (colors: any) =>
             borderRadius: 4,
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: '#f3f4f6',
+            backgroundColor: colors.surfaceMuted,
         },
         paginationButtonActive: {
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
         },
         paginationButtonDisabled: {
             opacity: 0.5,
@@ -2775,12 +2934,12 @@ const createStyles = (colors: any) =>
             alignItems: 'center',
         },
         detailCard: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             padding: 24,
             marginBottom: 16,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         detailCardTitle: {
             fontSize: 16,
@@ -2815,13 +2974,13 @@ const createStyles = (colors: any) =>
             alignItems: 'flex-start',
             paddingVertical: 16,
             borderBottomWidth: 1,
-            borderBottomColor: '#e5e7eb',
+            borderBottomColor: colors.border,
         },
         activityDot: {
             width: 8,
             height: 8,
             borderRadius: 4,
-            backgroundColor: '#0ea5e9',
+            backgroundColor: colors.primary,
             marginTop: 6,
             marginRight: 12,
         },
@@ -2856,16 +3015,16 @@ const createStyles = (colors: any) =>
         },
         chartCard: {
             flex: 1,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 16,
             padding: 16,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         chartTitle: {
             fontSize: 16,
             fontWeight: '600',
-            color: '#111827',
+            color: colors.text,
             marginBottom: 12,
         },
         chartContainer: {
@@ -2898,7 +3057,7 @@ const createStyles = (colors: any) =>
         },
         chartLabel: {
             fontSize: 11,
-            color: '#6b7280',
+            color: colors.textMuted,
             flex: 1,
             textAlign: 'center',
         },
@@ -2911,13 +3070,13 @@ const createStyles = (colors: any) =>
         uptimeBar: {
             flex: 1,
             height: 120,
-            backgroundColor: '#e5e7eb',
+            backgroundColor: colors.border,
             borderRadius: 2,
             overflow: 'hidden',
             justifyContent: 'flex-end',
         },
         uptimeBarFill: {
-            backgroundColor: '#10b981',
+            backgroundColor: colors.successText,
             borderRadius: 2,
         },
         noDataText: {
@@ -2941,17 +3100,17 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 16,
             paddingVertical: 8,
             borderRadius: 8,
-            backgroundColor: '#f3f4f6',
+            backgroundColor: colors.surfaceMuted,
         },
         filterButtonActive: {
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
         },
         filterButtonText: {
             fontSize: 14,
             color: colors.textMuted,
         },
         filterButtonTextActive: {
-            color: '#fff',
+            color: colors.primaryText,
             fontWeight: '500',
         },
 
@@ -2969,13 +3128,13 @@ const createStyles = (colors: any) =>
         actionButton: {
             padding: 6,
             borderRadius: 6,
-            backgroundColor: '#f3f4f6',
+            backgroundColor: colors.surfaceMuted,
         },
         actionButtonDanger: {
-            backgroundColor: '#fee2e2',
+            backgroundColor: colors.dangerBg,
         },
         actionButtonSuccess: {
-            backgroundColor: '#dcfce7',
+            backgroundColor: colors.successBg,
         },
 
         // Configuration
@@ -2983,11 +3142,11 @@ const createStyles = (colors: any) =>
             gap: 24,
         },
         configSection: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             padding: 20,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         configSectionHeader: {
             marginBottom: 16,
@@ -3015,7 +3174,7 @@ const createStyles = (colors: any) =>
             flex: 1,
             paddingVertical: 8,
             paddingHorizontal: 12,
-            backgroundColor: '#f9fafb',
+            backgroundColor: colors.surfaceHover,
             borderRadius: 8,
         },
         configItemLabel: {
@@ -3026,17 +3185,17 @@ const createStyles = (colors: any) =>
             width: 44,
             height: 24,
             borderRadius: 12,
-            backgroundColor: '#d1d5db',
+            backgroundColor: colors.border,
             padding: 2,
         },
         toggleActive: {
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
         },
         toggleKnob: {
             width: 20,
             height: 20,
             borderRadius: 10,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
         },
         toggleKnobActive: {
             marginLeft: 'auto',
@@ -3062,17 +3221,17 @@ const createStyles = (colors: any) =>
             borderRadius: 8,
         },
         configButtonPrimary: {
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
         },
         configButtonSecondary: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         configButtonPrimaryText: {
             fontSize: 14,
             fontWeight: '500',
-            color: '#fff',
+            color: colors.primaryText,
         },
         configButtonSecondaryText: {
             fontSize: 14,
@@ -3083,12 +3242,12 @@ const createStyles = (colors: any) =>
         // Modal
         modalOverlay: {
             flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: colors.overlay,
             justifyContent: 'center',
             alignItems: 'center',
         },
         addCustomerModal: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             width: '90%',
             maxWidth: 480,
@@ -3121,9 +3280,9 @@ const createStyles = (colors: any) =>
             marginBottom: 8,
         },
         formInput: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -3131,14 +3290,14 @@ const createStyles = (colors: any) =>
             color: colors.text,
         },
         addCustomerSubmitButton: {
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
             paddingVertical: 14,
             borderRadius: 8,
             alignItems: 'center',
             marginTop: 8,
         },
         addCustomerSubmitText: {
-            color: '#fff',
+            color: colors.primaryText,
             fontSize: 16,
             fontWeight: '500',
         },
@@ -3161,15 +3320,10 @@ const createStyles = (colors: any) =>
             color: '#fff',
             fontSize: 14,
         },
-        loadingOverlay: {
-            position: 'absolute',
-            top: 80,
-            right: 24,
-        },
 
         // Confirm Modal (Suspend/Delete)
         confirmModal: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             width: '90%',
             maxWidth: 400,
@@ -3197,7 +3351,7 @@ const createStyles = (colors: any) =>
             alignItems: 'center',
             paddingVertical: 12,
             paddingHorizontal: 16,
-            backgroundColor: '#f0fdf4',
+            backgroundColor: colors.successBg,
             borderRadius: 8,
             marginBottom: 24,
         },
@@ -3206,15 +3360,15 @@ const createStyles = (colors: any) =>
             height: 24,
             borderRadius: 6,
             borderWidth: 2,
-            borderColor: '#d1d5db',
+            borderColor: colors.border,
             justifyContent: 'center',
             alignItems: 'center',
             marginRight: 12,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
         },
         confirmCheckboxChecked: {
-            borderColor: '#16a34a',
-            backgroundColor: '#fff',
+            borderColor: colors.successText,
+            backgroundColor: colors.surface,
         },
         confirmCheckboxText: {
             fontSize: 14,
@@ -3230,7 +3384,7 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 8,
-            backgroundColor: '#f3f4f6',
+            backgroundColor: colors.surfaceMuted,
         },
         confirmCancelText: {
             fontSize: 14,
@@ -3241,22 +3395,22 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 8,
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
             minWidth: 100,
             alignItems: 'center',
         },
         confirmProceedButtonDisabled: {
-            backgroundColor: '#9ca3af',
+            backgroundColor: colors.textSubtle,
         },
         confirmProceedText: {
             fontSize: 14,
             fontWeight: '500',
-            color: '#fff',
+            color: colors.primaryText,
         },
 
         // Upgrade Modal
         upgradeModal: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             width: '90%',
             maxWidth: 400,
@@ -3270,7 +3424,7 @@ const createStyles = (colors: any) =>
             alignItems: 'center',
             paddingVertical: 14,
             paddingHorizontal: 16,
-            backgroundColor: '#f9fafb',
+            backgroundColor: colors.surfaceHover,
             borderRadius: 8,
             marginBottom: 8,
         },
@@ -3279,15 +3433,15 @@ const createStyles = (colors: any) =>
             height: 20,
             borderRadius: 10,
             borderWidth: 2,
-            borderColor: '#d1d5db',
+            borderColor: colors.border,
             justifyContent: 'center',
             alignItems: 'center',
             marginRight: 12,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
         },
         planCheckboxChecked: {
-            borderColor: '#111827',
-            backgroundColor: '#111827',
+            borderColor: colors.primary,
+            backgroundColor: colors.primary,
         },
         planOptionText: {
             fontSize: 14,
@@ -3298,7 +3452,7 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 8,
-            backgroundColor: '#f3f4f6',
+            backgroundColor: colors.surfaceMuted,
         },
         upgradeCancelText: {
             fontSize: 14,
@@ -3309,39 +3463,39 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 8,
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
             minWidth: 120,
             alignItems: 'center',
         },
         upgradeSubmitButtonDisabled: {
-            backgroundColor: '#9ca3af',
+            backgroundColor: colors.textSubtle,
         },
         upgradeSubmitText: {
             fontSize: 14,
             fontWeight: '500',
-            color: '#fff',
+            color: colors.primaryText,
         },
 
         // Revoke Suspension Button
         revokeButton: {
-            backgroundColor: '#16a34a',
+            backgroundColor: colors.successText,
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 8,
         },
         revokeButtonText: {
-            color: '#fff',
+            color: colors.primaryText,
             fontSize: 14,
             fontWeight: '500',
         },
 
         // Moderation & Safety Page
         moderationCard: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             marginBottom: 16,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         moderationCardContent: {
             flexDirection: 'row',
@@ -3377,7 +3531,7 @@ const createStyles = (colors: any) =>
         // Settings Page
         settingsTabs: {
             flexDirection: 'row',
-            backgroundColor: '#f3f4f6',
+            backgroundColor: colors.surfaceMuted,
             borderRadius: 8,
             padding: 4,
             marginBottom: 24,
@@ -3389,7 +3543,7 @@ const createStyles = (colors: any) =>
             borderRadius: 6,
         },
         settingsTabActive: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
         },
         settingsTabText: {
             fontSize: 14,
@@ -3400,11 +3554,11 @@ const createStyles = (colors: any) =>
             color: colors.text,
         },
         settingsContent: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             padding: 24,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         settingsSectionTitle: {
             fontSize: 18,
@@ -3432,9 +3586,9 @@ const createStyles = (colors: any) =>
             marginBottom: 8,
         },
         settingsInput: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -3445,17 +3599,17 @@ const createStyles = (colors: any) =>
             marginTop: 24,
             paddingTop: 24,
             borderTopWidth: 1,
-            borderTopColor: '#e5e7eb',
+            borderTopColor: colors.border,
         },
         changePasswordButton: {
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 8,
             alignSelf: 'flex-start',
         },
         changePasswordButtonText: {
-            color: '#fff',
+            color: colors.primaryText,
             fontSize: 14,
             fontWeight: '500',
         },
@@ -3477,38 +3631,38 @@ const createStyles = (colors: any) =>
             height: 40,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             justifyContent: 'center',
             alignItems: 'center',
         },
         addTeamMemberButton: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 8,
             gap: 8,
         },
         addTeamMemberButtonText: {
-            color: '#fff',
+            color: colors.primaryText,
             fontSize: 14,
             fontWeight: '500',
         },
         teamTable: {
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 8,
             overflow: 'hidden',
         },
         teamTableHeader: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#f9fafb',
+            backgroundColor: colors.surfaceHover,
             paddingVertical: 12,
             paddingHorizontal: 16,
             borderBottomWidth: 1,
-            borderBottomColor: '#e5e7eb',
+            borderBottomColor: colors.border,
         },
         teamTableHeaderCell: {
             fontSize: 12,
@@ -3521,7 +3675,7 @@ const createStyles = (colors: any) =>
             paddingVertical: 12,
             paddingHorizontal: 16,
             borderBottomWidth: 1,
-            borderBottomColor: '#e5e7eb',
+            borderBottomColor: colors.border,
         },
         teamTableCell: {
             fontSize: 14,
@@ -3534,14 +3688,14 @@ const createStyles = (colors: any) =>
             width: 36,
             height: 36,
             borderRadius: 18,
-            backgroundColor: '#f59e0b',
+            backgroundColor: colors.warningText,
             justifyContent: 'center',
             alignItems: 'center',
         },
         teamMemberAvatarText: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#fff',
+            color: colors.primaryText,
         },
         teamMemberName: {
             fontSize: 14,
@@ -3567,11 +3721,11 @@ const createStyles = (colors: any) =>
 
         // Notification Cards
         notificationCard: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             marginBottom: 16,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         notificationCardContent: {
             flexDirection: 'row',
@@ -3595,7 +3749,7 @@ const createStyles = (colors: any) =>
 
         // Invite Modal
         inviteModal: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderRadius: 12,
             width: '90%',
             maxWidth: 520,
@@ -3611,7 +3765,7 @@ const createStyles = (colors: any) =>
             width: 56,
             height: 56,
             borderRadius: 28,
-            backgroundColor: '#f0fdf4',
+            backgroundColor: colors.successBg,
             justifyContent: 'center',
             alignItems: 'center',
         },
@@ -3648,9 +3802,9 @@ const createStyles = (colors: any) =>
             marginBottom: 8,
         },
         inviteInput: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -3661,9 +3815,9 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -3671,6 +3825,37 @@ const createStyles = (colors: any) =>
         inviteRoleText: {
             fontSize: 14,
             color: colors.text,
+        },
+        inviteRoleDropdownMenu: {
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 8,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            elevation: 4,
+            overflow: 'hidden',
+        },
+        inviteRoleOption: {
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+        },
+        inviteRoleOptionActive: {
+            backgroundColor: colors.successBg,
+        },
+        inviteRoleOptionText: {
+            fontSize: 14,
+            fontWeight: '500',
+            color: colors.text,
+        },
+        inviteRoleOptionDesc: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 2,
         },
         addAnotherButton: {
             flexDirection: 'row',
@@ -3693,7 +3878,7 @@ const createStyles = (colors: any) =>
             paddingVertical: 12,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         inviteCancelText: {
             fontSize: 14,
@@ -3704,17 +3889,17 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 8,
-            backgroundColor: '#111827',
+            backgroundColor: colors.primary,
             minWidth: 120,
             alignItems: 'center',
         },
         inviteSubmitButtonDisabled: {
-            backgroundColor: '#9ca3af',
+            backgroundColor: colors.textSubtle,
         },
         inviteSubmitText: {
             fontSize: 14,
             fontWeight: '500',
-            color: '#fff',
+            color: colors.primaryText,
         },
 
         // Invite Code Section (Customer Details)
@@ -3722,12 +3907,12 @@ const createStyles = (colors: any) =>
             marginTop: 20,
             paddingTop: 20,
             borderTopWidth: 1,
-            borderTopColor: '#e5e7eb',
+            borderTopColor: colors.border,
         },
         inviteCodeBox: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#f9fafb',
+            backgroundColor: colors.surfaceHover,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -3744,9 +3929,9 @@ const createStyles = (colors: any) =>
         copyCodeButton: {
             padding: 8,
             borderRadius: 6,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: '#e5e7eb',
+            borderColor: colors.border,
         },
         inviteCodeHint: {
             fontSize: 13,
@@ -3756,17 +3941,17 @@ const createStyles = (colors: any) =>
 
         // See All Button
         seeAllButton: {
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             paddingHorizontal: 14,
             paddingVertical: 6,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: '#d1d5db',
+            borderColor: colors.border,
         },
         seeAllButtonText: {
             fontSize: 13,
             fontWeight: '600',
-            color: '#111827',
+            color: colors.text,
         },
 
         // Chart Header & Dropdown
@@ -3780,16 +3965,48 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: '#fff',
+            backgroundColor: colors.surface,
             paddingHorizontal: 12,
             paddingVertical: 6,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: '#d1d5db',
+            borderColor: colors.border,
+        },
+        chartDropdownWrapper: {
+            position: 'relative',
+        },
+        chartDropdownMenu: {
+            position: 'absolute',
+            top: 40,
+            right: 0,
+            backgroundColor: colors.surface,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
+            minWidth: 120,
+            zIndex: 5,
+            shadowColor: '#000',
+            shadowOpacity: 0.08,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 6 },
+        },
+        chartDropdownItem: {
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+        },
+        chartDropdownItemActive: {
+            backgroundColor: colors.surfaceMuted,
+        },
+        chartDropdownItemText: {
+            fontSize: 13,
+            color: colors.text,
+        },
+        chartDropdownItemTextActive: {
+            fontWeight: '600',
         },
         chartDropdownText: {
             fontSize: 13,
-            color: '#111827',
+            color: colors.text,
         },
 
         // Chart Legend
@@ -3811,7 +4028,7 @@ const createStyles = (colors: any) =>
         },
         chartLegendText: {
             fontSize: 12,
-            color: '#16a34a',
+            color: colors.successText,
         },
     });
 

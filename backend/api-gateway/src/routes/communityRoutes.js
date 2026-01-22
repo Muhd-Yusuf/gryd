@@ -55,6 +55,7 @@ const {
     flagDirectMessage,
     deleteDirectMessage,
     listFriends,
+    listMutualFriends,
     listBlockedFriends,
     listFriendRequests,
     createFriendRequest,
@@ -165,6 +166,7 @@ router.post('/subgrids/:subgridId/direct-messages/:directMessageId/flag', requir
 router.delete('/subgrids/:subgridId/direct-messages/:directMessageId', requireUser, loadSubgrid, requireSubgridRead, deleteDirectMessage);
 
 router.get('/subgrids/:subgridId/friends', requireUser, loadSubgrid, requireSubgridRead, listFriends);
+router.get('/subgrids/:subgridId/friends/:peerId/mutual', requireUser, loadSubgrid, requireSubgridRead, listMutualFriends);
 router.get('/subgrids/:subgridId/blocks', requireUser, loadSubgrid, requireSubgridRead, listBlockedFriends);
 router.get('/subgrids/:subgridId/friend-requests', requireUser, loadSubgrid, requireSubgridRead, listFriendRequests);
 router.post('/subgrids/:subgridId/friend-requests', requireUser, loadSubgrid, requireSubgridRead, createFriendRequest);

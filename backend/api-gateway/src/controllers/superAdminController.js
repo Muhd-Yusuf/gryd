@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
 const Subgrid = require('../models/Subgrid');
@@ -8,6 +9,7 @@ const Subscription = require('../models/Subscription');
 const ServiceMetric = require('../models/ServiceMetric');
 const { getTenantConnection } = require('../services/tenantDb');
 const { defineModels } = require('../services/tenantModels');
+const { sendCustomerSetupEmail } = require('../services/emailService');
 
 // Helper function to calculate delta percentage
 const calcDelta = (current, previous) => {
@@ -54,12 +56,11 @@ const buildHourlySeries = (startDate, hours, map) => {
 exports.getOverview = async (req, res) => {
     try {
         const now = new Date();
-        const start7 = new Date(now);
-        start7.setDate(start7.getDate() - 6);
-        start7.setHours(0, 0, 0, 0);
-
-        const start30 = new Date(now);
-        start30.setDate(start30.getDate() - 30);
+        const growthDaysParam = parseInt(req.query.growthDays, 10);
+        const growthDays = [7, 30, 90].includes(growthDaysParam) ? growthDaysParam : 7;
+        const startGrowth = new Date(now);
+        startGrowth.setDate(startGrowth.getDate() - (growthDays - 1));
+        startGrowth.setHours(0, 0, 0, 0);
 
         const start24 = new Date(now);
         start24.setHours(start24.getHours() - 24);
@@ -67,15 +68,13 @@ exports.getOverview = async (req, res) => {
         // Get all subgrids (customers/communities)
         const [
             totalCustomers,
-            activeSubscriptions,
             allSubgrids,
             subgridGrowthAgg,
         ] = await Promise.all([
             Subgrid.countDocuments(),
-            Subscription.countDocuments({ status: 'active' }),
             Subgrid.find().populate('tenantId').lean(),
             Subgrid.aggregate([
-                { $match: { createdAt: { $gte: start7 } } },
+                { $match: { createdAt: { $gte: startGrowth } } },
                 {
                     $group: {
                         _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
@@ -84,6 +83,15 @@ exports.getOverview = async (req, res) => {
                 },
             ]),
         ]);
+
+        // Count active subscriptions only for tenants that have active subgrids
+        const tenantIdsWithSubgrids = allSubgrids
+            .map(s => s.tenantId?._id || s.tenantId)
+            .filter(Boolean);
+        const activeSubscriptions = await Subscription.countDocuments({
+            status: 'active',
+            tenantId: { $in: tenantIdsWithSubgrids },
+        });
 
         // Count total members across all subgrids
         const totalMembers = await SubgridMembership.countDocuments();
@@ -115,7 +123,7 @@ exports.getOverview = async (req, res) => {
         });
 
         // Calculate cumulative growth
-        const growthSeries = buildDailySeries(start7, 7, growthMap);
+        const growthSeries = buildDailySeries(startGrowth, growthDays, growthMap);
         let cumulative = totalCustomers - growthSeries.values.reduce((a, b) => a + b, 0);
         const cumulativeValues = growthSeries.values.map((val) => {
             cumulative += val;
@@ -222,7 +230,7 @@ exports.getCustomers = async (req, res) => {
                 clientName: subgrid.clientName || subgrid.name,
                 status: subgrid.status,
                 memberCount,
-                plan: subscription?.planName || 'Trial',
+                plan: subscription?.planName || 'Premium',
                 subscriptionStatus: subscription?.status || 'active',
                 owner: owner?.userId ? {
                     _id: owner.userId._id,
@@ -317,7 +325,7 @@ exports.getCustomerDetails = async (req, res) => {
                     memberCount,
                     channelCount: channels.length,
                 },
-                subscription: subscription || { planName: 'Trial', status: 'active' },
+                subscription: subscription || { planName: 'Premium', status: 'active' },
                 members: members.map((m) => ({
                     _id: m._id,
                     userId: m.userId?._id,
@@ -507,20 +515,31 @@ exports.createCustomer = async (req, res) => {
             const tempPassword = Math.random().toString(36).slice(-8);
             const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
+            // Parse name - if single name, use it for both first and last
+            const nameParts = name.trim().split(' ');
+            const firstName = nameParts[0] || name;
+            const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : nameParts[0];
+
             user = await User.create({
-                firstName: name.split(' ')[0] || name,
-                lastName: name.split(' ').slice(1).join(' ') || '',
+                firstName,
+                lastName,
                 email: email.toLowerCase(),
                 password: hashedPassword,
                 role: 'admin',
             });
         }
 
+        // Generate unique slug and dbName for tenant
+        const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const uniqueSuffix = Date.now().toString(36);
+        const tenantSlug = `${baseSlug}-${uniqueSuffix}`;
+        const dbName = `tenant_${baseSlug.replace(/-/g, '_')}_${uniqueSuffix}`;
+
         // Create tenant for the customer
         const tenant = await Tenant.create({
             name: `${name}'s Organization`,
-            ownerId: user._id,
-            members: [{ userId: user._id, role: 'owner' }],
+            slug: tenantSlug,
+            dbName: dbName,
         });
 
         // Create tenant membership for the owner
@@ -531,14 +550,14 @@ exports.createCustomer = async (req, res) => {
         });
 
         // Create subgrid (community) for the customer
+        // Server name is empty initially - customer will set it during setup
+        const subgridSlug = `${baseSlug}-community-${uniqueSuffix}`;
         const subgrid = await Subgrid.create({
-            name: name,
+            name: '',  // Will be set by customer during setup
+            slug: subgridSlug,
             clientName: name,
             tenantId: tenant._id,
-            status: 'pending',
-            settings: {
-                isPublic: false,
-            },
+            status: 'active',
         });
 
         // Create subgrid membership for the owner
@@ -550,21 +569,36 @@ exports.createCustomer = async (req, res) => {
             status: 'active',
         });
 
-        // Create trial subscription
-        const trialEndDate = new Date();
-        trialEndDate.setDate(trialEndDate.getDate() + 14);
-
+        // Create Premium subscription by default (customer has paid outside system)
         await Subscription.create({
             tenantId: tenant._id,
-            planName: 'Trial',
+            planName: 'Premium',
             status: 'active',
-            startDate: new Date(),
-            endDate: trialEndDate,
         });
 
-        // TODO: Send setup email to customer
-        // For now, just log the intent
-        console.log(`[superAdmin.createCustomer] Would send setup email to ${email}`);
+        // Generate setup token for the customer
+        const setupToken = crypto.randomBytes(32).toString('hex');
+        const setupTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+        // Update user with setup token
+        await User.findByIdAndUpdate(user._id, {
+            setupToken,
+            setupTokenExpires,
+        });
+
+        // Send setup email to customer
+        try {
+            await sendCustomerSetupEmail({
+                email,
+                customerName: name,
+                setupToken,
+                tenantId: tenant._id.toString(),
+            });
+            console.log(`[superAdmin.createCustomer] Setup email sent to ${email}`);
+        } catch (emailError) {
+            console.error('[superAdmin.createCustomer] Failed to send setup email:', emailError.message);
+            // Don't fail the request if email fails - customer is still created
+        }
 
         return res.status(201).json({
             success: true,
@@ -794,7 +828,131 @@ exports.getUsers = async (req, res) => {
 };
 
 /**
+ * Get team members (admin and super_admin users who help manage the platform)
+ * GET /api/super-admin/team
+ */
+exports.getTeamMembers = async (req, res) => {
+    try {
+        const { q, limit = 50, offset = 0 } = req.query;
+        const search = String(q || '').trim();
+
+        // Team members are users with admin or super_admin roles
+        const filter = {
+            role: { $in: ['admin', 'super_admin'] }
+        };
+
+        if (search) {
+            filter.$or = [
+                { firstName: { $regex: search, $options: 'i' } },
+                { lastName: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+            ];
+        }
+
+        const [total, users] = await Promise.all([
+            User.countDocuments(filter),
+            User.find(filter)
+                .select('-password')
+                .sort({ createdAt: -1 })
+                .skip(Number(offset))
+                .limit(Math.min(Number(limit), 100))
+                .lean(),
+        ]);
+
+        console.log(`[superAdmin.getTeamMembers] Found ${users.length} team members`);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                total,
+                users,
+            },
+        });
+    } catch (error) {
+        console.error('[superAdmin.getTeamMembers] Error:', error.message);
+        return res.status(500).json({ message: 'Failed to load team members', error: error.message });
+    }
+};
+
+/**
  * Invite a new team member
+ * POST /api/super-admin/team/invite
+ */
+exports.inviteTeamMember = async (req, res) => {
+    try {
+        const { email, firstName, lastName, role = 'admin' } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required' });
+        }
+
+        // Validate role - only admin or super_admin allowed for team members
+        if (!['admin', 'super_admin'].includes(role)) {
+            return res.status(400).json({ message: 'Invalid role. Team members must have admin or super_admin role.' });
+        }
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ email: email.toLowerCase() });
+        if (existingUser) {
+            return res.status(400).json({ message: 'User with this email already exists' });
+        }
+
+        // Create new team member with a temporary password
+        const bcrypt = require('bcryptjs');
+        const crypto = require('crypto');
+        const tempPassword = crypto.randomBytes(16).toString('hex');
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+        // Generate setup token for account activation
+        const setupToken = crypto.randomBytes(32).toString('hex');
+        const setupTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+        const user = await User.create({
+            email: email.toLowerCase(),
+            firstName: firstName || 'Team',
+            lastName: lastName || 'Member',
+            password: hashedPassword,
+            role: role,
+            setupToken,
+            setupTokenExpires,
+        });
+
+        // Send invitation email - redirects to login page with email prefilled
+        const { sendTeamMemberInviteEmail } = require('../services/emailService');
+
+        try {
+            await sendTeamMemberInviteEmail({
+                email: email.toLowerCase(),
+                firstName: firstName || 'Team Member',
+                role: role,
+            });
+            console.log(`[superAdmin.inviteTeamMember] Invitation email sent to ${email}`);
+        } catch (emailError) {
+            console.error(`[superAdmin.inviteTeamMember] Failed to send email:`, emailError.message);
+            // Continue even if email fails - user is created
+        }
+
+        return res.status(201).json({
+            success: true,
+            data: {
+                user: {
+                    _id: user._id,
+                    email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    role: user.role,
+                },
+            },
+            message: 'Team member invitation sent successfully',
+        });
+    } catch (error) {
+        console.error('[superAdmin.inviteTeamMember] Error:', error.message);
+        return res.status(500).json({ message: 'Failed to invite team member', error: error.message });
+    }
+};
+
+/**
+ * Invite a new user (legacy - for backward compatibility)
  * POST /api/super-admin/users/invite
  */
 exports.inviteUser = async (req, res) => {
@@ -811,20 +969,21 @@ exports.inviteUser = async (req, res) => {
             return res.status(400).json({ message: 'User with this email already exists' });
         }
 
-        // Create new user with pending status
+        // Create new user with a temporary password
         const bcrypt = require('bcryptjs');
-        const tempPassword = Math.random().toString(36).slice(-8);
+        const crypto = require('crypto');
+        const tempPassword = crypto.randomBytes(16).toString('hex');
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
         const user = await User.create({
             email: email.toLowerCase(),
+            firstName: 'New',
+            lastName: 'User',
             password: hashedPassword,
             role: role,
-            status: 'pending',
         });
 
-        // TODO: Send invitation email with setup link
-        console.log(`[superAdmin.inviteUser] Would send invite email to ${email}`);
+        console.log(`[superAdmin.inviteUser] User created: ${email} with role: ${role}`);
 
         return res.status(201).json({
             success: true,
@@ -833,10 +992,9 @@ exports.inviteUser = async (req, res) => {
                     _id: user._id,
                     email: user.email,
                     role: user.role,
-                    status: user.status,
                 },
             },
-            message: 'Invitation sent successfully',
+            message: 'User created successfully',
         });
     } catch (error) {
         console.error('[superAdmin.inviteUser] Error:', error.message);

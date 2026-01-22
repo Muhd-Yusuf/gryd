@@ -27,6 +27,7 @@ import {
     resolveTenantId,
     resolveUserId,
     uploadFile,
+    StakeholderBadge,
 } from '../../../lib/api';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -37,6 +38,7 @@ import { useAgoraCall } from '../../../hooks/useAgoraCall';
 import { useCallContext } from '../../../contexts/CallContext';
 import CallModal from '../../../components/CallModal';
 import UserAvatar from '../../../components/UserAvatar';
+import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 
 type Subgrid = {
     _id: string;
@@ -64,7 +66,47 @@ type UserProfile = {
     firstName?: string;
     lastName?: string;
     email?: string;
+    username?: string;
     avatarUrl?: string;
+    role?: string;
+    stakeholderBadge?: StakeholderBadge;
+};
+
+type Channel = {
+    _id: string;
+    name?: string;
+    type?: string;
+    visibility?: string;
+    status?: string;
+};
+
+type Member = {
+    _id?: string;
+    userId?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    avatarUrl?: string;
+    role?: string;
+    userRole?: string;
+    stakeholderBadge?: StakeholderBadge;
+    user?: {
+        _id?: string;
+        firstName?: string;
+        lastName?: string;
+        email?: string;
+        createdAt?: string;
+        role?: string;
+        stakeholderBadge?: StakeholderBadge;
+    };
+};
+
+const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
+    stakeholder: '#3B82F6',
+    vendor: '#8B5CF6',
+    partner: '#10B981',
+    sponsor: '#F59E0B',
+    investor: '#EC4899',
 };
 
 
@@ -133,11 +175,6 @@ const blobToDataUrl = (blob: Blob) =>
 const normalizeAttachments = (message: Message) => {
     const raw = Array.isArray(message.attachments) ? message.attachments : [];
 
-    // Debug: log raw attachments to understand their structure
-    if (raw.length > 0) {
-        console.log('[DM] Raw attachments for message:', message._id, JSON.stringify(raw));
-    }
-
     const result = raw
         .map((item) => {
             if (!item) return null;
@@ -182,10 +219,6 @@ const normalizeAttachments = (message: Message) => {
         })
         .filter(Boolean) as Array<Attachment & { uri?: string }>;
 
-    // Debug logging for attachments
-    if (result.length > 0) {
-        console.log('[DM] Normalized attachments:', message._id, result);
-    }
     return result;
 };
 
@@ -216,6 +249,7 @@ const DirectMessageChatScreen = () => {
     const styles = useMemo(() => createStyles(colors), [colors]);
     const router = useRouter();
     const navigation = useNavigation();
+
     const params = useLocalSearchParams();
     const peerId = normalizeParam(params.peerId);
     const initialSubgridId = normalizeParam(params.subgridId);
@@ -223,6 +257,8 @@ const DirectMessageChatScreen = () => {
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [subgridId, setSubgridId] = useState(initialSubgridId);
+    const [members, setMembers] = useState<Member[]>([]);
+    const [channels, setChannels] = useState<Channel[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [draft, setDraft] = useState('');
     const [loading, setLoading] = useState(false);
@@ -234,7 +270,9 @@ const DirectMessageChatScreen = () => {
     const [recordingTime, setRecordingTime] = useState(0);
     const [recordingError, setRecordingError] = useState('');
     const [friendName, setFriendName] = useState('User');
+    const [friendUsername, setFriendUsername] = useState<string | null>(null);
     const [friendAvatar, setFriendAvatar] = useState<string | undefined>(undefined);
+    const [friendStakeholderBadge, setFriendStakeholderBadge] = useState<StakeholderBadge | null>(null);
     const [currentUserAvatar, setCurrentUserAvatar] = useState<string | undefined>(undefined);
     const [isFriend, setIsFriend] = useState(true);
     const [isBlocked, setIsBlocked] = useState(false);
@@ -251,7 +289,7 @@ const DirectMessageChatScreen = () => {
     const scrollViewRef = useRef<ScrollView>(null);
 
     // Get call context for managing calls
-    const { incomingCall, clearIncomingCall, setActiveCall, markCallConnected, endCall: contextEndCall } = useCallContext();
+    const { incomingCall, clearIncomingCall, startActiveCall, markCallConnected, endCall: contextEndCall } = useCallContext();
 
     // Get answerCall params from URL (when navigating from incoming call overlay)
     const answerCallId = normalizeParam(params.answerCall);
@@ -259,46 +297,42 @@ const DirectMessageChatScreen = () => {
     // Track if we've already processed this answer to prevent duplicate calls
     const answerProcessedRef = useRef<string | null>(null);
 
-    // Agora call hook
-    const agoraCall = useAgoraCall({
-        onCallEnded: useCallback((callId: string, reason: string) => {
-            console.log('[DM] Call ended:', callId, reason);
-            // Refresh messages to show call history
-            if (subgridId && peerId) {
-                communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${peerId}`)
-                    .then(response => setMessages(response?.data || []))
-                    .catch(() => {});
-            }
-        }, [subgridId, peerId]),
-        onError: useCallback((err: Error) => {
-            Alert.alert('Call Error', err.message);
-        }, []),
-    });
+    // Agora call hook - memoize callbacks to prevent unnecessary re-renders
+    const onCallEnded = useCallback((callId: string, reason: string) => {
+        // Call ended - messages stay as they are, no refresh needed
+    }, []);
+
+    const onCallError = useCallback((err: Error) => {
+        Alert.alert('Call Error', err.message);
+    }, []);
+
+    // Memoize options to prevent useAgoraCall from recreating functions unnecessarily
+    const agoraCallOptions = useMemo(() => ({
+        onCallEnded,
+        onError: onCallError,
+    }), [onCallEnded, onCallError]);
+
+    const agoraCall = useAgoraCall(agoraCallOptions);
 
     // Handle answering call when navigated with answerCall param
+    // Note: We use agoraCall.answer in the dependency array, not the entire agoraCall object,
+    // to prevent unnecessary re-runs when callState changes
     useEffect(() => {
-        // Check if we have the required params and haven't processed this call yet
-        if (answerCallId && answerCallType && answerProcessedRef.current !== answerCallId) {
-            console.log('[DM] Answering call from URL param:', answerCallId, 'type:', answerCallType);
-            // Mark as processed immediately to prevent duplicate calls
-            answerProcessedRef.current = answerCallId;
+        if (!answerCallId || !answerCallType) return;
+        if (answerProcessedRef.current === answerCallId) return;
 
-            // Answer the call (async operation)
-            // We do NOT navigate away - the call modal will show based on agoraCall.callState
-            agoraCall.answer(answerCallId, answerCallType).then(() => {
-                console.log('[DM] Call answered successfully, callState:', agoraCall.callState);
-            }).catch((err) => {
-                console.error('[DM] Failed to answer call:', err);
-            });
+        // Mark as processed immediately to prevent duplicate calls
+        answerProcessedRef.current = answerCallId;
 
-            // Clear any lingering incoming call state
-            clearIncomingCall();
+        // Answer the call (async operation)
+        // We do NOT navigate away - the call modal will show based on agoraCall.callState
+        agoraCall.answer(answerCallId, answerCallType).catch((err) => {
+            console.error('[DM] Failed to answer call:', err);
+        });
 
-            // NOTE: We no longer do router.replace() here because it was causing the component
-            // to re-render and reset the Agora state before the call could connect.
-            // The URL params are harmless and will be cleared on next navigation.
-        }
-    }, [answerCallId, answerCallType, agoraCall, clearIncomingCall]);
+        // Clear any lingering incoming call state
+        clearIncomingCall();
+    }, [answerCallId, answerCallType, agoraCall.answer, clearIncomingCall]);
 
     // Check if call modal should be visible
     const isCallModalVisible = agoraCall.callState !== 'idle';
@@ -307,7 +341,6 @@ const DirectMessageChatScreen = () => {
     // This prevents stale call_missed/call_declined events from closing the call modal
     useEffect(() => {
         if (agoraCall.callState === 'connected' && agoraCall.currentCall?.callId) {
-            console.log('[DM] Agora connected, calling markCallConnected()');
             markCallConnected();
         }
     }, [agoraCall.callState, agoraCall.currentCall?.callId, markCallConnected]);
@@ -356,10 +389,19 @@ const DirectMessageChatScreen = () => {
                 if (user) {
                     const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
                     setFriendName(name || user.email || 'Unknown User');
+                    setFriendUsername(user.username || null);
                     setFriendAvatar(user.avatarUrl || undefined);
+                    // Set stakeholder badge if user is a stakeholder
+                    if (user.role === 'stakeholder' && user.stakeholderBadge) {
+                        setFriendStakeholderBadge(user.stakeholderBadge);
+                    } else {
+                        setFriendStakeholderBadge(null);
+                    }
                 } else {
                     setFriendName('Unknown User');
+                    setFriendUsername(null);
                     setFriendAvatar(undefined);
+                    setFriendStakeholderBadge(null);
                 }
             }
             if (blocksRes.status === 'fulfilled') {
@@ -374,6 +416,23 @@ const DirectMessageChatScreen = () => {
     useEffect(() => { if (subgridId) refreshRelationship(subgridId); }, [subgridId, peerId]);
 
     useEffect(() => {
+        if (!subgridId) return;
+        Promise.allSettled([
+            communityGet(`/subgrids/${subgridId}/members`),
+            communityGet(`/subgrids/${subgridId}/channels`),
+        ]).then(([membersRes, channelsRes]) => {
+            if (membersRes.status === 'fulfilled') {
+                const rawMembers = membersRes.value?.data;
+                setMembers(Array.isArray(rawMembers) ? rawMembers : []);
+            }
+            if (channelsRes.status === 'fulfilled') {
+                const rawChannels = channelsRes.value?.data;
+                setChannels(Array.isArray(rawChannels) ? rawChannels : []);
+            }
+        });
+    }, [subgridId]);
+
+    useEffect(() => {
         const loadMessages = async () => {
             if (!subgridId || !peerId) return;
             setLoading(true);
@@ -381,11 +440,6 @@ const DirectMessageChatScreen = () => {
             try {
                 const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${peerId}`);
                 const msgs = response?.data || [];
-                // Debug: Log messages with attachments
-                const msgsWithAttachments = msgs.filter((m: Message) => m.attachments && m.attachments.length > 0);
-                if (msgsWithAttachments.length > 0) {
-                    console.log('[DM] Messages with attachments loaded:', msgsWithAttachments.length, msgsWithAttachments);
-                }
                 setMessages(msgs);
             } catch (err: any) {
                 setMessages([]);
@@ -736,8 +790,9 @@ const DirectMessageChatScreen = () => {
         const result = await agoraCall.startCall(peerId, type, subgridId || undefined);
 
         // Only set active call after we have the actual callId from backend
+        // Use startActiveCall which also manages activeCallIds to protect against stale events
         if (result?.callId) {
-            setActiveCall({
+            startActiveCall({
                 callId: result.callId,
                 peerId: peerId,
                 peerName: friendName,
@@ -791,7 +846,39 @@ const DirectMessageChatScreen = () => {
         [subgrids, subgridId]
     );
 
-    const profileHandle = peerId ? `@${peerId.slice(-12)}` : '@brooklynsim32';
+    const isAdminRole = (role?: string | null) => {
+        const value = String(role || '').toLowerCase();
+        return value === 'subgrid_admin' || value === 'owner' || value === 'admin';
+    };
+
+    const getMemberRole = (id?: string | null) => {
+        if (!id) return '';
+        const idStr = String(id);
+        const member = members.find((item) =>
+            String(item.userId) === idStr || String(item._id) === idStr || String(item.user?._id) === idStr
+        );
+        return member?.role || '';
+    };
+
+    const commonForums = useMemo(() => {
+        if (!peerId) return [];
+        const currentRole = getMemberRole(currentUserId);
+        const friendRole = getMemberRole(peerId);
+        const allowAdmin = isAdminRole(currentRole) && isAdminRole(friendRole);
+        return channels
+            .filter((channel) => channel.status !== 'archived')
+            .filter((channel) => channel.type !== 'voice')
+            .filter((channel) => {
+                if (channel.visibility === 'admin') {
+                    return allowAdmin;
+                }
+                return true;
+            })
+            .map((channel) => channel.name)
+            .filter(Boolean) as string[];
+    }, [channels, peerId, currentUserId, members]);
+
+    const profileHandle = friendUsername ? `@${friendUsername}` : (peerId ? `@user_${peerId.slice(-8)}` : '@unknown');
     const messageGroups = groupMessagesByDate(messages);
     const showSendButton = draft.trim().length > 0 || pendingAttachments.length > 0;
     const formatRecordingTime = (secs: number) => {
@@ -818,7 +905,19 @@ const DirectMessageChatScreen = () => {
                             />
                             <View style={styles.onlineIndicator} />
                         </View>
-                        <Text style={styles.headerName}>{friendName}</Text>
+                        <View style={styles.headerNameRow}>
+                            <Text style={styles.headerName}>{friendName}</Text>
+                            {friendUsername && (
+                                <Text style={styles.headerUsername}>@{friendUsername}</Text>
+                            )}
+                            {friendStakeholderBadge && (
+                                <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[friendStakeholderBadge] }]}>
+                                    <Text style={styles.stakeholderBadgeText}>
+                                        {friendStakeholderBadge.charAt(0).toUpperCase() + friendStakeholderBadge.slice(1)}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                         <View style={styles.headerActions}>
                             <TouchableOpacity style={styles.headerIcon} onPress={() => handleStartCall('audio')}>
                                 <MaterialIcons name="phone" size={20} color={colors.text} />
@@ -861,7 +960,10 @@ const DirectMessageChatScreen = () => {
                                 <Text style={styles.profileIntroName}>{friendName}</Text>
                             </Text>
                             <Text style={styles.forumCommon}>
-                                Forum in common: <Text style={styles.forumCommonValue}>General, Financial Tips</Text>
+                                Forum in common:{' '}
+                                <Text style={styles.forumCommonValue}>
+                                    {commonForums.length > 0 ? commonForums.join(', ') : 'None'}
+                                </Text>
                             </Text>
                             <View style={styles.profileActions}>
                                 <TouchableOpacity style={styles.removeButton} onPress={handleRemoveFriend}>
@@ -946,18 +1048,15 @@ const DirectMessageChatScreen = () => {
                                                 )}
                                                 {!!message.body && <Text style={[styles.messageText, isSelf && styles.messageTextSelf]}>{message.body}</Text>}
                                                 {attachmentList.map((attachment, idx) => {
-                                                    if (attachment.type === 'audio') {
+                                                    if (attachment.type === 'audio' || attachment.type === 'voice') {
                                                         return (
-                                                            <TouchableOpacity
+                                                            <VoiceMessagePlayer
                                                                 key={`${message._id}-audio-${idx}`}
-                                                                style={[styles.audioBubble, isSelf && styles.audioBubbleSelf]}
-                                                                onPress={() => handlePlayAudio(attachment.value)}
-                                                            >
-                                                                <View style={styles.audioDot} />
-                                                                <Text style={styles.audioText}>
-                                                                    Voice note {formatDuration(attachment.durationMs)}
-                                                                </Text>
-                                                            </TouchableOpacity>
+                                                                source={attachment.value}
+                                                                durationMs={attachment.durationMs}
+                                                                colors={colors}
+                                                                compact={false}
+                                                            />
                                                         );
                                                     }
                                                     if (attachment.type === 'emoji' || attachment.type === 'sticker') {
@@ -1187,7 +1286,11 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         headerAvatarWrap: { position: 'relative' },
         headerAvatar: { width: 36, height: 36, borderRadius: 18 },
         onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E', borderWidth: 2, borderColor: colors.appBg },
-        headerName: { flex: 1, fontSize: 17, fontWeight: '600', color: colors.text },
+        headerNameRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+        headerName: { fontSize: 17, fontWeight: '600', color: colors.text },
+        headerUsername: { fontSize: 13, color: colors.textMuted, fontWeight: '400' },
+        stakeholderBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+        stakeholderBadgeText: { fontSize: 10, fontWeight: '600', color: '#FFFFFF' },
         headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
         headerIcon: { padding: 4 },
         headerDivider: { height: 1, backgroundColor: colors.border },

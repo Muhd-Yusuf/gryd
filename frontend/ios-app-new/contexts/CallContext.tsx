@@ -34,6 +34,7 @@ interface CallContextType {
     incomingCall: IncomingCall | null;
     activeCall: ActiveCall | null;
     setActiveCall: (call: ActiveCall | null) => void;
+    startActiveCall: (call: ActiveCall) => void; // Use this when starting a call - manages activeCallIds
     markCallConnected: () => void; // Mark active call as connected via Agora
     answerCall: () => void;
     declineCall: () => void;
@@ -66,6 +67,8 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
     // Track handled call IDs to prevent showing the same incoming call multiple times
     // (can happen due to multiple SSE connections from hot-reload)
     const handledCallIdsRef = useRef<Set<string>>(new Set());
+    // Track call IDs that we are actively answering/in-call with - used to ignore stale events
+    const activeCallIdsRef = useRef<Set<string>>(new Set());
 
     // Keep refs in sync with state/router for use in callbacks
     useEffect(() => {
@@ -78,18 +81,13 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
 
     // Stable callback that uses refs instead of dependencies
     const handleCallEvent = useCallback((event: string, data: any) => {
-        console.log('[CallContext] Received event:', event, data);
-
         switch (event) {
             case 'incoming_call':
                 // Check if we've already handled this call (prevents duplicate notifications
                 // from multiple SSE connections due to hot-reload)
                 if (handledCallIdsRef.current.has(data.callId)) {
-                    console.log('[CallContext] Ignoring duplicate incoming_call event for:', data.callId);
                     break;
                 }
-
-                console.log('[CallContext] Incoming call from:', data.callerName, 'callId:', data.callId);
                 setIncomingCall({
                     callId: data.callId,
                     callerId: data.callerId,
@@ -113,7 +111,7 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
                             });
                         }
                     } catch (e) {
-                        console.log('[CallContext] Browser notification not available');
+                        // Browser notification not available
                     }
                 }
                 break;
@@ -121,62 +119,38 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
             case 'call_answered':
                 // The callee answered the call - caller's Agora hook will transition
                 // to 'connected' when it detects the callee joined the channel
-                console.log('[CallContext] Call answered by callee:', data.calleeId);
                 break;
 
             case 'user_busy':
                 // The callee is busy in another call
-                console.log('[CallContext] User is busy:', data.calleeId);
                 // Don't need to do anything here - the startCall API already returns the error
                 break;
 
             case 'call_ended':
             case 'call_declined':
             case 'call_missed':
-                console.log('[CallContext] Call ended/declined/missed, activeCall:', activeCallRef.current, 'eventCallId:', data.callId, 'eventTimestamp:', data.timestamp);
                 setIncomingCall(null);
-                // Only redirect if the call ID matches our active call
-                // When we have an activeCall with callId set, it must match exactly
-                // Ignore stale events from before our current call started
-                // IMPORTANT: Do NOT redirect if the call is already connected (Agora is active)
-                if (activeCallRef.current) {
-                    const hasCallId = !!activeCallRef.current.callId;
 
-                    // If we don't have a callId yet, don't redirect on any event
-                    if (!hasCallId) {
-                        console.log('[CallContext] Ignoring event - no callId set on activeCall yet');
+                // Check if we have an active call that matches this callId
+                if (activeCallRef.current && activeCallRef.current.callId === data.callId) {
+                    // If we're the answering party (receiver) and call is connected, ignore stale events
+                    // This prevents late-arriving events from closing an active call
+                    if (activeCallRef.current.isAnswering && activeCallRef.current.isConnected) {
                         break;
                     }
 
-                    // If the call is already connected via Agora, ignore missed/declined events
-                    // These are stale events from before the call was established
-                    if (activeCallRef.current.isConnected && (event === 'call_missed' || event === 'call_declined')) {
-                        console.log('[CallContext] Ignoring', event, 'event - call is already connected via Agora');
+                    // If call is already connected via Agora, ignore stale events
+                    // Only exception: call_ended should still work for connected calls
+                    if (activeCallRef.current.isConnected && event !== 'call_ended') {
                         break;
                     }
 
-                    // If we're in the process of answering (receiver side), ignore missed/declined events
-                    // The answer process is async and stale events could arrive before Agora connects
-                    if (activeCallRef.current.isAnswering && (event === 'call_missed' || event === 'call_declined')) {
-                        console.log('[CallContext] Ignoring', event, 'event - we are in the process of answering');
-                        break;
-                    }
-
-                    const callIdMatches = activeCallRef.current.callId === data.callId;
-                    // Check if this event is from after our call started (not a stale event)
-                    const eventTimestamp = data.timestamp || 0;
-                    const isRecentEvent = eventTimestamp >= (activeCallRef.current.startedAt || 0);
-
-                    if (callIdMatches && isRecentEvent) {
-                        console.log('[CallContext] Ending active call and redirecting (callId matched)');
-                        const peerId = activeCallRef.current.peerId;
-                        setActiveCall(null);
-                        routerRef.current.replace(`/direct-messages/${peerId}`);
-                    } else if (!callIdMatches) {
-                        console.log('[CallContext] Ignoring event - callId does not match:', data.callId, 'vs', activeCallRef.current.callId);
-                    } else if (!isRecentEvent) {
-                        console.log('[CallContext] Ignoring stale event from before current call started');
-                    }
+                    // For caller receiving call_declined/call_missed while waiting (ringing state),
+                    // or for any party receiving call_ended - end the call
+                    activeCallIdsRef.current.delete(data.callId);
+                    setActiveCall(null);
+                    // Don't navigate - the user stays on the current DM page
+                    // Navigation would cause unnecessary page reload
                 }
                 break;
         }
@@ -187,6 +161,9 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
 
         // Mark this call as handled to prevent duplicate notifications
         handledCallIdsRef.current.add(incomingCall.callId);
+        // CRITICAL: Add to activeCallIds FIRST before anything else
+        // This ensures that any stale call_missed/call_declined events are ignored
+        activeCallIdsRef.current.add(incomingCall.callId);
 
         // Set active call for tracking (used for redirect on end)
         // Set isAnswering: true to prevent stale events from redirecting during answer process
@@ -203,9 +180,9 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
         activeCallRef.current = newActiveCall;
 
         // Navigate to the DM screen with the caller to handle the call
-        // The DM screen's useAgoraCall hook will handle actually answering
         // Pass callType in URL since incomingCall will be null after navigation
-        router.push(`/direct-messages/${incomingCall.callerId}?answerCall=${incomingCall.callId}&callType=${incomingCall.callType}`);
+        const navUrl = `/direct-messages/${incomingCall.callerId}?answerCall=${incomingCall.callId}&callType=${incomingCall.callType}`;
+        router.push(navUrl);
         setIncomingCall(null);
     }, [incomingCall, router]);
 
@@ -232,6 +209,16 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
         setIncomingCall(null);
     }, [incomingCall]);
 
+    // Start an active call - this manages the activeCallIds set to protect against stale events
+    // Use this when initiating a call (caller side)
+    const startActiveCall = useCallback((call: ActiveCall) => {
+        // Add to activeCallIds FIRST before setting state
+        // This ensures any stale events for this callId are ignored
+        activeCallIdsRef.current.add(call.callId);
+        setActiveCall(call);
+        activeCallRef.current = call;
+    }, []);
+
     // Mark the active call as connected (prevents stale events from closing call)
     const markCallConnected = useCallback(() => {
         setActiveCall(prev => prev ? { ...prev, isConnected: true, isAnswering: false } : null);
@@ -239,7 +226,6 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
         if (activeCallRef.current) {
             activeCallRef.current = { ...activeCallRef.current, isConnected: true, isAnswering: false };
         }
-        console.log('[CallContext] Marked active call as connected');
     }, []);
 
     const endCall = useCallback(async () => {
@@ -252,6 +238,9 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
             console.error('[CallContext] Failed to end call:', err);
         }
 
+        // Clean up activeCallIds
+        activeCallIdsRef.current.delete(activeCall.callId);
+
         // Redirect to DM chat
         const peerId = activeCall.peerId;
         setActiveCall(null);
@@ -260,21 +249,16 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
 
     useEffect(() => {
         // Prevent multiple SSE setups
-        if (sseSetupRef.current) {
-            console.log('[CallContext] SSE already setup, skipping');
-            return;
-        }
+        if (sseSetupRef.current) return;
 
         let isMounted = true;
         sseSetupRef.current = true;
 
         const setupSSE = async () => {
             try {
-                console.log('[CallContext] Setting up global call event subscription...');
                 const cleanup = await subscribeToCallEventsAsync(handleCallEvent);
                 if (isMounted) {
                     cleanupRef.current = cleanup;
-                    console.log('[CallContext] Global call event subscription active');
                 } else {
                     cleanup();
                 }
@@ -293,7 +277,7 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
     }, [handleCallEvent]);
 
     return (
-        <CallContext.Provider value={{ incomingCall, activeCall, setActiveCall, markCallConnected, answerCall, declineCall, clearIncomingCall, endCall }}>
+        <CallContext.Provider value={{ incomingCall, activeCall, setActiveCall, startActiveCall, markCallConnected, answerCall, declineCall, clearIncomingCall, endCall }}>
             {children}
         </CallContext.Provider>
     );

@@ -14,7 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { getAuthUser, communityGet, resolveTenantId, logout, uploadAvatar, updateAuthUser } from '../../lib/api';
+import { getAuthUser, communityGet, resolveTenantId, logout, uploadAvatar, updateAuthUser, StakeholderBadge } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../../components/UserAvatar';
 
@@ -25,6 +25,7 @@ type UserProfile = {
     lastName: string;
     role: string;
     avatarUrl?: string;
+    stakeholderBadge?: StakeholderBadge;
 };
 
 type SubgridMembership = {
@@ -40,7 +41,6 @@ const ProfileScreen = () => {
     const navigation = useNavigation();
     const [user, setUser] = useState<UserProfile | null>(null);
     const [memberships, setMemberships] = useState<SubgridMembership[]>([]);
-    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -51,7 +51,6 @@ const ProfileScreen = () => {
     }, []);
 
     const loadProfile = async () => {
-        setLoading(true);
         setError('');
         try {
             const authUser = await getAuthUser();
@@ -71,6 +70,7 @@ const ProfileScreen = () => {
                         lastName: profileRes.data.lastName,
                         role: profileRes.data.role,
                         avatarUrl: profileRes.data.avatarUrl,
+                        stakeholderBadge: profileRes.data.stakeholderBadge,
                     };
                     setUser(profileData);
                     await updateAuthUser(profileData);
@@ -85,6 +85,7 @@ const ProfileScreen = () => {
                         firstName: authUser.firstName,
                         lastName: authUser.lastName,
                         role: authUser.role,
+                        stakeholderBadge: authUser.stakeholderBadge,
                     });
                 }
             } catch {
@@ -95,6 +96,7 @@ const ProfileScreen = () => {
                     firstName: authUser.firstName,
                     lastName: authUser.lastName,
                     role: authUser.role,
+                    stakeholderBadge: authUser.stakeholderBadge,
                 });
             }
 
@@ -129,9 +131,7 @@ const ProfileScreen = () => {
                 }
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to load profile');
-        } finally {
-            setLoading(false);
+            console.error('Failed to load profile:', err.message);
         }
     };
 
@@ -253,6 +253,21 @@ const ProfileScreen = () => {
         }
     };
 
+    const getStakeholderBadgeColor = (badge: StakeholderBadge) => {
+        const badgeColors: Record<StakeholderBadge, { bg: string; text: string }> = {
+            stakeholder: { bg: '#3B82F6', text: '#FFFFFF' },
+            vendor: { bg: '#8B5CF6', text: '#FFFFFF' },
+            partner: { bg: '#10B981', text: '#FFFFFF' },
+            sponsor: { bg: '#F59E0B', text: '#FFFFFF' },
+            investor: { bg: '#EC4899', text: '#FFFFFF' },
+        };
+        return badgeColors[badge] || { bg: '#3B82F6', text: '#FFFFFF' };
+    };
+
+    const formatStakeholderBadge = (badge: StakeholderBadge) => {
+        return badge.charAt(0).toUpperCase() + badge.slice(1);
+    };
+
     const formatRole = (role: string) => {
         // Display "Member" for regular member roles
         const memberRoles = ['member', 'agent', 'user'];
@@ -263,17 +278,6 @@ const ProfileScreen = () => {
             word.charAt(0).toUpperCase() + word.slice(1)
         ).join(' ');
     };
-
-    if (loading) {
-        return (
-            <SafeAreaView style={styles.safe}>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                    <Text style={styles.loadingText}>Loading profile...</Text>
-                </View>
-            </SafeAreaView>
-        );
-    }
 
     const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User';
 
@@ -382,10 +386,23 @@ const ProfileScreen = () => {
                         <View style={styles.profileInfo}>
                             <Text style={styles.fullName}>{fullName}</Text>
                             <Text style={styles.email}>{user?.email}</Text>
-                            <View style={[styles.roleBadge, { backgroundColor: roleBadge.bg }]}>
-                                <Text style={[styles.roleBadgeText, { color: roleBadge.text }]}>
-                                    {formatRole(effectiveRole)}
-                                </Text>
+                            <View style={styles.badgesContainer}>
+                                {/* Show stakeholder badge if user is a stakeholder */}
+                                {user?.role === 'stakeholder' && user?.stakeholderBadge && (
+                                    <View style={[styles.roleBadge, { backgroundColor: getStakeholderBadgeColor(user.stakeholderBadge).bg }]}>
+                                        <Text style={[styles.roleBadgeText, { color: getStakeholderBadgeColor(user.stakeholderBadge).text }]}>
+                                            {formatStakeholderBadge(user.stakeholderBadge)}
+                                        </Text>
+                                    </View>
+                                )}
+                                {/* Show role badge for non-stakeholders or as secondary badge */}
+                                {user?.role !== 'stakeholder' && (
+                                    <View style={[styles.roleBadge, { backgroundColor: roleBadge.bg }]}>
+                                        <Text style={[styles.roleBadgeText, { color: roleBadge.text }]}>
+                                            {formatRole(effectiveRole)}
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
                         </View>
                     </View>
@@ -483,16 +500,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         container: {
             flex: 1,
-        },
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 16,
-        },
-        loadingText: {
-            fontSize: 14,
-            color: colors.textMuted,
         },
         header: {
             flexDirection: 'row',
@@ -622,11 +629,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 14,
             color: colors.textMuted,
         },
+        badgesContainer: {
+            flexDirection: 'row',
+            gap: 8,
+            marginTop: 8,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+        },
         roleBadge: {
             paddingHorizontal: 12,
             paddingVertical: 4,
             borderRadius: 12,
-            marginTop: 8,
         },
         roleBadgeText: {
             fontSize: 12,

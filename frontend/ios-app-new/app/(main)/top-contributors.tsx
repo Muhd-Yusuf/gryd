@@ -5,12 +5,16 @@ import {
     View,
     ScrollView,
     TouchableOpacity,
+    Image,
     useWindowDimensions,
+    Modal,
+    Pressable,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { communityGet, getTenantId, resolveTenantId } from '../../lib/api';
+import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../../components/UserAvatar';
 
@@ -53,6 +57,12 @@ type ContributorData = {
     messageCount: number;
 };
 
+type Subgrid = {
+    _id: string;
+    name?: string;
+    logoUrl?: string;
+};
+
 const normalizeParam = (value?: string | string[]) => {
     if (Array.isArray(value)) {
         return value[0] || '';
@@ -71,6 +81,7 @@ const TopContributorsScreen = () => {
     const initialSubgridId = normalizeParam(params.subgridId);
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgridId, setSubgridId] = useState(initialSubgridId);
+    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [posts, setPosts] = useState<Post[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -100,10 +111,10 @@ const TopContributorsScreen = () => {
     useEffect(() => {
         const loadSubgrids = async () => {
             if (!tenantId) return;
-            if (subgridId) return;
             try {
                 const response = await communityGet(`/tenants/${tenantId}/subgrids`);
                 const list = response?.data || [];
+                setSubgrids(list);
                 if (!subgridId && list.length > 0) {
                     setSubgridId(list[0]._id);
                 }
@@ -113,7 +124,12 @@ const TopContributorsScreen = () => {
         };
 
         loadSubgrids();
-    }, [tenantId, subgridId]);
+    }, [tenantId]);
+
+    const activeSubgrid = useMemo(
+        () => subgrids.find((s) => s._id === subgridId) || null,
+        [subgrids, subgridId]
+    );
 
     useEffect(() => {
         const loadData = async () => {
@@ -215,7 +231,15 @@ const TopContributorsScreen = () => {
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
                         <View style={styles.leftRail}>
                             <TouchableOpacity style={styles.railLogo} onPress={handleBack}>
-                                <MaterialIcons name="grid-view" size={20} color="#FFFFFF" />
+                                {activeSubgrid ? (
+                                    activeSubgrid.logoUrl ? (
+                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                                    ) : (
+                                        <Text style={styles.railLogoText}>
+                                            {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
+                                        </Text>
+                                    )
+                                ) : null}
                             </TouchableOpacity>
                             {railItems.map((item) => {
                                 const isActive = activeRail === item.id;
@@ -323,6 +347,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 8,
+        },
+        railLogoImage: {
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+        },
+        railLogoText: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: '#FFFFFF',
         },
         railButton: {
             width: 48,

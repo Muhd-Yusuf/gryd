@@ -55,7 +55,7 @@ const resolveScopesForRole = (role) => {
     if (role === 'moderator') {
         return ['read', 'write', 'moderate'];
     }
-    if (role === 'member') {
+    if (role === 'member' || role === 'stakeholder') {
         return ['read', 'write'];
     }
     return ['read'];
@@ -601,7 +601,7 @@ exports.listSubgridMembers = async (req, res) => {
         const User = require('../models/User');
         const userIds = members.map(m => m.userId);
         const users = await User.find({ _id: { $in: userIds } })
-            .select('_id firstName lastName email username avatarUrl createdAt')
+            .select('_id firstName lastName email username avatarUrl createdAt role stakeholderBadge')
             .lean();
 
         const userMap = {};
@@ -623,6 +623,8 @@ exports.listSubgridMembers = async (req, res) => {
                     username: user.username || '',
                     avatarUrl: user.avatarUrl || '',
                     createdAt: user.createdAt || m.createdAt,
+                    role: user.role || 'member',
+                    stakeholderBadge: user.stakeholderBadge || null,
                 },
                 // Keep flat fields for backward compatibility
                 firstName: user.firstName || '',
@@ -630,6 +632,8 @@ exports.listSubgridMembers = async (req, res) => {
                 email: user.email || '',
                 username: user.username || '',
                 avatarUrl: user.avatarUrl || '',
+                userRole: user.role || 'member',
+                stakeholderBadge: user.stakeholderBadge || null,
             };
         });
 
@@ -1729,12 +1733,14 @@ exports.createMessage = async (req, res) => {
 };
 
 exports.flagMessage = async (req, res) => {
+    console.log('[flagMessage] Called with params:', req.params);
     try {
         const { subgridId, messageId } = req.params;
         const { reason } = req.body;
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
+            console.log('[flagMessage] Subgrid not found:', subgridId);
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
@@ -1744,14 +1750,39 @@ exports.flagMessage = async (req, res) => {
         }
 
         const { Message, ModerationFlag } = await getTenantModels(subgrid);
-        const updated = await Message.findOneAndUpdate(
-            { _id: messageId, subgridId: String(subgridId) },
+
+        // Debug: check if message exists
+        const existingMessage = await Message.findById(messageId);
+        console.log('[flagMessage] Debug:', {
+            messageId,
+            subgridId,
+            existingMessage: existingMessage ? {
+                _id: existingMessage._id,
+                subgridId: existingMessage.subgridId,
+                channelId: existingMessage.channelId,
+            } : null,
+        });
+
+        // Use findByIdAndUpdate instead of findOneAndUpdate for more reliable matching
+        const updated = await Message.findByIdAndUpdate(
+            messageId,
             { flagged: true },
             { new: true }
         );
         if (!updated) {
+            console.log('[flagMessage] Message not found with ID:', messageId);
             return res.status(404).json({ message: 'Message not found' });
         }
+
+        // Store a snapshot of the content for moderation review
+        const contentSnapshot = {
+            body: updated.body || '',
+            text: updated.text || '',
+            authorId: updated.authorId?.toString() || '',
+            senderId: updated.senderId?.toString() || '',
+            attachments: updated.attachments || [],
+            createdAt: updated.createdAt,
+        };
 
         await ModerationFlag.create({
             subgridId: String(subgridId),
@@ -1759,6 +1790,7 @@ exports.flagMessage = async (req, res) => {
             contentId: String(messageId),
             flaggedBy: String(actorId),
             reason: reason || '',
+            contentSnapshot,
         });
 
         return res.status(200).json({ success: true });
@@ -1964,12 +1996,14 @@ exports.createComment = async (req, res) => {
 };
 
 exports.flagPost = async (req, res) => {
+    console.log('[flagPost] Called with params:', req.params);
     try {
         const { subgridId, postId } = req.params;
         const { reason } = req.body;
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
+            console.log('[flagPost] Subgrid not found:', subgridId);
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
@@ -1979,14 +2013,38 @@ exports.flagPost = async (req, res) => {
         }
 
         const { Post, ModerationFlag } = await getTenantModels(subgrid);
-        const updated = await Post.findOneAndUpdate(
-            { _id: postId, subgridId: String(subgridId) },
+
+        // First try to find the post by ID only to debug
+        const existingPost = await Post.findById(postId);
+        console.log('[flagPost] Debug:', {
+            postId,
+            subgridId,
+            existingPost: existingPost ? {
+                _id: existingPost._id,
+                subgridId: existingPost.subgridId,
+                subgridIdType: typeof existingPost.subgridId,
+            } : null,
+        });
+
+        // Try to match by _id only since subgridId might be stored differently
+        const updated = await Post.findByIdAndUpdate(
+            postId,
             { flagged: true },
             { new: true }
         );
         if (!updated) {
+            console.log('[flagPost] Post not found with ID:', postId);
             return res.status(404).json({ message: 'Post not found' });
         }
+
+        // Store a snapshot of the content for moderation review
+        const contentSnapshot = {
+            body: updated.body || '',
+            title: updated.title || '',
+            authorId: updated.authorId?.toString() || '',
+            attachments: updated.attachments || [],
+            createdAt: updated.createdAt,
+        };
 
         await ModerationFlag.create({
             subgridId: String(subgridId),
@@ -1994,6 +2052,7 @@ exports.flagPost = async (req, res) => {
             contentId: String(postId),
             flaggedBy: String(actorId),
             reason: reason || '',
+            contentSnapshot,
         });
 
         return res.status(200).json({ success: true });
@@ -2027,12 +2086,22 @@ exports.flagComment = async (req, res) => {
             return res.status(404).json({ message: 'Comment not found' });
         }
 
+        // Store a snapshot of the content for moderation review
+        const contentSnapshot = {
+            body: updated.body || '',
+            text: updated.text || '',
+            authorId: updated.authorId?.toString() || '',
+            postId: updated.postId?.toString() || '',
+            createdAt: updated.createdAt,
+        };
+
         await ModerationFlag.create({
             subgridId: String(subgridId),
             contentType: 'comment',
             contentId: String(commentId),
             flaggedBy: String(actorId),
             reason: reason || '',
+            contentSnapshot,
         });
 
         return res.status(200).json({ success: true });
@@ -2669,6 +2738,8 @@ const mapUsersById = async (ids) => {
             email: user.email,
             username: user.username,
             avatarUrl: user.avatarUrl,
+            role: user.role || 'member',
+            stakeholderBadge: user.stakeholderBadge || null,
         };
         return acc;
     }, {});
@@ -2689,6 +2760,41 @@ exports.listFriends = async (req, res) => {
         return res.status(200).json({ success: true, data: { friends: friendIds, users } });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to list friends', error: error.message });
+    }
+};
+
+exports.listMutualFriends = async (req, res) => {
+    try {
+        const { subgridId, peerId } = req.params;
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+        if (!peerId) {
+            return res.status(400).json({ message: 'peerId is required' });
+        }
+
+        const isFriend = await hasFriendship(subgridId, userId, peerId);
+        if (!isFriend) {
+            return res.status(403).json({ message: 'Friendship required to view mutual friends' });
+        }
+
+        const [myFriendships, peerFriendships] = await Promise.all([
+            Friendship.find({ subgridId, userId }).select('friendId').lean(),
+            Friendship.find({ subgridId, userId: peerId }).select('friendId').lean(),
+        ]);
+
+        const myFriendSet = new Set(myFriendships.map((friend) => String(friend.friendId)));
+        const mutualIds = peerFriendships
+            .map((friend) => String(friend.friendId))
+            .filter((id) => myFriendSet.has(id));
+
+        const uniqueMutualIds = [...new Set(mutualIds)];
+        const users = await mapUsersById(uniqueMutualIds);
+
+        return res.status(200).json({ success: true, data: { friends: uniqueMutualIds, users } });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to list mutual friends', error: error.message });
     }
 };
 
@@ -2952,6 +3058,8 @@ exports.listModerationQueue = async (req, res) => {
         const flags = await ModerationFlag.find({ subgridId: String(subgridId), status: 'open' })
             .sort({ createdAt: -1 });
 
+        console.log('[listModerationQueue] Found flags:', flags.length);
+
         const contentMap = {
             message: Message,
             post: Post,
@@ -2961,12 +3069,43 @@ exports.listModerationQueue = async (req, res) => {
 
         const enriched = await Promise.all(flags.map(async (flag) => {
             const Model = contentMap[flag.contentType];
-            const content = Model ? await Model.findById(flag.contentId) : null;
+            console.log('[listModerationQueue] Processing flag:', {
+                flagId: flag._id,
+                contentType: flag.contentType,
+                contentId: flag.contentId,
+                hasModel: !!Model,
+            });
+
+            let content = null;
+            if (Model) {
+                try {
+                    // Try to find by _id first
+                    content = await Model.findById(flag.contentId);
+                    console.log('[listModerationQueue] Content lookup result:', {
+                        contentId: flag.contentId,
+                        found: !!content,
+                        contentBody: content?.body?.substring(0, 50) || content?.text?.substring(0, 50) || null,
+                    });
+                } catch (lookupErr) {
+                    console.error('[listModerationQueue] Content lookup error:', lookupErr.message);
+                }
+            }
+
+            // If content was deleted, use the stored snapshot
+            if (!content && flag.contentSnapshot) {
+                console.log('[listModerationQueue] Using contentSnapshot for deleted content:', flag.contentId);
+                content = {
+                    ...flag.contentSnapshot,
+                    _deleted: true, // Mark as deleted for frontend display
+                };
+            }
+
             return { ...flag.toObject(), content };
         }));
 
         return res.status(200).json({ success: true, data: enriched });
     } catch (error) {
+        console.error('[listModerationQueue] Error:', error);
         return res.status(500).json({ message: 'Failed to load moderation queue', error: error.message });
     }
 };
@@ -3388,11 +3527,13 @@ exports.setOffline = async (req, res) => {
  * Allowed: post author or subgrid admin/moderator
  */
 exports.deletePost = async (req, res) => {
+    console.log('[deletePost] Called with params:', req.params);
     try {
         const { subgridId, postId } = req.params;
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
+            console.log('[deletePost] Subgrid not found:', subgridId);
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
@@ -3403,7 +3544,18 @@ exports.deletePost = async (req, res) => {
 
         const { Post } = await getTenantModels(subgrid);
         const post = await Post.findById(postId);
+        console.log('[deletePost] Debug:', {
+            postId,
+            subgridId,
+            userId,
+            post: post ? {
+                _id: post._id,
+                authorId: post.authorId,
+                subgridId: post.subgridId,
+            } : null,
+        });
         if (!post) {
+            console.log('[deletePost] Post not found with ID:', postId);
             return res.status(404).json({ message: 'Post not found' });
         }
 

@@ -3,7 +3,7 @@
  * Uses Agora Web SDK for browser-based voice/video calls
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import AgoraRTC, {
     IAgoraRTCClient,
     IAgoraRTCRemoteUser,
@@ -61,10 +61,11 @@ interface UseAgoraCallOptions {
 }
 
 export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
-    // Log to confirm web hook is being used (not the native stub)
-    console.log('[useAgoraCall.web.ts] Web Agora hook initialized - real Agora SDK');
-
-    const [callState, setCallState] = useState<CallState>('idle');
+    const [callState, setCallStateInternal] = useState<CallState>('idle');
+    // Simplified setCallState wrapper
+    const setCallState = useCallback((newState: CallState | ((prev: CallState) => CallState)) => {
+        setCallStateInternal(newState);
+    }, []);
     const [callType, setCallType] = useState<CallType>('audio');
     const [currentCall, setCurrentCall] = useState<CallSession | null>(null);
     const [isMuted, setIsMuted] = useState(false);
@@ -94,12 +95,9 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             try {
                 if (clientRef.current.connectionState === 'CONNECTED' ||
                     clientRef.current.connectionState === 'CONNECTING') {
-                    console.log('[Agora Web] Leaving existing channel before rejoining...');
                     await clientRef.current.leave();
                 }
-            } catch (e) {
-                console.log('[Agora Web] Error leaving previous channel:', e);
-            }
+            } catch (e) {}
             return clientRef.current;
         }
 
@@ -109,43 +107,49 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             // Set up event listeners
             client.on('user-published', async (user: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
                 await client.subscribe(user, mediaType);
-                console.log('[Agora Web] Subscribed to', mediaType, 'from user', user.uid);
 
                 if (mediaType === 'audio') {
                     user.audioTrack?.play();
                 }
                 if (mediaType === 'video') {
-                    // Video track will be handled by the UI
+                    // Trigger re-render so CallModal can play the video track
+                    setRemoteUsers(prev => [...prev]);
                 }
             });
 
             client.on('user-unpublished', (user: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
-                console.log('[Agora Web] User unpublished', mediaType, user.uid);
+                // User unpublished their track
             });
 
             client.on('user-joined', (user: IAgoraRTCRemoteUser) => {
-                console.log('[Agora Web] User joined:', user.uid);
                 setRemoteUsers(prev => [...prev.filter(uid => uid !== user.uid), user.uid as number]);
                 // Transition from 'ringing' to 'connected' when the other user joins
                 if (callStateRef.current === 'ringing') {
-                    console.log('[Agora Web] Callee joined, transitioning to connected');
                     setCallState('connected');
                     startDurationTimerRef.current?.();
                 }
             });
 
-            client.on('user-left', (user: IAgoraRTCRemoteUser) => {
-                console.log('[Agora Web] User left:', user.uid);
-                setRemoteUsers(prev => prev.filter(uid => uid !== user.uid));
+            client.on('user-left', (user: IAgoraRTCRemoteUser, reason?: string) => {
+                setRemoteUsers(prev => {
+                    const newUsers = prev.filter(uid => uid !== user.uid);
+                    // If no remote users left and we were connected, end the call
+                    // This handles the case where the other party hangs up
+                    if (newUsers.length === 0 && callStateRef.current === 'connected') {
+                        // Use setTimeout to avoid state update during render
+                        setTimeout(() => {
+                            setCallState('ended');
+                        }, 0);
+                    }
+                    return newUsers;
+                });
             });
 
             client.on('token-privilege-will-expire', async () => {
-                console.log('[Agora Web] Token expiring, refreshing...');
                 await handleTokenRefresh();
             });
 
             client.on('token-privilege-did-expire', async () => {
-                console.log('[Agora Web] Token expired');
                 setError('Call token expired');
             });
 
@@ -194,27 +198,42 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     // Create local tracks
     const createLocalTracks = useCallback(async (type: CallType) => {
         try {
-            console.log('[Agora Web] Creating local tracks for call type:', type);
+            // Clean up any existing tracks first to release camera/microphone
+            if (localAudioTrackRef.current) {
+                try {
+                    localAudioTrackRef.current.stop();
+                    localAudioTrackRef.current.close();
+                } catch (e) {}
+                localAudioTrackRef.current = null;
+            }
+            if (localVideoTrackRef.current) {
+                try {
+                    localVideoTrackRef.current.stop();
+                    localVideoTrackRef.current.close();
+                } catch (e) {}
+                localVideoTrackRef.current = null;
+                setLocalVideoTrack(null);
+            }
 
             // Create audio track
             const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
             localAudioTrackRef.current = audioTrack;
-            console.log('[Agora Web] Audio track created successfully');
 
             // Create video track if video call
             let videoTrack = null;
             if (type === 'video') {
                 try {
-                    videoTrack = await AgoraRTC.createCameraVideoTrack();
+                    videoTrack = await AgoraRTC.createCameraVideoTrack({
+                        encoderConfig: '480p_1',
+                    });
                     localVideoTrackRef.current = videoTrack;
-                    setLocalVideoTrack(videoTrack); // Update state to trigger re-renders
+                    setLocalVideoTrack(videoTrack);
                     setIsVideoEnabled(true);
-                    console.log('[Agora Web] Video track created successfully');
                 } catch (videoErr: any) {
                     console.error('[Agora Web] Failed to create video track:', videoErr);
-                    // Continue with audio-only if video fails
                     setIsVideoEnabled(false);
                     setLocalVideoTrack(null);
+                    setError(`Video unavailable: ${videoErr?.message || 'Camera access denied'}`);
                 }
             }
 
@@ -265,7 +284,6 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
             // Join channel
             await client.join(appId, channelName, token, uid);
-            console.log('[Agora Web] Joined channel:', channelName);
 
             // Publish tracks
             const tracksToPublish = [audioTrack];
@@ -273,7 +291,6 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 tracksToPublish.push(videoTrack);
             }
             await client.publish(tracksToPublish);
-            console.log('[Agora Web] Published local tracks');
 
             setCurrentCall({
                 callId,
@@ -300,18 +317,14 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
     // Answer incoming call (callId and callType passed from CallContext)
     const answer = useCallback(async (callId: string, callTypeArg?: CallType) => {
-        console.log('[Agora Web] answer() called with callId:', callId, 'callType:', callTypeArg);
         try {
             setError(null);
             setCallState('connecting');
-            console.log('[Agora Web] Set callState to connecting');
             const type = callTypeArg || 'audio';
             setCallType(type);
             setCallDuration(0);
 
-            console.log('[Agora Web] Calling apiAnswerCall...');
             const response = await apiAnswerCall(callId);
-            console.log('[Agora Web] apiAnswerCall response:', response);
             if (!response.success) {
                 setError(response.error || 'Failed to answer call');
                 setCallState('idle');
@@ -319,25 +332,20 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             }
 
             const { channelName, token, uid, appId } = response.data;
-            console.log('[Agora Web] Got channel info:', { channelName, uid, appId });
 
             // Initialize client and create tracks
             const client = await initClient();
             const { audioTrack, videoTrack } = await createLocalTracks(type);
 
             // Join channel
-            console.log('[Agora Web] Joining channel as callee...');
             await client.join(appId, channelName, token, uid);
-            console.log('[Agora Web] Joined channel as callee:', channelName);
 
             // Publish tracks
             const tracksToPublish = [audioTrack];
             if (videoTrack) {
                 tracksToPublish.push(videoTrack);
-                console.log('[Agora Web] Including video track in publish');
             }
             await client.publish(tracksToPublish);
-            console.log('[Agora Web] Published local tracks, count:', tracksToPublish.length);
 
             setCurrentCall({
                 callId,
@@ -351,7 +359,6 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             });
 
             setCallState('connected');
-            console.log('[Agora Web] Set callState to connected');
             startDurationTimer();
             return response.data;
         } catch (err: any) {
@@ -403,58 +410,48 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
     // Toggle mute
     const toggleMute = useCallback(async () => {
-        console.log('[Agora Web] toggleMute called, current isMuted:', isMuted, 'hasAudioTrack:', !!localAudioTrackRef.current);
         if (localAudioTrackRef.current) {
             const newMuted = !isMuted;
             try {
                 await localAudioTrackRef.current.setEnabled(!newMuted);
                 setIsMuted(newMuted);
-                console.log('[Agora Web] Mute toggled, now muted:', newMuted);
             } catch (err) {
                 console.error('[Agora Web] Failed to toggle mute:', err);
             }
         } else {
             // Still toggle UI state even if no track (for visual feedback)
             setIsMuted(prev => !prev);
-            console.log('[Agora Web] No audio track, toggled UI state only');
         }
     }, [isMuted]);
 
     // Toggle video
     const toggleVideo = useCallback(async () => {
-        console.log('[Agora Web] toggleVideo called, current isVideoEnabled:', isVideoEnabled, 'hasVideoTrack:', !!localVideoTrackRef.current);
         if (localVideoTrackRef.current) {
             const newVideoEnabled = !isVideoEnabled;
             try {
                 await localVideoTrackRef.current.setEnabled(newVideoEnabled);
                 setIsVideoEnabled(newVideoEnabled);
-                console.log('[Agora Web] Video toggled, now enabled:', newVideoEnabled);
             } catch (err) {
                 console.error('[Agora Web] Failed to toggle video:', err);
             }
         } else {
             setIsVideoEnabled(prev => !prev);
-            console.log('[Agora Web] No video track, toggled UI state only');
         }
     }, [isVideoEnabled]);
 
     // Toggle speaker - mutes/unmutes remote audio playback
     const toggleSpeaker = useCallback(() => {
-        console.log('[Agora Web] toggleSpeaker called, current isSpeakerOn:', isSpeakerOn);
         const newSpeakerOn = !isSpeakerOn;
 
         // On web, we can control remote audio volume through the client
         if (clientRef.current) {
             try {
-                // Get all remote users and adjust their audio volume
                 const remoteUsersList = clientRef.current.remoteUsers || [];
                 remoteUsersList.forEach((user: IAgoraRTCRemoteUser) => {
                     if (user.audioTrack) {
-                        // setVolume takes 0-100, 0 = mute, 100 = full volume
                         user.audioTrack.setVolume(newSpeakerOn ? 100 : 0);
                     }
                 });
-                console.log('[Agora Web] Speaker toggled, remote audio volume set to:', newSpeakerOn ? 100 : 0);
             } catch (err) {
                 console.error('[Agora Web] Failed to toggle speaker:', err);
             }
@@ -485,9 +482,38 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     // Note: SSE call event subscription is now handled globally by CallContext
     // This hook only handles Agora-specific call actions
 
-    // Cleanup only on actual unmount when call ends
-    // We don't auto-cleanup the Agora client on component re-renders
-    // since that would end active calls unexpectedly
+    // Cleanup when call ends (either by user hangup or remote user leaving)
+    useEffect(() => {
+        if (callState === 'ended') {
+            const callId = currentCall?.callId;
+            // Leave channel
+            if (clientRef.current) {
+                clientRef.current.leave().catch(() => {});
+            }
+            // Clean up local tracks
+            cleanupLocalTracks();
+            // Stop duration timer
+            stopDurationTimer();
+            // Clear current call
+            setCurrentCall(null);
+            setRemoteUsers([]);
+            // Call the onCallEnded callback if we have a callId
+            if (callId) {
+                options.onCallEnded?.(callId, 'remote_ended');
+            }
+            // Reset to idle after a short delay to allow UI to show "Call ended" briefly
+            setTimeout(() => {
+                setCallState('idle');
+            }, 1500);
+        }
+    }, [callState, cleanupLocalTracks, stopDurationTimer, currentCall, options]);
+
+    // Memoize engine object to prevent unnecessary re-renders in CallModal
+    // Only create new object when localVideoTrack or client actually changes
+    const engine = useMemo(() => ({
+        localVideoTrack,
+        client,
+    }), [localVideoTrack, client]);
 
     return {
         // State
@@ -517,11 +543,8 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
         // Engine object containing tracks and client for CallModal.web.tsx
         // On web, this contains { localVideoTrack, client } instead of native Agora engine
-        // Using state values ensures component re-renders when tracks are created
-        engine: {
-            localVideoTrack,
-            client,
-        },
+        // Memoized to prevent infinite re-render loops in video calls
+        engine,
     };
 };
 

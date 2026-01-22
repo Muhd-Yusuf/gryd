@@ -16,6 +16,7 @@
     "agora-rtc-sdk-ng": "^4.24.2",
     "expo": "~54.0.30",
     "expo-av": "~16.0.8",
+    "expo-clipboard": "^8.0.8",
     "expo-constants": "~18.0.12",
     "expo-device": "~8.0.10",
     "expo-document-picker": "^14.0.8",

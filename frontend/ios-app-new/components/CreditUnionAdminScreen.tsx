@@ -18,9 +18,10 @@ import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { communityGet, communityPost, communityPut, communityDelete, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile, getAuthUser, initiateChannelCall } from '../lib/api';
+import { communityGet, communityPost, communityPatch, communityPut, communityDelete, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile, getAuthUser, initiateChannelCall, logout, inviteStakeholder, StakeholderBadge } from '../lib/api';
 import { useTheme } from '../lib/theme';
 import UserAvatar from './UserAvatar';
+import VoiceMessagePlayer from './VoiceMessagePlayer';
 
 // Helper to convert Blob to data URL
 const blobToDataUrl = (blob: Blob): Promise<string> => {
@@ -59,6 +60,9 @@ type Subgrid = {
     description?: string;
     icon?: string;
     inviteCode?: string;
+    logoUrl?: string;
+    coverImageUrl?: string;
+    status?: string;
 };
 
 type Post = {
@@ -105,6 +109,14 @@ type Member = {
     };
 };
 
+type ChannelPermissionKey = 'members' | 'stakeholders' | 'serverAdmin' | 'serverOwner';
+type EngagementSettingKey =
+    | 'joinMessage'
+    | 'uploadNotice'
+    | 'emojiReactions'
+    | 'autoEmoji'
+    | 'stickersAutocomplete';
+
 const formatDate = (value?: string) => {
     if (!value) return '';
     const date = new Date(value);
@@ -128,19 +140,37 @@ const getMemberName = (member: Member) => {
 
 const getAuthorName = (authorId?: string, members?: Member[]) => {
     if (!authorId || !members) return `User ${String(authorId).slice(-6)}`;
+    // Ensure authorId is a string for comparison
+    const authorIdStr = String(authorId);
     // Check userId (direct), user._id (nested), or _id (fallback)
+    // Use String() to ensure consistent comparison since ObjectIds may be returned as objects
     const member = members.find(m =>
-        m.userId === authorId ||
-        m.user?._id === authorId ||
-        m._id === authorId
+        String(m.userId) === authorIdStr ||
+        String(m.user?._id) === authorIdStr ||
+        String(m._id) === authorIdStr
     );
     if (member) return getMemberName(member);
-    return `User ${String(authorId).slice(-6)}`;
+    return `User ${authorIdStr.slice(-6)}`;
 };
 
 const getMemberAvatarUrl = (member?: Member) => {
     if (!member) return null;
     return member.avatarUrl || member.user?.avatarUrl || null;
+};
+
+const getMemberEmail = (member: Member) => {
+    return member.email || member.user?.email || '';
+};
+
+const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', 'Other'];
+
+type ModerationFlag = {
+    _id: string;
+    contentType?: 'message' | 'post' | 'comment' | 'direct_message';
+    contentId?: string;
+    reason?: string;
+    createdAt?: string;
+    content?: any;
 };
 
 const CreditUnionAdminScreen = () => {
@@ -149,6 +179,15 @@ const CreditUnionAdminScreen = () => {
     const styles = useMemo(() => createStyles(colors), [colors]);
     const { width } = useWindowDimensions();
     const isMobile = width < 800;
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+            router.replace('/login');
+        } catch (err) {
+            console.error('Logout failed:', err);
+        }
+    };
 
     const userId = getUserId();
     const [tenantId, setTenantId] = useState(getTenantId());
@@ -162,7 +201,6 @@ const CreditUnionAdminScreen = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [memberOnlineStatuses, setMemberOnlineStatuses] = useState<Record<string, boolean>>({});
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
     // UI State
@@ -203,6 +241,9 @@ const CreditUnionAdminScreen = () => {
     const [serverSettingsModalOpen, setServerSettingsModalOpen] = useState(false);
     const [notificationSettingsModalOpen, setNotificationSettingsModalOpen] = useState(false);
     const [privacySettingsModalOpen, setPrivacySettingsModalOpen] = useState(false);
+    const [editChannelModalOpen, setEditChannelModalOpen] = useState(false);
+    const [channelPermissionModalOpen, setChannelPermissionModalOpen] = useState(false);
+    const [channelMenuOpen, setChannelMenuOpen] = useState<string | null>(null);
 
     // Success & Confirmation Modal States
     const [successModalOpen, setSuccessModalOpen] = useState(false);
@@ -213,9 +254,22 @@ const CreditUnionAdminScreen = () => {
 
     // Form States
     const [inviteEmail, setInviteEmail] = useState('');
+    const [selectedStakeholderBadge, setSelectedStakeholderBadge] = useState<StakeholderBadge>('stakeholder');
+    const [invitingStakeholder, setInvitingStakeholder] = useState(false);
     const [newChannelName, setNewChannelName] = useState('');
     const [newChannelType, setNewChannelType] = useState<'text' | 'voice'>('text');
     const [isPrivateChannel, setIsPrivateChannel] = useState(false);
+    const [editChannelId, setEditChannelId] = useState('');
+    const [editChannelName, setEditChannelName] = useState('');
+    const [editChannelType, setEditChannelType] = useState<'text' | 'voice'>('text');
+    const [editChannelPrivate, setEditChannelPrivate] = useState(false);
+    const [permissionChannelId, setPermissionChannelId] = useState('');
+    const [channelPermissions, setChannelPermissions] = useState({
+        members: true,
+        stakeholders: true,
+        serverAdmin: true,
+        serverOwner: true,
+    });
     const [newCategoryName, setNewCategoryName] = useState('');
     const [isPrivateCategory, setIsPrivateCategory] = useState(false);
     const [newEventTitle, setNewEventTitle] = useState('');
@@ -223,6 +277,12 @@ const CreditUnionAdminScreen = () => {
     const [newEventDate, setNewEventDate] = useState('');
     const [serverName, setServerName] = useState('');
     const [serverDescription, setServerDescription] = useState('');
+    const [serverLogoUrl, setServerLogoUrl] = useState('');
+    const [serverIconUploading, setServerIconUploading] = useState(false);
+    const [createServerModalOpen, setCreateServerModalOpen] = useState(false);
+    const [newServerName, setNewServerName] = useState('');
+    const [newServerDescription, setNewServerDescription] = useState('');
+    const [newServerVisibility, setNewServerVisibility] = useState<'private' | 'public'>('private');
 
     // Notification Settings
     const [notifyAllMessages, setNotifyAllMessages] = useState(true);
@@ -252,13 +312,31 @@ const CreditUnionAdminScreen = () => {
     const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
 
-    // Item menu state (for post/message delete dropdown)
+    // Item menu state (for post/message delete dropdown) - using floating menu approach
     const [itemMenuOpen, setItemMenuOpen] = useState<string | null>(null);
+    const [itemMenuPosition, setItemMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+    const [itemMenuItem, setItemMenuItem] = useState<any>(null);
+    const [reportModalOpen, setReportModalOpen] = useState(false);
+    const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
+    const [reportNotes, setReportNotes] = useState('');
+    const [reportTarget, setReportTarget] = useState<{ id: string; type: 'post' | 'message' } | null>(null);
+    const [reportSubmitting, setReportSubmitting] = useState(false);
+
+    // Moderation queue state (server settings)
+    const [moderationQueue, setModerationQueue] = useState<ModerationFlag[]>([]);
+    const [moderationLoading, setModerationLoading] = useState(false);
+    const [moderationError, setModerationError] = useState('');
+    const [moderationMenuOpen, setModerationMenuOpen] = useState<string | null>(null);
+    const [moderationDetailOpen, setModerationDetailOpen] = useState(false);
+    const [activeModerationItem, setActiveModerationItem] = useState<ModerationFlag | null>(null);
+    const [moderationActionLoading, setModerationActionLoading] = useState(false);
 
     // Server Settings Tab
     const [settingsTab, setSettingsTab] = useState('server-profile');
     const [accountEmail, setAccountEmail] = useState('');
     const [selectedBanner, setSelectedBanner] = useState(0);
+    const [membersSearch, setMembersSearch] = useState('');
+    const [feedSearchQuery, setFeedSearchQuery] = useState('');
     const bannerColors = [
         ['#1a1a2e', '#16213e'],
         ['#ff6b6b', '#ee5a5a'],
@@ -270,6 +348,13 @@ const CreditUnionAdminScreen = () => {
         ['#11998e', '#38ef7d'],
         ['#fc5c7d', '#6a82fb'],
     ];
+    const [engagementSettings, setEngagementSettings] = useState({
+        joinMessage: true,
+        uploadNotice: true,
+        emojiReactions: true,
+        autoEmoji: true,
+        stickersAutocomplete: false,
+    });
 
     // Bootstrap tenant and load user info
     useEffect(() => {
@@ -300,7 +385,6 @@ const CreditUnionAdminScreen = () => {
             return;
         }
         console.log('[CUA Admin] Loading subgrids for tenant:', tenantId);
-        setLoading(true);
         communityGet(`/tenants/${tenantId}/subgrids`)
             .then((response) => {
                 console.log('[CUA Admin] Subgrids response:', response);
@@ -311,13 +395,12 @@ const CreditUnionAdminScreen = () => {
                     setActiveSubgridId(list[0]._id);
                     setServerName(list[0].name || '');
                     setServerDescription(list[0].description || '');
+                    setServerLogoUrl(list[0].logoUrl || '');
                 }
             })
             .catch((err) => {
                 console.error('[CUA Admin] Failed to load subgrids:', err);
-                setError(err.message);
-            })
-            .finally(() => setLoading(false));
+            });
     }, [tenantId]);
 
     // Load subgrid data
@@ -327,7 +410,6 @@ const CreditUnionAdminScreen = () => {
             return;
         }
         console.log('[CUA Admin] Loading subgrid data for:', activeSubgridId);
-        setLoading(true);
         Promise.allSettled([
             communityGet(`/subgrids/${activeSubgridId}/channels`),
             communityGet(`/subgrids/${activeSubgridId}/posts`),
@@ -344,8 +426,7 @@ const CreditUnionAdminScreen = () => {
                 if (membersRes.status === 'fulfilled') setMembers(membersRes.value?.data || []);
                 if (categoriesRes.status === 'fulfilled') setCategories(categoriesRes.value?.data || []);
                 if (eventsRes.status === 'fulfilled') setEvents(eventsRes.value?.data || []);
-            })
-            .finally(() => setLoading(false));
+            });
     }, [activeSubgridId]);
 
     // Set default channel
@@ -373,6 +454,11 @@ const CreditUnionAdminScreen = () => {
         const interval = setInterval(fetchMessages, 5000);
         return () => clearInterval(interval);
     }, [activeSubgridId, activeChannelId]);
+
+    useEffect(() => {
+        if (!serverSettingsModalOpen || settingsTab !== 'bans' || !activeSubgridId) return;
+        loadModerationQueue();
+    }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
 
     // Fetch and update member online statuses
     useEffect(() => {
@@ -405,8 +491,25 @@ const CreditUnionAdminScreen = () => {
         });
     }, [messages]);
 
+    useEffect(() => {
+        if (!activeSubgridId) return;
+        const current = subgrids.find((s) => s._id === activeSubgridId);
+        if (!current) return;
+        setServerName(current.name || '');
+        setServerDescription(current.description || '');
+        setServerLogoUrl(current.logoUrl || '');
+    }, [activeSubgridId, subgrids]);
+
     const activeSubgrid = subgrids.find((s) => s._id === activeSubgridId);
     const activeChannel = channels.find((c) => c._id === activeChannelId);
+    const moderationContent = activeModerationItem?.content || {};
+    const moderationAuthorId = moderationContent?.authorId || moderationContent?.senderId;
+    const moderationAuthorMember = members.find((member) =>
+        String(member.userId) === String(moderationAuthorId) || String(member.user?._id) === String(moderationAuthorId) || String(member._id) === String(moderationAuthorId)
+    );
+    const moderationAuthorName = moderationAuthorId ? getAuthorName(moderationAuthorId, members) : 'Unknown';
+    const moderationContentText =
+        moderationContent?.body || moderationContent?.text || moderationContent?.title || 'Content unavailable';
 
     const textChannels = channels.filter(c => c.type !== 'voice' && c.type !== 'announcement');
     const voiceChannels = channels.filter(c => c.type === 'voice');
@@ -414,13 +517,164 @@ const CreditUnionAdminScreen = () => {
     // Check if server is empty (no channels)
     const isServerEmpty = channels.length === 0;
 
-    // Combine posts and messages for feed
+    const permissionOptions: { key: ChannelPermissionKey; label: string }[] = [
+        { key: 'members', label: 'Members' },
+        { key: 'stakeholders', label: 'Stakeholders' },
+        { key: 'serverAdmin', label: 'Server Admin' },
+        { key: 'serverOwner', label: 'Server Owner' },
+    ];
+    const filteredMembers = useMemo(() => {
+        const query = membersSearch.trim().toLowerCase();
+        if (!query) return members;
+        return members.filter((member) => {
+            const name = getMemberName(member).toLowerCase();
+            const email = getMemberEmail(member).toLowerCase();
+            return name.includes(query) || email.includes(query);
+        });
+    }, [members, membersSearch]);
+
+    // Combine posts and messages for feed, with search filtering
     const feedItems = useMemo(() => {
-        const items = [...posts, ...messages].sort((a, b) => {
+        let items = [...posts, ...messages].sort((a, b) => {
             return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
         });
+
+        // Filter by search query if present
+        if (feedSearchQuery.trim()) {
+            const query = feedSearchQuery.toLowerCase().trim();
+            items = items.filter((item: any) => {
+                // Search in message/post body
+                const body = (item.body || '').toLowerCase();
+                if (body.includes(query)) return true;
+
+                // Search in author name
+                const authorId = item.authorId || item.senderId;
+                const authorName = getAuthorName(authorId, members).toLowerCase();
+                if (authorName.includes(query)) return true;
+
+                return false;
+            });
+        }
+
         return items;
-    }, [posts, messages]);
+    }, [posts, messages, feedSearchQuery, members]);
+
+    const getSeverityLabel = (reason?: string) => {
+        const value = (reason || '').toLowerCase();
+        if (value.includes('hate') || value.includes('harass') || value.includes('scam') || value.includes('fraud')) {
+            return 'High';
+        }
+        return 'Medium';
+    };
+
+    const openReportModal = (id: string, type: 'post' | 'message') => {
+        setReportTarget({ id, type });
+        setReportReason(REPORT_REASONS[0]);
+        setReportNotes('');
+        setReportModalOpen(true);
+    };
+
+    // Handle opening item action menu with proper positioning
+    const handleOpenItemMenu = (event: any, item: any, isPost: boolean) => {
+        if (itemMenuOpen === item._id) {
+            setItemMenuOpen(null);
+            setItemMenuItem(null);
+            return;
+        }
+        // Get position from event target for web
+        const target = event.currentTarget || event.target;
+        if (target && target.getBoundingClientRect) {
+            const rect = target.getBoundingClientRect();
+            setItemMenuPosition({
+                top: rect.bottom + 5,
+                right: window.innerWidth - rect.right,
+            });
+        }
+        setItemMenuItem({ ...item, isPost });
+        setItemMenuOpen(item._id);
+    };
+
+    const closeItemMenu = () => {
+        setItemMenuOpen(null);
+        setItemMenuItem(null);
+    };
+
+    const submitReport = async () => {
+        if (!activeSubgridId || !reportTarget) return;
+        const reason = reportReason === 'Other' ? reportNotes.trim() : reportReason;
+        if (!reason) {
+            if (Platform.OS === 'web') {
+                window.alert('Please select a report reason.');
+            } else {
+                Alert.alert('Missing reason', 'Please select a report reason.');
+            }
+            return;
+        }
+        setReportSubmitting(true);
+        try {
+            const path =
+                reportTarget.type === 'post'
+                    ? `/subgrids/${activeSubgridId}/posts/${reportTarget.id}/flag`
+                    : `/subgrids/${activeSubgridId}/messages/${reportTarget.id}/flag`;
+            await communityPost(path, { reason });
+            setReportModalOpen(false);
+            setReportTarget(null);
+            showSuccessModal('Report Submitted', 'Thanks for reporting. Our team will review this content.');
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to submit report.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to submit report.');
+            }
+        } finally {
+            setReportSubmitting(false);
+        }
+    };
+
+    const loadModerationQueue = async () => {
+        if (!activeSubgridId) return;
+        setModerationLoading(true);
+        setModerationError('');
+        try {
+            const response = await communityGet(`/subgrids/${activeSubgridId}/moderation`);
+            setModerationQueue(response?.data || []);
+        } catch (err: any) {
+            setModerationError(err.message || 'Failed to load moderation queue.');
+            setModerationQueue([]);
+        } finally {
+            setModerationLoading(false);
+        }
+    };
+
+    const openModerationDetail = (item: ModerationFlag) => {
+        setActiveModerationItem(item);
+        setModerationDetailOpen(true);
+    };
+
+    const handleModerationAction = async (flag: ModerationFlag | null, action: 'approve' | 'remove' | 'warn' | 'mute' | 'ban') => {
+        if (!activeSubgridId || !flag?._id) return;
+        setModerationActionLoading(true);
+        try {
+            await communityPost(`/subgrids/${activeSubgridId}/moderation/${flag._id}/action`, {
+                action,
+                reason: flag.reason || '',
+            });
+            setModerationQueue((prev) => prev.filter((item) => item._id !== flag._id));
+            if (activeModerationItem?._id === flag._id) {
+                setModerationDetailOpen(false);
+                setActiveModerationItem(null);
+            }
+            showSuccessModal('Moderation Updated', 'The moderation action has been applied.');
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to apply moderation action.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to apply moderation action.');
+            }
+        } finally {
+            setModerationActionLoading(false);
+        }
+    };
 
     // Helper function to show success modal
     const showSuccessModal = (title: string, message: string) => {
@@ -460,6 +714,118 @@ const CreditUnionAdminScreen = () => {
                 Alert.alert('Error', err.message || 'Failed to create channel.');
             }
         }
+    };
+
+    const openEditChannelModal = (channel: Channel) => {
+        setEditChannelId(channel._id);
+        setEditChannelName(channel.name || '');
+        setEditChannelType(channel.type === 'voice' ? 'voice' : 'text');
+        setEditChannelPrivate(channel.visibility === 'admin');
+        setEditChannelModalOpen(true);
+        setChannelMenuOpen(null);
+    };
+
+    const handleUpdateChannel = async () => {
+        if (!editChannelId || !activeSubgridId) return;
+        const channelName = editChannelName.trim();
+        if (!channelName) return;
+        try {
+            await communityPatch(`/subgrids/${activeSubgridId}/channels/${editChannelId}`, {
+                name: channelName,
+                type: editChannelType,
+                visibility: editChannelPrivate ? 'admin' : 'public',
+            });
+            const response = await communityGet(`/subgrids/${activeSubgridId}/channels`);
+            setChannels(response?.data || []);
+            setEditChannelModalOpen(false);
+            showSuccessModal('Channel Updated', `Channel "${channelName}" has been updated successfully!`);
+        } catch (err: any) {
+            setError(err.message || 'Failed to update channel.');
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to update channel.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to update channel.');
+            }
+        }
+    };
+
+    const openChannelPermissionModal = (channel: Channel) => {
+        const isPublic = channel.visibility !== 'admin';
+        setPermissionChannelId(channel._id);
+        setChannelPermissions({
+            members: isPublic,
+            stakeholders: true,
+            serverAdmin: true,
+            serverOwner: true,
+        });
+        setChannelPermissionModalOpen(true);
+        setChannelMenuOpen(null);
+    };
+
+    const handleSaveChannelPermissions = async () => {
+        if (!permissionChannelId || !activeSubgridId) return;
+        const visibility = channelPermissions.members ? 'public' : 'admin';
+        try {
+            await communityPatch(`/subgrids/${activeSubgridId}/channels/${permissionChannelId}`, {
+                visibility,
+            });
+            const response = await communityGet(`/subgrids/${activeSubgridId}/channels`);
+            setChannels(response?.data || []);
+            setChannelPermissionModalOpen(false);
+            showSuccessModal('Permissions Updated', 'Channel permissions have been updated successfully.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to update channel permissions.');
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to update channel permissions.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to update channel permissions.');
+            }
+        }
+    };
+
+    const toggleChannelPermission = (key: ChannelPermissionKey) => {
+        setChannelPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const toggleEngagementSetting = (key: EngagementSettingKey) => {
+        setEngagementSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const getMemberStatusLabel = (status?: string) => {
+        const value = (status || 'active').toLowerCase();
+        if (value === 'pending') return 'Pending';
+        if (value === 'suspended') return 'Suspended';
+        if (value === 'muted') return 'Muted';
+        return 'Active';
+    };
+
+    const getMemberStatusStyle = (status?: string) => {
+        const value = (status || 'active').toLowerCase();
+        if (value === 'pending') return styles.statusBadgePending;
+        if (value === 'suspended') return styles.statusBadgeSuspended;
+        if (value === 'muted') return styles.statusBadgeMuted;
+        return styles.statusBadgeActive;
+    };
+
+    const getMemberStatusTextStyle = (status?: string) => {
+        const value = (status || 'active').toLowerCase();
+        if (value === 'pending') return styles.statusBadgeTextPending;
+        if (value === 'suspended') return styles.statusBadgeTextSuspended;
+        if (value === 'muted') return styles.statusBadgeTextMuted;
+        return styles.statusBadgeTextActive;
+    };
+
+    const getMemberRoleLabel = (role?: string) => {
+        const value = (role || 'member').replace(/_/g, ' ');
+        return value.replace(/\b\w/g, (char) => char.toUpperCase());
+    };
+
+    const getChannelAccessLabel = (role?: string) => {
+        const value = (role || '').toLowerCase();
+        if (['subgrid_admin', 'admin', 'owner', 'moderator'].includes(value)) {
+            return 'Full Access';
+        }
+        return 'Limited Access';
     };
 
     const handleDeleteChannel = (channelId: string, channelName?: string) => {
@@ -550,9 +916,10 @@ const CreditUnionAdminScreen = () => {
     const handleUpdateServer = async () => {
         if (!activeSubgridId) return;
         try {
-            await communityPut(`/subgrids/${activeSubgridId}`, {
+            await communityPatch(`/subgrids/${activeSubgridId}`, {
                 name: serverName.trim(),
                 description: serverDescription.trim(),
+                logoUrl: serverLogoUrl || '',
             });
             const response = await communityGet(`/tenants/${tenantId}/subgrids`);
             setSubgrids(response?.data || []);
@@ -562,61 +929,177 @@ const CreditUnionAdminScreen = () => {
         }
     };
 
-    const handleInviteMember = async () => {
+    const handlePickServerIcon = async () => {
+        if (!activeSubgridId) return;
+        try {
+            console.log('[ServerIcon] Starting image picker...');
+            const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            console.log('[ServerIcon] Permission result:', permissionResult);
+            if (!permissionResult.granted) {
+                Alert.alert('Permission required', 'Please allow access to your photos to update the server icon.');
+                return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+            console.log('[ServerIcon] Picker result:', result.canceled ? 'canceled' : 'selected', result.assets?.length || 0, 'assets');
+            if (result.canceled || !result.assets?.length) return;
+            const image = result.assets[0];
+            console.log('[ServerIcon] Selected image:', { uri: image.uri?.substring(0, 50), fileName: image.fileName, mimeType: image.mimeType });
+            setServerIconUploading(true);
+            const uploadResult = await uploadFile(
+                {
+                    uri: image.uri,
+                    name: image.fileName || `server_icon_${Date.now()}.jpg`,
+                    type: image.mimeType || 'image/jpeg',
+                },
+                { type: 'server-icon', subgridId: activeSubgridId }
+            );
+            console.log('[ServerIcon] Upload result:', uploadResult);
+            const uploadUrl = uploadResult?.data?.url || uploadResult?.url;
+            if (!uploadUrl) {
+                throw new Error('Upload failed to return a URL.');
+            }
+            setServerLogoUrl(uploadUrl);
+            await communityPatch(`/subgrids/${activeSubgridId}`, { logoUrl: uploadUrl });
+            const response = await communityGet(`/tenants/${tenantId}/subgrids`);
+            setSubgrids(response?.data || []);
+            showSuccessModal('Server Icon Updated', 'Your server icon has been updated.');
+        } catch (err: any) {
+            console.error('[ServerIcon] Error:', err);
+            setError(err.message || 'Failed to update server icon.');
+        } finally {
+            setServerIconUploading(false);
+        }
+    };
+
+    const handleRemoveServerIcon = async () => {
+        if (!activeSubgridId) return;
+        try {
+            await communityPatch(`/subgrids/${activeSubgridId}`, { logoUrl: '' });
+            setServerLogoUrl('');
+            const response = await communityGet(`/tenants/${tenantId}/subgrids`);
+            setSubgrids(response?.data || []);
+        } catch (err: any) {
+            setError(err.message || 'Failed to remove server icon.');
+        }
+    };
+
+    const handleCreateServer = async () => {
+        if (!tenantId || !newServerName.trim()) return;
+        try {
+            const response = await communityPost(`/tenants/${tenantId}/subgrids`, {
+                name: newServerName.trim(),
+                description: newServerDescription.trim(),
+                visibility: newServerVisibility,
+            });
+            const created = response?.data;
+            const refreshed = await communityGet(`/tenants/${tenantId}/subgrids`);
+            setSubgrids(refreshed?.data || []);
+            if (created?._id) {
+                setActiveSubgridId(created._id);
+            }
+            setCreateServerModalOpen(false);
+            setNewServerName('');
+            setNewServerDescription('');
+            setNewServerVisibility('private');
+            showSuccessModal('Server Created', 'Your new server is ready.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to create server.');
+        }
+    };
+
+    const handleArchiveServer = async () => {
+        if (!activeSubgridId) return;
+        const confirm = Platform.OS === 'web'
+            ? window.confirm('Archive this server? Members will lose access until it is reactivated.')
+            : await new Promise<boolean>((resolve) => {
+                Alert.alert(
+                    'Archive Server',
+                    'Archive this server? Members will lose access until it is reactivated.',
+                    [
+                        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                        { text: 'Archive', style: 'destructive', onPress: () => resolve(true) },
+                    ]
+                );
+            });
+        if (!confirm) return;
+        try {
+            await communityPatch(`/subgrids/${activeSubgridId}`, { status: 'archived' });
+            const response = await communityGet(`/tenants/${tenantId}/subgrids`);
+            const updated = response?.data || [];
+            setSubgrids(updated);
+            setActiveSubgridId(updated[0]?._id || '');
+            showSuccessModal('Server Archived', 'The server has been archived.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to archive server.');
+        }
+    };
+
+    const handleInviteStakeholder = async () => {
         const emailToInvite = inviteEmail.trim();
         if (!emailToInvite || !activeSubgridId) return;
         setError('');
+        setInvitingStakeholder(true);
         try {
-            const response = await communityPost(`/subgrids/${activeSubgridId}/invites/email`, {
+            await inviteStakeholder({
                 email: emailToInvite,
-                memberRole: 'member',
+                subgridId: activeSubgridId,
+                stakeholderBadge: selectedStakeholderBadge,
             });
             setInviteEmail('');
+            setSelectedStakeholderBadge('stakeholder');
             setInviteModalOpen(false);
-            if (response?.data?.emailSent) {
-                Alert.alert('Invite Sent', `An invitation email has been sent to ${emailToInvite}`);
-            } else {
-                Alert.alert('Invite Created', 'Invitation created but email may not have been sent. You can share the invite link manually.');
-            }
+            Alert.alert('Invite Sent', `A stakeholder invitation has been sent to ${emailToInvite}`);
         } catch (err: any) {
             const message = err.message || 'Failed to send invite.';
-            if (message.includes('already a member')) {
-                Alert.alert('Already a Member', 'This user is already a member of your community.');
+            if (message.includes('already a member') || message.includes('already a stakeholder')) {
+                Alert.alert('Already Exists', 'This user is already a member or stakeholder of your community.');
             } else if (message.includes('already been sent')) {
                 Alert.alert('Invite Pending', 'An invitation has already been sent to this email address.');
             } else {
                 setError(message);
             }
+        } finally {
+            setInvitingStakeholder(false);
         }
     };
 
     const handleSendMessage = async () => {
         if ((!messageDraft.trim() && attachments.length === 0) || !activeSubgridId || !activeChannelId) return;
         try {
-            setLoading(true);
-
             // Upload attachments first if any
             const uploadedAttachments: Array<{ type: string; value: string; mimeType?: string; fileName?: string }> = [];
 
             for (const att of attachments) {
                 try {
+                    console.log('[CUAdmin] Uploading attachment:', att.name, att.type);
                     const uploadResult = await uploadFile(
                         { uri: att.uri, name: att.name, type: att.type },
                         { type: 'chat', subgridId: activeSubgridId }
                     );
-                    if (uploadResult?.url) {
+                    console.log('[CUAdmin] Upload result:', uploadResult);
+                    // uploadFile returns { success: true, data: { url: '...' } }
+                    const uploadUrl = uploadResult?.data?.url || uploadResult?.url;
+                    if (uploadUrl) {
                         const attType = att.type.startsWith('image/') ? 'image' :
                                        att.type.startsWith('audio/') ? 'voice' :
                                        att.type.startsWith('video/') ? 'video' : 'file';
                         uploadedAttachments.push({
                             type: attType,
-                            value: uploadResult.url,
+                            value: uploadUrl,
                             mimeType: att.type,
                             fileName: att.name,
                         });
+                        console.log('[CUAdmin] Attachment uploaded successfully:', attType, uploadUrl);
+                    } else {
+                        console.error('[CUAdmin] Upload succeeded but no URL in result:', uploadResult);
                     }
                 } catch (uploadErr) {
-                    console.error('Failed to upload attachment:', uploadErr);
+                    console.error('[CUAdmin] Failed to upload attachment:', uploadErr);
                 }
             }
 
@@ -636,31 +1119,29 @@ const CreditUnionAdminScreen = () => {
             const response = await communityGet(`/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`);
             setMessages(response?.data || []);
         } catch (err: any) {
-            setError(err.message || 'Failed to send message.');
-        } finally {
-            setLoading(false);
+            console.error('Failed to send message:', err.message);
         }
     };
 
-    // Copy invite link to clipboard
+    // Copy invite code to clipboard
     const handleCopyInviteLink = async () => {
-        const inviteLink = `https://the-gryd.com/${activeSubgridId?.slice(-8) || '3v4KrVwQ'}`;
+        const inviteCode = activeSubgrid?.inviteCode || activeSubgridId?.slice(-8) || 'XXXXXXXX';
         try {
             if (Platform.OS === 'web' && navigator.clipboard) {
-                await navigator.clipboard.writeText(inviteLink);
-                Alert.alert('Copied!', 'Invite link copied to clipboard');
+                await navigator.clipboard.writeText(inviteCode);
+                Alert.alert('Copied!', 'Invite code copied to clipboard');
             } else {
                 // For native platforms, use Clipboard API from react-native
                 const Clipboard = require('react-native').Clipboard;
                 if (Clipboard?.setString) {
-                    Clipboard.setString(inviteLink);
-                    Alert.alert('Copied!', 'Invite link copied to clipboard');
+                    Clipboard.setString(inviteCode);
+                    Alert.alert('Copied!', 'Invite code copied to clipboard');
                 } else {
-                    Alert.alert('Link', inviteLink);
+                    Alert.alert('Invite Code', inviteCode);
                 }
             }
         } catch (err) {
-            Alert.alert('Invite Link', inviteLink);
+            Alert.alert('Invite Code', inviteCode);
         }
     };
 
@@ -743,7 +1224,6 @@ const CreditUnionAdminScreen = () => {
     const sendVoiceNote = async (dataUrl: string, mimeType: string, durationMs: number) => {
         if (!activeSubgridId || !activeChannelId) return;
         try {
-            setLoading(true);
             // Upload voice note first
             const uploadResult = await uploadFile(
                 { uri: dataUrl, name: `voice_${Date.now()}.webm`, type: mimeType },
@@ -767,9 +1247,7 @@ const CreditUnionAdminScreen = () => {
                 setMessages(response?.data || []);
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to send voice note.');
-        } finally {
-            setLoading(false);
+            console.error('Failed to send voice note:', err.message);
         }
     };
 
@@ -1069,7 +1547,7 @@ const CreditUnionAdminScreen = () => {
         }
     };
 
-    const currentUserMember = members.find(m => m.userId === userId || m.user?._id === userId || m._id === userId);
+    const currentUserMember = members.find(m => String(m.userId) === String(userId) || String(m.user?._id) === String(userId) || String(m._id) === String(userId));
     const currentUserName = currentUserMember ? getMemberName(currentUserMember) : 'User';
 
     // Server Menu Dropdown
@@ -1196,17 +1674,22 @@ const CreditUnionAdminScreen = () => {
                 {/* Left Icon Rail */}
                 <View style={styles.iconRail}>
                     <TouchableOpacity style={styles.railLogo}>
-                        <Text style={styles.railLogoText}>RBFCU</Text>
+                        {activeSubgrid ? (
+                            activeSubgrid.logoUrl ? (
+                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                            ) : (
+                                <Text style={styles.railLogoText}>
+                                    {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
+                                </Text>
+                            )
+                        ) : null}
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.railButton} onPress={() => router.push('/admin/messages')}>
                         <MaterialIcons name="message" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.railButton} onPress={() => setServerSettingsModalOpen(true)}>
-                        <MaterialIcons name="settings" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
                     <View style={{ flex: 1 }} />
-                    <TouchableOpacity style={styles.railButton}>
-                        <MaterialIcons name="star" size={18} color={colors.textMuted} />
+                    <TouchableOpacity style={styles.railButton} onPress={() => router.push('/admin/contributors')}>
+                        <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.railButton} onPress={toggleTheme}>
                         {mode === 'dark' ? (
@@ -1214,6 +1697,9 @@ const CreditUnionAdminScreen = () => {
                         ) : (
                             <MaterialIcons name="dark-mode" size={18} color={colors.textMuted} />
                         )}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.exitButton} onPress={handleLogout}>
+                        <MaterialIcons name="close" size={18} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
 
@@ -1270,7 +1756,10 @@ const CreditUnionAdminScreen = () => {
                                     <TouchableOpacity
                                         key={channel._id}
                                         style={[styles.channelItem, isActive && styles.channelItemActive]}
-                                        onPress={() => setActiveChannelId(channel._id)}
+                                        onPress={() => {
+                                            setActiveChannelId(channel._id);
+                                            setChannelMenuOpen(null);
+                                        }}
                                     >
                                         <MaterialIcons name="tag" size={16} color={isActive ? colors.text : colors.textMuted} />
                                         <Text style={[styles.channelName, isActive && styles.channelNameActive]}>
@@ -1284,12 +1773,45 @@ const CreditUnionAdminScreen = () => {
                                                 >
                                                     <MaterialIcons name="person-add" size={14} color={colors.textMuted} />
                                                 </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    onPress={(e) => { e.stopPropagation(); handleDeleteChannel(channel._id, channel.name); }}
-                                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                >
-                                                    <MaterialIcons name="delete" size={14} color="#EF4444" />
-                                                </TouchableOpacity>
+                                                <View style={styles.channelMenuWrap}>
+                                                    <TouchableOpacity
+                                                        onPress={(e) => {
+                                                            e.stopPropagation();
+                                                            setChannelMenuOpen(channelMenuOpen === channel._id ? null : channel._id);
+                                                        }}
+                                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                    >
+                                                        <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                                    </TouchableOpacity>
+                                                    {channelMenuOpen === channel._id && (
+                                                        <Pressable
+                                                            style={styles.channelMenuDropdown}
+                                                            onPress={(e) => e.stopPropagation()}
+                                                        >
+                                                            <Pressable
+                                                                style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
+                                                                onPress={() => { openEditChannelModal(channel); }}
+                                                            >
+                                                                <Text style={styles.channelMenuText}>Rename Channel</Text>
+                                                                <MaterialIcons name="edit" size={16} color="#9ca3af" />
+                                                            </Pressable>
+                                                            <Pressable
+                                                                style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
+                                                                onPress={() => { handleDeleteChannel(channel._id, channel.name); }}
+                                                            >
+                                                                <Text style={styles.channelMenuTextDanger}>Delete Channel</Text>
+                                                                <MaterialIcons name="delete" size={16} color="#EF4444" />
+                                                            </Pressable>
+                                                            <Pressable
+                                                                style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
+                                                                onPress={() => { openChannelPermissionModal(channel); }}
+                                                            >
+                                                                <Text style={styles.channelMenuText}>Channel Permission</Text>
+                                                                <MaterialIcons name="settings" size={16} color="#9ca3af" />
+                                                            </Pressable>
+                                                        </Pressable>
+                                                    )}
+                                                </View>
                                             </View>
                                         )}
                                     </TouchableOpacity>
@@ -1326,17 +1848,53 @@ const CreditUnionAdminScreen = () => {
                                 <TouchableOpacity
                                     key={channel._id}
                                     style={styles.channelItem}
-                                    onPress={() => handleVoiceChannelClick(channel)}
+                                    onPress={() => {
+                                        setChannelMenuOpen(null);
+                                        handleVoiceChannelClick(channel);
+                                    }}
                                 >
                                     <MaterialIcons name="headphones" size={16} color={colors.textMuted} />
                                     <Text style={styles.channelName}>{channel.name || 'untitled'}</Text>
                                     <View style={styles.channelActions}>
-                                        <TouchableOpacity
-                                            onPress={(e) => { e.stopPropagation(); handleDeleteChannel(channel._id, channel.name); }}
-                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                        >
-                                            <MaterialIcons name="delete" size={14} color="#EF4444" />
-                                        </TouchableOpacity>
+                                        <View style={styles.channelMenuWrap}>
+                                            <TouchableOpacity
+                                                onPress={(e) => {
+                                                    e.stopPropagation();
+                                                    setChannelMenuOpen(channelMenuOpen === channel._id ? null : channel._id);
+                                                }}
+                                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                            >
+                                                <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                            </TouchableOpacity>
+                                            {channelMenuOpen === channel._id && (
+                                                <Pressable
+                                                    style={styles.channelMenuDropdown}
+                                                    onPress={(e) => e.stopPropagation()}
+                                                >
+                                                    <Pressable
+                                                        style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
+                                                        onPress={() => { openEditChannelModal(channel); }}
+                                                    >
+                                                        <Text style={styles.channelMenuText}>Rename Channel</Text>
+                                                        <MaterialIcons name="edit" size={16} color="#9ca3af" />
+                                                    </Pressable>
+                                                    <Pressable
+                                                        style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
+                                                        onPress={() => { handleDeleteChannel(channel._id, channel.name); }}
+                                                    >
+                                                        <Text style={styles.channelMenuTextDanger}>Delete Channel</Text>
+                                                        <MaterialIcons name="delete" size={16} color="#EF4444" />
+                                                    </Pressable>
+                                                    <Pressable
+                                                        style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
+                                                        onPress={() => { openChannelPermissionModal(channel); }}
+                                                    >
+                                                        <Text style={styles.channelMenuText}>Channel Permission</Text>
+                                                        <MaterialIcons name="settings" size={16} color="#9ca3af" />
+                                                    </Pressable>
+                                                </Pressable>
+                                            )}
+                                        </View>
                                     </View>
                                 </TouchableOpacity>
                             ))}
@@ -1411,7 +1969,13 @@ const CreditUnionAdminScreen = () => {
                 </View>
 
                 {/* Main Content */}
-                <Pressable style={styles.mainContent} onPress={() => serverMenuOpen && setServerMenuOpen(false)}>
+                <Pressable
+                    style={styles.mainContent}
+                    onPress={() => {
+                        if (serverMenuOpen) setServerMenuOpen(false);
+                        if (channelMenuOpen) setChannelMenuOpen(null);
+                    }}
+                >
                     {/* Channel Header */}
                     <View style={styles.contentHeader}>
                         <View style={styles.contentHeaderLeft}>
@@ -1429,8 +1993,20 @@ const CreditUnionAdminScreen = () => {
                                 <MaterialIcons name="group" size={18} color={showMembersSidebar ? colors.text : colors.textMuted} />
                             </TouchableOpacity>
                             <View style={styles.searchBox}>
-                                <Text style={styles.searchPlaceholder}>Search RBFCU server</Text>
-                                <MaterialIcons name="search" size={14} color={colors.textMuted} />
+                                <TextInput
+                                    style={styles.searchInput}
+                                    placeholder={`Search ${activeSubgrid?.name || 'server'}`}
+                                    placeholderTextColor={colors.textSubtle}
+                                    value={feedSearchQuery}
+                                    onChangeText={setFeedSearchQuery}
+                                />
+                                {feedSearchQuery ? (
+                                    <TouchableOpacity onPress={() => setFeedSearchQuery('')}>
+                                        <MaterialIcons name="close" size={14} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                ) : (
+                                    <MaterialIcons name="search" size={14} color={colors.textMuted} />
+                                )}
                             </View>
                         </View>
                     </View>
@@ -1446,25 +2022,49 @@ const CreditUnionAdminScreen = () => {
                                 contentContainerStyle={styles.feedContent}
                                 showsVerticalScrollIndicator={false}
                             >
-                                {feedItems.length === 0 && !loading && (
+                                {feedItems.length === 0 && feedSearchQuery.trim() && (
+                                    <View style={styles.welcomeCard}>
+                                        <View style={styles.welcomeIcon}>
+                                            <MaterialIcons name="search-off" size={32} color={colors.textMuted} />
+                                        </View>
+                                        <Text style={styles.welcomeTitle}>No results found</Text>
+                                        <Text style={styles.welcomeSubtitle}>No messages or posts match "{feedSearchQuery}"</Text>
+                                        <TouchableOpacity
+                                            style={styles.editChannelBtn}
+                                            onPress={() => setFeedSearchQuery('')}
+                                        >
+                                            <MaterialIcons name="close" size={14} color={colors.text} />
+                                            <Text style={styles.editChannelText}>Clear search</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                                {feedItems.length === 0 && !feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
                                         <View style={styles.welcomeIcon}>
                                             <MaterialIcons name="tag" size={32} color={colors.textMuted} />
                                         </View>
                                         <Text style={styles.welcomeTitle}>Welcome to {activeChannel?.name || 'general'}</Text>
                                         <Text style={styles.welcomeSubtitle}>This is the start of the #{activeChannel?.name || 'general'} channel.</Text>
-                                        <TouchableOpacity style={styles.editChannelBtn}>
+                                        <TouchableOpacity
+                                            style={styles.editChannelBtn}
+                                            onPress={() => {
+                                                if (activeChannel) {
+                                                    openEditChannelModal(activeChannel);
+                                                }
+                                            }}
+                                        >
                                             <MaterialIcons name="edit" size={14} color={colors.text} />
                                             <Text style={styles.editChannelText}>Edit Channel</Text>
                                         </TouchableOpacity>
                                     </View>
                                 )}
                                 {feedItems.map((item: any) => {
-                                    const isPost = !!item.authorId; // Posts have authorId, messages have senderId
+                                    // Posts have likeCount/commentCount fields; Messages have 'kind' field
+                                    const isPost = item.likeCount !== undefined || item.commentCount !== undefined;
                                     const authorId = item.authorId || item.senderId;
                                     const authorName = getAuthorName(authorId, members);
                                     const authorMember = members.find((member) =>
-                                        member.userId === authorId || member.user?._id === authorId || member._id === authorId
+                                        String(member.userId) === String(authorId) || String(member.user?._id) === String(authorId) || String(member._id) === String(authorId)
                                     );
                                     const likeCount = item.likeCount ?? 0;
                                     const commentCount = item.commentCount ?? 0;
@@ -1487,20 +2087,9 @@ const CreditUnionAdminScreen = () => {
                                                     </View>
                                                 </View>
                                                 <View style={styles.itemMenuContainer}>
-                                                    <TouchableOpacity onPress={() => setItemMenuOpen(itemMenuOpen === item._id ? null : item._id)}>
+                                                    <TouchableOpacity onPress={(e) => handleOpenItemMenu(e, item, isPost)}>
                                                         <MaterialIcons name="more-horiz" size={18} color={colors.textMuted} />
                                                     </TouchableOpacity>
-                                                    {itemMenuOpen === item._id && (
-                                                        <View style={styles.itemMenuDropdown}>
-                                                            <TouchableOpacity
-                                                                style={styles.itemMenuItem}
-                                                                onPress={() => isPost ? handleDeletePost(item._id) : handleDeleteMessage(item._id)}
-                                                            >
-                                                                <MaterialIcons name="delete" size={14} color="#EF4444" />
-                                                                <Text style={styles.itemMenuTextDanger}>Delete</Text>
-                                                            </TouchableOpacity>
-                                                        </View>
-                                                    )}
                                                 </View>
                                             </View>
                                             {!!item.body && (
@@ -1511,22 +2100,35 @@ const CreditUnionAdminScreen = () => {
                                                     {item.attachments.map((att: any, idx: number) => {
                                                         const url = att?.value || att?.uri || att?.url || (typeof att === 'string' ? att : null);
                                                         const attType = att?.type || '';
+                                                        const mimeType = att?.mimeType || '';
                                                         if (!url) return null;
 
-                                                        // Handle image attachments
-                                                        if (attType === 'image' || attType === 'sticker' || attType === 'emoji' || url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+                                                        // Debug logging
+                                                        console.log('[CUAdmin] Rendering attachment:', { url: url?.substring(0, 80), attType, mimeType });
+
+                                                        // Determine if it's an image based on type field, mimeType, or URL pattern
+                                                        // Check URL for image extensions (handle Cloudinary URLs which may have params)
+                                                        const isImage = attType === 'image' || attType === 'sticker' || attType === 'emoji' ||
+                                                            mimeType?.startsWith('image/') ||
+                                                            /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?|$)/i.test(url);
+
+                                                        // Handle image attachments - check this FIRST before video
+                                                        if (isImage) {
                                                             return (
                                                                 <Image
                                                                     key={`${item._id}-att-${idx}`}
                                                                     source={{ uri: url }}
                                                                     style={styles.postImage}
-                                                                    resizeMode="cover"
+                                                                    resizeMode="contain"
                                                                 />
                                                             );
                                                         }
 
-                                                        // Handle video attachments
-                                                        if (attType === 'video' || url.match(/\.(mp4|webm|mov)$/i)) {
+                                                        // Handle video attachments (NOT .webm for voice notes - only mp4/mov/avi)
+                                                        const isVideo = attType === 'video' ||
+                                                            mimeType?.startsWith('video/') ||
+                                                            /\.(mp4|mov|avi|mkv)(\?|$)/i.test(url);
+                                                        if (isVideo) {
                                                             return (
                                                                 <View key={`${item._id}-att-${idx}`} style={styles.videoPlaceholder}>
                                                                     <MaterialIcons name="play-circle-filled" size={48} color="#FFFFFF" />
@@ -1535,13 +2137,18 @@ const CreditUnionAdminScreen = () => {
                                                             );
                                                         }
 
-                                                        // Handle audio/voice attachments
-                                                        if (attType === 'audio' || attType === 'voice' || url.match(/\.(mp3|wav|webm|ogg|m4a)$/i)) {
+                                                        // Handle audio/voice attachments (including .webm voice notes)
+                                                        const isAudio = attType === 'audio' || attType === 'voice' ||
+                                                            mimeType?.startsWith('audio/') ||
+                                                            /\.(mp3|wav|webm|ogg|m4a|aac)(\?|$)/i.test(url);
+                                                        if (isAudio) {
                                                             return (
-                                                                <View key={`${item._id}-att-${idx}`} style={styles.audioAttachment}>
-                                                                    <MaterialIcons name="mic" size={20} color={colors.primary} />
-                                                                    <Text style={styles.audioLabel}>Voice note</Text>
-                                                                </View>
+                                                                <VoiceMessagePlayer
+                                                                    key={`${item._id}-att-${idx}`}
+                                                                    source={url}
+                                                                    durationMs={att?.durationMs}
+                                                                    colors={colors}
+                                                                />
                                                             );
                                                         }
 
@@ -1765,6 +2372,128 @@ const CreditUnionAdminScreen = () => {
                 </View>
             </Modal>
 
+            {/* Edit Channel Modal */}
+            <Modal visible={editChannelModalOpen} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <TouchableOpacity style={styles.modalClose} onPress={() => setEditChannelModalOpen(false)}>
+                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>Edit Channel</Text>
+
+                        <Text style={styles.modalLabel}>CHANNEL TYPE</Text>
+                        <TouchableOpacity
+                            style={[styles.typeOption, editChannelType === 'text' && styles.typeOptionActive]}
+                            onPress={() => setEditChannelType('text')}
+                        >
+                            <View style={styles.radioOuter}>
+                                {editChannelType === 'text' && <View style={styles.radioInner} />}
+                            </View>
+                            <View style={styles.typeIcon}>
+                                <MaterialIcons name="tag" size={20} color={colors.textMuted} />
+                            </View>
+                            <View style={styles.typeInfo}>
+                                <Text style={styles.typeTitle}>Text</Text>
+                                <Text style={styles.typeDesc}>Send messages, images, GIFs, emoji, opinions, and puns</Text>
+                            </View>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.typeOption, editChannelType === 'voice' && styles.typeOptionActive]}
+                            onPress={() => setEditChannelType('voice')}
+                        >
+                            <View style={styles.radioOuter}>
+                                {editChannelType === 'voice' && <View style={styles.radioInner} />}
+                            </View>
+                            <View style={styles.typeIcon}>
+                                <MaterialIcons name="headphones" size={20} color={colors.textMuted} />
+                            </View>
+                            <View style={styles.typeInfo}>
+                                <Text style={styles.typeTitle}>Voice</Text>
+                                <Text style={styles.typeDesc}>Hang out together with voice, video, and screen share</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <Text style={styles.modalLabel}>CHANNEL NAME</Text>
+                        <View style={styles.inputRow}>
+                            <MaterialIcons name="tag" size={18} color={colors.textMuted} />
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="channel-name"
+                                placeholderTextColor={colors.textSubtle}
+                                value={editChannelName}
+                                onChangeText={setEditChannelName}
+                            />
+                        </View>
+
+                        <View style={styles.toggleRow}>
+                            <View style={styles.toggleInfo}>
+                                <MaterialIcons name="lock" size={16} color={colors.textMuted} />
+                                <View>
+                                    <Text style={styles.toggleTitle}>Private Channel</Text>
+                                    <Text style={styles.toggleDesc}>Only selected members can view</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.toggle, editChannelPrivate && styles.toggleActive]}
+                                onPress={() => setEditChannelPrivate(!editChannelPrivate)}
+                            >
+                                <View style={[styles.toggleKnob, editChannelPrivate && styles.toggleKnobActive]} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditChannelModalOpen(false)}>
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.createBtnBlack} onPress={handleUpdateChannel}>
+                                <Text style={styles.createBtnBlackText}>Update Channel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Channel Permission Modal */}
+            <Modal visible={channelPermissionModalOpen} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.permissionModalContent}>
+                        <TouchableOpacity style={styles.modalClose} onPress={() => setChannelPermissionModalOpen(false)}>
+                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>Channel Permission</Text>
+
+                        <View style={styles.permissionList}>
+                            {permissionOptions.map((option) => {
+                                const isChecked = channelPermissions[option.key];
+                                return (
+                                    <TouchableOpacity
+                                        key={option.key}
+                                        style={styles.permissionRow}
+                                        onPress={() => toggleChannelPermission(option.key)}
+                                    >
+                                        <MaterialIcons
+                                            name={isChecked ? 'check-box' : 'check-box-outline-blank'}
+                                            size={18}
+                                            color={isChecked ? colors.text : colors.textMuted}
+                                        />
+                                        <Text style={styles.permissionLabel}>{option.label}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setChannelPermissionModalOpen(false)}>
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.createBtnBlack} onPress={handleSaveChannelPermissions}>
+                                <Text style={styles.createBtnBlackText}>Save</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
             {/* Invite Member Modal */}
             <Modal visible={inviteModalOpen} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
@@ -1773,37 +2502,85 @@ const CreditUnionAdminScreen = () => {
                             <MaterialIcons name="close" size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <View style={styles.modalIconWrap}>
-                            <MaterialIcons name="group" size={28} color="#22C55E" />
-                            <View style={styles.modalIconBadge}>
+                            <MaterialIcons name="badge" size={28} color="#8B5CF6" />
+                            <View style={[styles.modalIconBadge, { backgroundColor: '#8B5CF6' }]}>
                                 <MaterialIcons name="add" size={10} color="#FFFFFF" />
                             </View>
                         </View>
-                        <Text style={styles.modalTitle}>Invite members to {activeSubgrid?.name || 'RBFCU Server'}</Text>
-                        <Text style={styles.modalSubtitle}>Recipients will be added in #general</Text>
+                        <Text style={styles.modalTitle}>Invite Stakeholder</Text>
+                        <Text style={styles.modalSubtitle}>Stakeholders get special badges and permissions</Text>
 
-                        <Text style={styles.modalLabel}>Enter Email address</Text>
-                        <View style={styles.inputWithBtn}>
-                            <TextInput
-                                style={styles.modalInputFlex}
-                                placeholder="name@example.com"
-                                placeholderTextColor={colors.textSubtle}
-                                value={inviteEmail}
-                                onChangeText={setInviteEmail}
-                            />
-                            <TouchableOpacity style={styles.actionBtn} onPress={handleInviteMember}>
-                                <Text style={styles.actionBtnText}>Invite</Text>
-                            </TouchableOpacity>
+                        <Text style={styles.modalLabel}>Stakeholder Email</Text>
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="stakeholder@example.com"
+                            placeholderTextColor={colors.textSubtle}
+                            value={inviteEmail}
+                            onChangeText={setInviteEmail}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                        />
+
+                        <Text style={[styles.modalLabel, { marginTop: 16 }]}>Select Badge Type</Text>
+                        <View style={styles.badgeOptionsRow}>
+                            {(['vendor', 'partner', 'sponsor', 'investor'] as StakeholderBadge[]).map((badge) => {
+                                const badgeColors: Record<StakeholderBadge, string> = {
+                                    stakeholder: '#3B82F6',
+                                    vendor: '#8B5CF6',
+                                    partner: '#10B981',
+                                    sponsor: '#F59E0B',
+                                    investor: '#EC4899',
+                                };
+                                const isSelected = selectedStakeholderBadge === badge;
+                                return (
+                                    <TouchableOpacity
+                                        key={badge}
+                                        style={[
+                                            styles.badgeOption,
+                                            isSelected && { borderColor: badgeColors[badge], borderWidth: 2 },
+                                        ]}
+                                        onPress={() => setSelectedStakeholderBadge(badge)}
+                                    >
+                                        <View style={[styles.badgePreview, { backgroundColor: badgeColors[badge] }]}>
+                                            <Text style={styles.badgePreviewText}>
+                                                {badge.charAt(0).toUpperCase() + badge.slice(1)}
+                                            </Text>
+                                        </View>
+                                        {isSelected && (
+                                            <View style={[styles.badgeCheckmark, { backgroundColor: badgeColors[badge] }]}>
+                                                <MaterialIcons name="check" size={10} color="#FFFFFF" />
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </View>
 
-                        <Text style={styles.linkLabel}>Or, send a server invite link to a friend</Text>
+                        <TouchableOpacity
+                            style={[styles.inviteBtn, invitingStakeholder && styles.inviteBtnDisabled]}
+                            onPress={handleInviteStakeholder}
+                            disabled={invitingStakeholder || !inviteEmail.trim()}
+                        >
+                            <Text style={styles.inviteBtnText}>
+                                {invitingStakeholder ? 'Sending...' : 'Send Invite'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.dividerRow}>
+                            <View style={styles.dividerLine} />
+                            <Text style={styles.dividerText}>Members join via invite code</Text>
+                            <View style={styles.dividerLine} />
+                        </View>
+
+                        <Text style={styles.linkLabel}>Server invite code for members</Text>
                         <View style={styles.inputWithBtn}>
                             <TextInput
                                 style={[styles.modalInputFlex, styles.disabledInput]}
-                                value={`https://the-gryd.com/${activeSubgridId?.slice(-8) || '3v4KrVwQ'}`}
+                                value={activeSubgrid?.inviteCode || activeSubgridId?.slice(-8) || 'XXXXXXXX'}
                                 editable={false}
                             />
                             <TouchableOpacity style={styles.actionBtn} onPress={handleCopyInviteLink}>
-                                <Text style={styles.actionBtnText}>Copy Link</Text>
+                                <Text style={styles.actionBtnText}>Copy</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1921,7 +2698,7 @@ const CreditUnionAdminScreen = () => {
                     {/* Settings Sidebar */}
                     <View style={styles.settingsSidebar}>
                         <View style={styles.settingsSidebarHeader}>
-                            <MaterialIcons name="tag" size={16} color={colors.text} />
+                            <MaterialIcons name="tag" size={16} color="#FFFFFF" />
                             <Text style={styles.settingsSidebarTitle}>THE GRYD</Text>
                         </View>
 
@@ -1934,45 +2711,11 @@ const CreditUnionAdminScreen = () => {
                             <Text style={[styles.settingsNavText, settingsTab === 'server-profile' && styles.settingsNavTextActive]}>Server Profile</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'server-tag' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('server-tag')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'server-tag' && styles.settingsNavTextActive]}>Server Tag</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'engagement' && styles.settingsNavItemActive]}
                             onPress={() => setSettingsTab('engagement')}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'engagement' && styles.settingsNavTextActive]}>Engagement</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'boost-perks' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('boost-perks')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'boost-perks' && styles.settingsNavTextActive]}>Boost Perks</Text>
-                        </TouchableOpacity>
-
-                        <Text style={styles.settingsSectionLabel}>EXPRESSION</Text>
-                        <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'emoji' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('emoji')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'emoji' && styles.settingsNavTextActive]}>Emoji</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'stickers' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('stickers')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'stickers' && styles.settingsNavTextActive]}>Stickers</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'soundboard' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('soundboard')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'soundboard' && styles.settingsNavTextActive]}>Soundboard</Text>
-                        </TouchableOpacity>
-
-                        <Text style={styles.settingsSectionLabel}>PEOPLE</Text>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'members' && styles.settingsNavItemActive]}
                             onPress={() => setSettingsTab('members')}
@@ -1983,7 +2726,7 @@ const CreditUnionAdminScreen = () => {
                             style={[styles.settingsNavItem, settingsTab === 'roles' && styles.settingsNavItemActive]}
                             onPress={() => setSettingsTab('roles')}
                         >
-                            <Text style={[styles.settingsNavText, settingsTab === 'roles' && styles.settingsNavTextActive]}>Roles</Text>
+                            <Text style={[styles.settingsNavText, settingsTab === 'roles' && styles.settingsNavTextActive]}>Roles & Permissions</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'invites' && styles.settingsNavItemActive]}
@@ -1992,47 +2735,10 @@ const CreditUnionAdminScreen = () => {
                             <Text style={[styles.settingsNavText, settingsTab === 'invites' && styles.settingsNavTextActive]}>Invites</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'access' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('access')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'access' && styles.settingsNavTextActive]}>Access</Text>
-                        </TouchableOpacity>
-
-                        <Text style={styles.settingsSectionLabel}>APPS</Text>
-                        <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'integrations' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('integrations')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'integrations' && styles.settingsNavTextActive]}>Integrations</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'app-directory' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('app-directory')}
-                        >
-                            <View style={styles.settingsNavItemRow}>
-                                <Text style={[styles.settingsNavText, settingsTab === 'app-directory' && styles.settingsNavTextActive]}>App Directory</Text>
-                                <MaterialIcons name="open-in-new" size={14} color={colors.textMuted} />
-                            </View>
-                        </TouchableOpacity>
-
-                        <Text style={styles.settingsSectionLabel}>MODERATION</Text>
-                        <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'safety-setup' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('safety-setup')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'safety-setup' && styles.settingsNavTextActive]}>Safety Setup</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.settingsNavItem, settingsTab === 'audit-log' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('audit-log')}
-                        >
-                            <Text style={[styles.settingsNavText, settingsTab === 'audit-log' && styles.settingsNavTextActive]}>Audit Log</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'bans' && styles.settingsNavItemActive]}
                             onPress={() => setSettingsTab('bans')}
                         >
-                            <Text style={[styles.settingsNavText, settingsTab === 'bans' && styles.settingsNavTextActive]}>Bans</Text>
+                            <Text style={[styles.settingsNavText, settingsTab === 'bans' && styles.settingsNavTextActive]}>Ban Members</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -2060,6 +2766,14 @@ const CreditUnionAdminScreen = () => {
                                                 style={styles.settingsInput}
                                                 value={serverName || activeSubgrid?.name || 'RBFCU Server'}
                                                 onChangeText={setServerName}
+                                                placeholderTextColor={colors.textSubtle}
+                                            />
+                                            <Text style={styles.settingsLabel}>Description</Text>
+                                            <TextInput
+                                                style={styles.settingsInput}
+                                                value={serverDescription}
+                                                onChangeText={setServerDescription}
+                                                placeholder="Describe your server..."
                                                 placeholderTextColor={colors.textSubtle}
                                             />
 
@@ -2091,9 +2805,16 @@ const CreditUnionAdminScreen = () => {
                                         <View style={styles.serverPreviewCard}>
                                             <View style={[styles.serverPreviewBanner, { backgroundColor: bannerColors[selectedBanner][0] }]}>
                                                 <View style={styles.serverPreviewAvatar}>
-                                                    <Text style={styles.serverPreviewAvatarText}>
-                                                        {(serverName || activeSubgrid?.name || 'RS')[0]?.toUpperCase()}
-                                                    </Text>
+                                                    {(serverLogoUrl || activeSubgrid?.logoUrl) ? (
+                                                        <Image
+                                                            source={{ uri: serverLogoUrl || activeSubgrid?.logoUrl }}
+                                                            style={styles.serverPreviewAvatarImage}
+                                                        />
+                                                    ) : (
+                                                        <Text style={styles.serverPreviewAvatarText}>
+                                                            {(serverName || activeSubgrid?.name || 'RS')[0]?.toUpperCase()}
+                                                        </Text>
+                                                    )}
                                                 </View>
                                             </View>
                                             <View style={styles.serverPreviewInfo}>
@@ -2111,9 +2832,18 @@ const CreditUnionAdminScreen = () => {
 
                                     <Text style={styles.settingsLabel}>Icon</Text>
                                     <Text style={styles.settingsHint}>We recommend an image of at least 512x512.</Text>
-                                    <TouchableOpacity style={styles.changeIconBtn}>
-                                        <Text style={styles.changeIconBtnText}>Change Server Icon</Text>
-                                    </TouchableOpacity>
+                                    <View style={styles.serverIconActions}>
+                                        <TouchableOpacity style={styles.changeIconBtn} onPress={handlePickServerIcon} disabled={serverIconUploading}>
+                                            <Text style={styles.changeIconBtnText}>
+                                                {serverIconUploading ? 'Uploading...' : 'Change Server Icon'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                        {!!(serverLogoUrl || activeSubgrid?.logoUrl) && (
+                                            <TouchableOpacity style={styles.removeIconBtn} onPress={handleRemoveServerIcon}>
+                                                <Text style={styles.removeIconBtnText}>Remove Icon</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
 
                                     <Text style={styles.settingsLabel}>Banner</Text>
                                     <View style={styles.bannerGrid}>
@@ -2159,6 +2889,156 @@ const CreditUnionAdminScreen = () => {
                                         <TouchableOpacity style={styles.settingsSaveBtn} onPress={handleUpdateServer}>
                                             <Text style={styles.settingsSaveBtnText}>Save Changes</Text>
                                         </TouchableOpacity>
+                                        <View style={styles.serverCrudActions}>
+                                            <TouchableOpacity style={styles.settingsSecondaryBtn} onPress={() => setCreateServerModalOpen(true)}>
+                                                <Text style={styles.settingsSecondaryBtnText}>Create Server</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity style={styles.settingsDangerBtn} onPress={handleArchiveServer}>
+                                                <Text style={styles.settingsDangerBtnText}>Archive Server</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* Engagement Tab */}
+                            {settingsTab === 'engagement' && (
+                                <View style={styles.settingsPanel}>
+                                    <Text style={styles.settingsPanelTitle}>Engagement</Text>
+                                    <Text style={styles.settingsPanelDesc}>Manage settings that keep your server active</Text>
+
+                                    <View style={styles.engagementCard}>
+                                        <Text style={styles.engagementSectionTitle}>System Message</Text>
+                                        <Text style={styles.engagementSectionDesc}>
+                                            Configure a system event message sent to your server.
+                                        </Text>
+
+                                        <View style={styles.engagementRow}>
+                                            <View style={styles.engagementInfo}>
+                                                <Text style={styles.engagementLabel}>
+                                                    Send a message when someone joins the server
+                                                </Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.engagementToggle,
+                                                    engagementSettings.joinMessage && styles.engagementToggleOn,
+                                                ]}
+                                                onPress={() => toggleEngagementSetting('joinMessage')}
+                                            >
+                                                <View
+                                                    style={[
+                                                        styles.engagementToggleKnob,
+                                                        engagementSettings.joinMessage && styles.engagementToggleKnobOn,
+                                                    ]}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        <View style={styles.engagementDivider} />
+
+                                        <View style={styles.engagementRow}>
+                                            <View style={styles.engagementInfo}>
+                                                <Text style={styles.engagementLabel}>When uploaded to The Gryd</Text>
+                                                <Text style={styles.engagementDesc}>
+                                                    Images larger than 10MB will not be previewed.
+                                                </Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.engagementToggle,
+                                                    engagementSettings.uploadNotice && styles.engagementToggleOn,
+                                                ]}
+                                                onPress={() => toggleEngagementSetting('uploadNotice')}
+                                            >
+                                                <View
+                                                    style={[
+                                                        styles.engagementToggleKnob,
+                                                        engagementSettings.uploadNotice && styles.engagementToggleKnobOn,
+                                                    ]}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        <View style={styles.engagementSectionDivider} />
+
+                                        <Text style={styles.engagementSectionTitle}>Emoji</Text>
+                                        <Text style={styles.engagementSectionDesc}>
+                                            Show emoji reactions on messages.
+                                        </Text>
+
+                                        <View style={styles.engagementRow}>
+                                            <View style={styles.engagementInfo}>
+                                                <Text style={styles.engagementLabel}>Emoji</Text>
+                                                <Text style={styles.engagementDesc}>Show emoji reactions on messages</Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.engagementToggle,
+                                                    engagementSettings.emojiReactions && styles.engagementToggleOn,
+                                                ]}
+                                                onPress={() => toggleEngagementSetting('emojiReactions')}
+                                            >
+                                                <View
+                                                    style={[
+                                                        styles.engagementToggleKnob,
+                                                        engagementSettings.emojiReactions && styles.engagementToggleKnobOn,
+                                                    ]}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        <View style={styles.engagementDivider} />
+
+                                        <View style={styles.engagementRow}>
+                                            <View style={styles.engagementInfo}>
+                                                <Text style={styles.engagementLabel}>
+                                                    Automatically convert emoticons in your messages to emoji
+                                                </Text>
+                                                <Text style={styles.engagementDesc}>
+                                                    For example, typing :) will convert to emoji.
+                                                </Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.engagementToggle,
+                                                    engagementSettings.autoEmoji && styles.engagementToggleOn,
+                                                ]}
+                                                onPress={() => toggleEngagementSetting('autoEmoji')}
+                                            >
+                                                <View
+                                                    style={[
+                                                        styles.engagementToggleKnob,
+                                                        engagementSettings.autoEmoji && styles.engagementToggleKnobOn,
+                                                    ]}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        <View style={styles.engagementDivider} />
+
+                                        <View style={styles.engagementRow}>
+                                            <View style={styles.engagementInfo}>
+                                                <Text style={styles.engagementLabel}>Stickers in Autocomplete</Text>
+                                                <Text style={styles.engagementDesc}>
+                                                    Allows stickers in your autocomplete results.
+                                                </Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.engagementToggle,
+                                                    engagementSettings.stickersAutocomplete && styles.engagementToggleOn,
+                                                ]}
+                                                onPress={() => toggleEngagementSetting('stickersAutocomplete')}
+                                            >
+                                                <View
+                                                    style={[
+                                                        styles.engagementToggleKnob,
+                                                        engagementSettings.stickersAutocomplete && styles.engagementToggleKnobOn,
+                                                    ]}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
                                 </View>
                             )}
@@ -2166,68 +3046,100 @@ const CreditUnionAdminScreen = () => {
                             {/* Members Tab */}
                             {settingsTab === 'members' && (
                                 <View style={styles.settingsPanel}>
-                                    <Text style={styles.settingsPanelTitle}>Members</Text>
-                                    <Text style={styles.settingsPanelDesc}>Manage server members and their permissions</Text>
-
-                                    <View style={styles.membersSearchRow}>
-                                        <View style={styles.membersSearchBox}>
-                                            <MaterialIcons name="search" size={18} color={colors.textMuted} />
-                                            <TextInput
-                                                style={styles.membersSearchInput}
-                                                placeholder="Search members..."
-                                                placeholderTextColor={colors.textSubtle}
-                                            />
-                                        </View>
-                                        <TouchableOpacity style={styles.inviteMemberBtn} onPress={() => { setServerSettingsModalOpen(false); setInviteModalOpen(true); }}>
-                                            <MaterialIcons name="person-add" size={16} color="#FFFFFF" />
-                                            <Text style={styles.inviteMemberBtnText}>Invite Member</Text>
-                                        </TouchableOpacity>
-                                    </View>
-
-                                    <View style={styles.membersListHeader}>
-                                        <Text style={styles.membersListHeaderText}>MEMBER</Text>
-                                        <Text style={styles.membersListHeaderText}>ROLE</Text>
-                                        <Text style={styles.membersListHeaderText}>JOINED</Text>
-                                        <Text style={styles.membersListHeaderText}>ACTIONS</Text>
-                                    </View>
-
-                                    {members.map((member, index) => (
-                                        <View key={member._id || index} style={styles.memberListItem}>
-                                            <View style={styles.memberListItemLeft}>
-                                                <UserAvatar
-                                                    uri={getMemberAvatarUrl(member)}
-                                                    name={getMemberName(member)}
-                                                    style={styles.memberListAvatar}
+                                    <View style={styles.settingsCard}>
+                                        <View style={styles.settingsCardHeader}>
+                                            <View>
+                                                <Text style={styles.settingsCardTitle}>Server members</Text>
+                                                <Text style={styles.settingsCardSubtitle}>Members in channel list</Text>
+                                            </View>
+                                            <View style={styles.membersSearchWrap}>
+                                                <MaterialIcons name="search" size={16} color={colors.textMuted} />
+                                                <TextInput
+                                                    style={styles.membersSearchInput}
+                                                    placeholder="Search members..."
+                                                    placeholderTextColor={colors.textSubtle}
+                                                    value={membersSearch}
+                                                    onChangeText={setMembersSearch}
                                                 />
-                                                <Text style={styles.memberListName}>{getMemberName(member)}</Text>
-                                            </View>
-                                            <Text style={styles.memberListRole}>{member.role || 'Member'}</Text>
-                                            <Text style={styles.memberListJoined}>Jan 2026</Text>
-                                            <View style={styles.memberListActions}>
-                                                <TouchableOpacity style={styles.memberActionBtn}>
-                                                    <MaterialIcons name="edit" size={16} color={colors.textMuted} />
-                                                </TouchableOpacity>
-                                                <TouchableOpacity style={styles.memberActionBtn}>
-                                                    <MaterialIcons name="delete" size={16} color="#EF4444" />
-                                                </TouchableOpacity>
                                             </View>
                                         </View>
-                                    ))}
 
-                                    {members.length === 0 && (
-                                        <View style={styles.emptyMembersList}>
-                                            <MaterialIcons name="group" size={48} color={colors.textMuted} />
-                                            <Text style={styles.emptyMembersText}>No members yet</Text>
-                                            <Text style={styles.emptyMembersHint}>Invite people to join your server</Text>
+                                        <Text style={styles.membersSectionTitle}>Members</Text>
+
+                                        <View style={styles.membersTable}>
+                                            <View style={styles.membersTableHeader}>
+                                                <Text style={[styles.membersTableHeaderText, styles.memberColName]}>Name</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.memberColEmail]}>Email</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.memberColRole]}>Role</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.memberColAccess]}>Channel Access</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.memberColStatus]}>Status</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.memberColActions]} />
+                                            </View>
+
+                                            {filteredMembers.map((member, index) => (
+                                                <View key={member._id || index} style={styles.membersTableRow}>
+                                                    <View style={[styles.memberCell, styles.memberColName]}>
+                                                        <UserAvatar
+                                                            uri={getMemberAvatarUrl(member)}
+                                                            name={getMemberName(member)}
+                                                            style={styles.memberListAvatar}
+                                                        />
+                                                        <Text style={styles.memberNameText}>{getMemberName(member)}</Text>
+                                                    </View>
+                                                    <Text style={[styles.memberCellText, styles.memberColEmail]}>
+                                                        {getMemberEmail(member) || '-'}
+                                                    </Text>
+                                                    <Text style={[styles.memberCellText, styles.memberColRole]}>
+                                                        {getMemberRoleLabel(member.role)}
+                                                    </Text>
+                                                    <Text style={[styles.memberCellText, styles.memberColAccess]}>
+                                                        {getChannelAccessLabel(member.role)}
+                                                    </Text>
+                                                    <View style={[styles.memberColStatus, styles.memberStatusWrap]}>
+                                                        <View style={[styles.statusBadge, getMemberStatusStyle(member.status)]}>
+                                                            <Text style={[styles.statusBadgeText, getMemberStatusTextStyle(member.status)]}>
+                                                                {getMemberStatusLabel(member.status)}
+                                                            </Text>
+                                                        </View>
+                                                    </View>
+                                                    <View style={[styles.memberColActions, styles.memberActions]}>
+                                                        <TouchableOpacity style={styles.memberActionBtn}>
+                                                            <MaterialIcons name="more-horiz" size={16} color={colors.textMuted} />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
+                                            ))}
+
+                                            {filteredMembers.length === 0 && (
+                                                <View style={styles.emptyMembersList}>
+                                                    <MaterialIcons name="group" size={48} color={colors.textMuted} />
+                                                    <Text style={styles.emptyMembersText}>No members yet</Text>
+                                                    <Text style={styles.emptyMembersHint}>Invite people to join your server</Text>
+                                                </View>
+                                            )}
                                         </View>
-                                    )}
+
+                                        <View style={styles.membersFooter}>
+                                            <Text style={styles.membersFooterText}>
+                                                1 - {Math.max(filteredMembers.length, 1)} of {filteredMembers.length || 0}
+                                            </Text>
+                                            <View style={styles.membersFooterActions}>
+                                                <TouchableOpacity style={styles.memberActionBtn}>
+                                                    <MaterialIcons name="navigate-before" size={16} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity style={styles.memberActionBtn}>
+                                                    <MaterialIcons name="navigate-next" size={16} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    </View>
                                 </View>
                             )}
 
                             {/* Roles Tab */}
                             {settingsTab === 'roles' && (
                                 <View style={styles.settingsPanel}>
-                                    <Text style={styles.settingsPanelTitle}>Roles</Text>
+                                    <Text style={styles.settingsPanelTitle}>Roles & Permissions</Text>
                                     <Text style={styles.settingsPanelDesc}>Create and manage server roles with specific permissions</Text>
 
                                     <TouchableOpacity style={styles.createRoleBtn}>
@@ -2267,85 +3179,433 @@ const CreditUnionAdminScreen = () => {
                             {/* Invites Tab */}
                             {settingsTab === 'invites' && (
                                 <View style={styles.settingsPanel}>
-                                    <Text style={styles.settingsPanelTitle}>Invites</Text>
-                                    <Text style={styles.settingsPanelDesc}>Manage server invite links</Text>
+                                    <View style={styles.settingsCard}>
+                                        <View style={styles.settingsCardHeader}>
+                                            <View>
+                                                <Text style={styles.settingsCardTitle}>Invites</Text>
+                                                <Text style={styles.settingsCardSubtitle}>Monitor active invite links</Text>
+                                            </View>
+                                            <TouchableOpacity style={styles.createInviteBtn} onPress={() => { setServerSettingsModalOpen(false); setInviteModalOpen(true); }}>
+                                                <Text style={styles.createInviteBtnText}>Create Invite Link</Text>
+                                            </TouchableOpacity>
+                                        </View>
 
-                                    <TouchableOpacity style={styles.createInviteBtn} onPress={() => { setServerSettingsModalOpen(false); setInviteModalOpen(true); }}>
-                                        <MaterialIcons name="link" size={18} color="#FFFFFF" />
-                                        <Text style={styles.createInviteBtnText}>Create Invite Link</Text>
-                                    </TouchableOpacity>
+                                        <Text style={styles.membersSectionTitle}>Active Invite Links</Text>
 
-                                    <View style={styles.invitesListEmpty}>
-                                        <MaterialIcons name="link" size={48} color={colors.textMuted} />
-                                        <Text style={styles.invitesEmptyText}>No active invites</Text>
-                                        <Text style={styles.invitesEmptyHint}>Create an invite link to share with others</Text>
+                                        <View style={styles.invitesTable}>
+                                            <View style={styles.membersTableHeader}>
+                                                <Text style={[styles.membersTableHeaderText, styles.inviteColInviter]}>Inviter</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.inviteColCode]}>Invite Code</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.inviteColUsers]}>Users</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.inviteColExpires]}>Expires</Text>
+                                                <Text style={[styles.membersTableHeaderText, styles.inviteColRole]}>Roles</Text>
+                                            </View>
+
+                                            {activeSubgrid?.inviteCode ? (
+                                                <View style={styles.membersTableRow}>
+                                                    <Text style={[styles.memberCellText, styles.inviteColInviter]}>
+                                                        {currentUserName || 'John Michael'}
+                                                    </Text>
+                                                    <Text style={[styles.memberCellText, styles.inviteColCode]}>
+                                                        {activeSubgrid.inviteCode}
+                                                    </Text>
+                                                    <Text style={[styles.memberCellText, styles.inviteColUsers]}>0</Text>
+                                                    <Text style={[styles.memberCellText, styles.inviteColExpires]}>02/12 1:32</Text>
+                                                    <Text style={[styles.memberCellText, styles.inviteColRole]}>Member</Text>
+                                                </View>
+                                            ) : (
+                                                <View style={styles.invitesListEmpty}>
+                                                    <MaterialIcons name="link" size={48} color={colors.textMuted} />
+                                                    <Text style={styles.invitesEmptyText}>No active invites</Text>
+                                                    <Text style={styles.invitesEmptyHint}>Create an invite link to share with others</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                     </View>
                                 </View>
                             )}
 
                             {/* Emoji Tab */}
-                            {settingsTab === 'emoji' && (
-                                <View style={styles.settingsPanel}>
-                                    <Text style={styles.settingsPanelTitle}>Emoji</Text>
-                                    <Text style={styles.settingsPanelDesc}>Add custom emoji for your server members to use</Text>
-
-                                    <TouchableOpacity style={styles.uploadEmojiBtn}>
-                                        <MaterialIcons name="add-photo-alternate" size={18} color="#FFFFFF" />
-                                        <Text style={styles.uploadEmojiBtnText}>Upload Emoji</Text>
-                                    </TouchableOpacity>
-
-                                    <View style={styles.emojiListEmpty}>
-                                        <MaterialIcons name="emoji-emotions" size={48} color={colors.textMuted} />
-                                        <Text style={styles.emojiEmptyText}>No custom emoji</Text>
-                                        <Text style={styles.emojiEmptyHint}>Upload custom emoji for your server</Text>
-                                    </View>
-                                </View>
-                            )}
-
-                            {/* Audit Log Tab */}
-                            {settingsTab === 'audit-log' && (
-                                <View style={styles.settingsPanel}>
-                                    <Text style={styles.settingsPanelTitle}>Audit Log</Text>
-                                    <Text style={styles.settingsPanelDesc}>View a log of all actions taken in this server</Text>
-
-                                    <View style={styles.auditLogEmpty}>
-                                        <MaterialIcons name="history" size={48} color={colors.textMuted} />
-                                        <Text style={styles.auditLogEmptyText}>No audit log entries</Text>
-                                        <Text style={styles.auditLogEmptyHint}>Actions taken in this server will appear here</Text>
-                                    </View>
-                                </View>
-                            )}
-
                             {/* Bans Tab */}
                             {settingsTab === 'bans' && (
                                 <View style={styles.settingsPanel}>
-                                    <Text style={styles.settingsPanelTitle}>Bans</Text>
-                                    <Text style={styles.settingsPanelDesc}>View and manage banned users</Text>
+                                    <View style={styles.settingsCard}>
+                                        <View style={styles.settingsCardHeader}>
+                                            <View>
+                                                <Text style={styles.settingsCardTitle}>Ban Members</Text>
+                                                <Text style={styles.settingsCardSubtitle}>Monitor flagged content</Text>
+                                            </View>
+                                        </View>
 
-                                    <View style={styles.bansListEmpty}>
-                                        <MaterialIcons name="block" size={48} color={colors.textMuted} />
-                                        <Text style={styles.bansEmptyText}>No banned users</Text>
-                                        <Text style={styles.bansEmptyHint}>Banned users will appear here</Text>
-                                    </View>
-                                </View>
-                            )}
+                                        {!!moderationError && (
+                                            <Text style={styles.moderationErrorText}>{moderationError}</Text>
+                                        )}
 
-                            {/* Default/Other tabs */}
-                            {['server-tag', 'engagement', 'boost-perks', 'stickers', 'soundboard', 'access', 'integrations', 'app-directory', 'safety-setup'].includes(settingsTab) && (
-                                <View style={styles.settingsPanel}>
-                                    <Text style={styles.settingsPanelTitle}>{settingsTab.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</Text>
-                                    <Text style={styles.settingsPanelDesc}>Configure {settingsTab.replace(/-/g, ' ')} settings</Text>
+                                        <View style={styles.moderationTable}>
+                                            <View style={styles.moderationTableHeader}>
+                                                <View style={styles.moderationCheckboxCell}>
+                                                    <View style={styles.checkbox} />
+                                                </View>
+                                                <Text style={[styles.moderationHeaderText, styles.moderationColSeverity]}>Severity</Text>
+                                                <Text style={[styles.moderationHeaderText, styles.moderationColContent]}>Content</Text>
+                                                <Text style={[styles.moderationHeaderText, styles.moderationColType]}>Type</Text>
+                                                <Text style={[styles.moderationHeaderText, styles.moderationColCommunity]}>Community</Text>
+                                                <Text style={[styles.moderationHeaderText, styles.moderationColAuthor]}>Author</Text>
+                                                <Text style={[styles.moderationHeaderText, styles.moderationColReport]}>Report</Text>
+                                                <View style={styles.moderationColActions} />
+                                            </View>
 
-                                    <View style={styles.comingSoonBox}>
-                                        <MaterialIcons name="construction" size={48} color={colors.textMuted} />
-                                        <Text style={styles.comingSoonText}>Coming Soon</Text>
-                                        <Text style={styles.comingSoonHint}>This feature is under development</Text>
+                                            {moderationLoading ? (
+                                                <View style={styles.moderationEmpty}>
+                                                    <MaterialIcons name="hourglass-empty" size={40} color={colors.textMuted} />
+                                                    <Text style={styles.moderationEmptyText}>Loading moderation queue</Text>
+                                                </View>
+                                            ) : moderationQueue.length === 0 ? (
+                                                <View style={styles.moderationEmpty}>
+                                                    <MaterialIcons name="shield" size={48} color={colors.textMuted} />
+                                                    <Text style={styles.moderationEmptyText}>No flagged content</Text>
+                                                    <Text style={styles.moderationEmptyHint}>Reported items will appear here</Text>
+                                                </View>
+                                            ) : (
+                                                moderationQueue.map((item) => {
+                                                    const content = item.content || {};
+                                                    const contentText = content?.body || content?.text || content?.title || 'Content unavailable';
+                                                    const authorId = content?.authorId || content?.senderId;
+                                                    const authorName = authorId ? getAuthorName(authorId, members) : 'Unknown';
+                                                    const typeLabel = item.contentType
+                                                        ? item.contentType.replace('_', ' ')
+                                                        : 'content';
+                                                    const severity = getSeverityLabel(item.reason);
+                                                    const severityColor =
+                                                        severity === 'High'
+                                                            ? { bg: '#FEE2E2', text: '#DC2626', dot: '#EF4444' }
+                                                            : { bg: '#FEF3C7', text: '#D97706', dot: '#F59E0B' };
+                                                    return (
+                                                        <View key={item._id} style={styles.moderationRow}>
+                                                            <View style={styles.moderationCheckboxCell}>
+                                                                <View style={styles.checkbox} />
+                                                            </View>
+                                                            <View style={[styles.moderationCell, styles.moderationColSeverity]}>
+                                                                <View style={[styles.severityBadge, { backgroundColor: severityColor.bg }]}>
+                                                                    <View style={[styles.severityDot, { backgroundColor: severityColor.dot }]} />
+                                                                    <Text style={[styles.severityText, { color: severityColor.text }]}>
+                                                                        {severity}
+                                                                    </Text>
+                                                                </View>
+                                                            </View>
+                                                            <Text
+                                                                style={[styles.moderationCellText, styles.moderationColContent]}
+                                                                numberOfLines={1}
+                                                            >
+                                                                {contentText}
+                                                            </Text>
+                                                            <View style={[styles.moderationCell, styles.moderationColType]}>
+                                                                <View style={styles.typeBadge}>
+                                                                    <Text style={styles.typeBadgeText}>
+                                                                        {typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)}
+                                                                    </Text>
+                                                                </View>
+                                                            </View>
+                                                            <Text style={[styles.moderationCellText, styles.moderationColCommunity]}>
+                                                                {activeSubgrid?.name || 'Community'}
+                                                            </Text>
+                                                            <Text style={[styles.moderationCellText, styles.moderationColAuthor]}>
+                                                                {authorName}
+                                                            </Text>
+                                                            <Text
+                                                                style={[styles.moderationCellText, styles.moderationColReport]}
+                                                                numberOfLines={1}
+                                                            >
+                                                                {item.reason || '-'}
+                                                            </Text>
+                                                            <View style={[styles.moderationColActions, styles.moderationActions]}>
+                                                                <TouchableOpacity
+                                                                    style={styles.memberActionBtn}
+                                                                    onPress={() =>
+                                                                        setModerationMenuOpen(moderationMenuOpen === item._id ? null : item._id)
+                                                                    }
+                                                                >
+                                                                    <MaterialIcons name="more-horiz" size={16} color={colors.textMuted} />
+                                                                </TouchableOpacity>
+                                                                {moderationMenuOpen === item._id && (
+                                                                    <View style={styles.moderationMenuDropdown}>
+                                                                        <TouchableOpacity
+                                                                            style={styles.moderationMenuItem}
+                                                                            onPress={() => {
+                                                                                setModerationMenuOpen(null);
+                                                                                openModerationDetail(item);
+                                                                            }}
+                                                                        >
+                                                                            <MaterialIcons name="visibility" size={14} color={colors.textMuted} />
+                                                                            <Text style={styles.moderationMenuText}>View</Text>
+                                                                        </TouchableOpacity>
+                                                                        <TouchableOpacity
+                                                                            style={styles.moderationMenuItem}
+                                                                            onPress={() => {
+                                                                                setModerationMenuOpen(null);
+                                                                                handleModerationAction(item, 'mute');
+                                                                            }}
+                                                                        >
+                                                                            <MaterialIcons name="block" size={14} color={colors.textMuted} />
+                                                                            <Text style={styles.moderationMenuText}>Restrict User</Text>
+                                                                        </TouchableOpacity>
+                                                                        <TouchableOpacity
+                                                                            style={styles.moderationMenuItem}
+                                                                            onPress={() => {
+                                                                                setModerationMenuOpen(null);
+                                                                                handleModerationAction(item, 'ban');
+                                                                            }}
+                                                                        >
+                                                                            <MaterialIcons name="person-remove" size={14} color={colors.textMuted} />
+                                                                            <Text style={styles.moderationMenuText}>Remove User</Text>
+                                                                        </TouchableOpacity>
+                                                                        <TouchableOpacity
+                                                                            style={styles.moderationMenuItem}
+                                                                            onPress={() => {
+                                                                                setModerationMenuOpen(null);
+                                                                                handleModerationAction(item, 'warn');
+                                                                            }}
+                                                                        >
+                                                                            <MaterialIcons name="warning" size={14} color={colors.textMuted} />
+                                                                            <Text style={styles.moderationMenuText}>Warn User</Text>
+                                                                        </TouchableOpacity>
+                                                                    </View>
+                                                                )}
+                                                            </View>
+                                                        </View>
+                                                    );
+                                                })
+                                            )}
+                                        </View>
+
+                                        <View style={styles.membersFooter}>
+                                            <Text style={styles.membersFooterText}>
+                                                {moderationQueue.length === 0 ? '0 - 0' : `1 - ${moderationQueue.length}`} of {moderationQueue.length}
+                                            </Text>
+                                            <View style={styles.membersFooterActions}>
+                                                <TouchableOpacity style={styles.memberActionBtn}>
+                                                    <MaterialIcons name="navigate-before" size={16} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity style={styles.memberActionBtn}>
+                                                    <MaterialIcons name="navigate-next" size={16} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
                                     </View>
                                 </View>
                             )}
                         </ScrollView>
                     </View>
                 </View>
+            </Modal>
+
+            {/* Create Server Modal */}
+            <Modal visible={createServerModalOpen} transparent animationType="fade" onRequestClose={() => setCreateServerModalOpen(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <TouchableOpacity style={styles.modalClose} onPress={() => setCreateServerModalOpen(false)}>
+                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>Create Server</Text>
+
+                        <Text style={styles.modalLabel}>SERVER NAME</Text>
+                        <View style={styles.inputRow}>
+                            <MaterialIcons name="tag" size={18} color={colors.textMuted} />
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="Server name"
+                                placeholderTextColor={colors.textSubtle}
+                                value={newServerName}
+                                onChangeText={setNewServerName}
+                            />
+                        </View>
+
+                        <Text style={styles.modalLabel}>DESCRIPTION</Text>
+                        <TextInput
+                            style={styles.textArea}
+                            placeholder="Describe this server..."
+                            placeholderTextColor={colors.textSubtle}
+                            value={newServerDescription}
+                            onChangeText={setNewServerDescription}
+                            multiline
+                            numberOfLines={3}
+                        />
+
+                        <Text style={styles.modalLabel}>VISIBILITY</Text>
+                        <View style={styles.visibilityRow}>
+                            <TouchableOpacity
+                                style={[styles.visibilityOption, newServerVisibility === 'private' && styles.visibilityOptionActive]}
+                                onPress={() => setNewServerVisibility('private')}
+                            >
+                                <MaterialIcons name="lock" size={16} color={newServerVisibility === 'private' ? '#FFFFFF' : colors.textMuted} />
+                                <Text style={[styles.visibilityText, newServerVisibility === 'private' && styles.visibilityTextActive]}>Private</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.visibilityOption, newServerVisibility === 'public' && styles.visibilityOptionActive]}
+                                onPress={() => setNewServerVisibility('public')}
+                            >
+                                <MaterialIcons name="public" size={16} color={newServerVisibility === 'public' ? '#FFFFFF' : colors.textMuted} />
+                                <Text style={[styles.visibilityText, newServerVisibility === 'public' && styles.visibilityTextActive]}>Public</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setCreateServerModalOpen(false)}>
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.createBtnBlack} onPress={handleCreateServer}>
+                                <Text style={styles.createBtnBlackText}>Create Server</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Floating Item Action Menu - rendered at root level for proper z-index */}
+            {itemMenuOpen && itemMenuItem && (
+                <>
+                    <Pressable
+                        style={styles.floatingMenuOverlay}
+                        onPress={closeItemMenu}
+                    />
+                    <View style={[styles.floatingMenuDropdown, { top: itemMenuPosition.top, right: itemMenuPosition.right }]}>
+                        <TouchableOpacity
+                            style={styles.floatingMenuItem}
+                            onPress={() => {
+                                openReportModal(itemMenuItem._id, itemMenuItem.isPost ? 'post' : 'message');
+                                closeItemMenu();
+                            }}
+                        >
+                            <MaterialIcons name="flag" size={16} color={colors.textMuted} />
+                            <Text style={styles.floatingMenuItemText}>Report</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.floatingMenuItem}
+                            onPress={() => {
+                                if (itemMenuItem.isPost) {
+                                    handleDeletePost(itemMenuItem._id);
+                                } else {
+                                    handleDeleteMessage(itemMenuItem._id);
+                                }
+                                closeItemMenu();
+                            }}
+                        >
+                            <MaterialIcons name="delete" size={16} color="#EF4444" />
+                            <Text style={styles.floatingMenuItemTextDanger}>Delete</Text>
+                        </TouchableOpacity>
+                    </View>
+                </>
+            )}
+
+            {/* Report Modal */}
+            <Modal visible={reportModalOpen} transparent animationType="fade" onRequestClose={() => setReportModalOpen(false)}>
+                <Pressable style={styles.modalOverlay} onPress={() => setReportModalOpen(false)}>
+                    <Pressable style={styles.reportModalCard} onPress={(event) => event.stopPropagation()}>
+                        <View style={styles.reportModalHeader}>
+                            <Text style={styles.reportModalTitle}>Report content</Text>
+                            <TouchableOpacity onPress={() => setReportModalOpen(false)}>
+                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.reportModalSubtitle}>Select a reason for this report.</Text>
+                        <View style={styles.reportReasonGrid}>
+                            {REPORT_REASONS.map((reason) => (
+                                <TouchableOpacity
+                                    key={reason}
+                                    style={[styles.reportReasonOption, reportReason === reason && styles.reportReasonOptionActive]}
+                                    onPress={() => setReportReason(reason)}
+                                >
+                                    <Text style={[styles.reportReasonText, reportReason === reason && styles.reportReasonTextActive]}>
+                                        {reason}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        {reportReason === 'Other' && (
+                            <View style={styles.reportNotesWrap}>
+                                <Text style={styles.reportNotesLabel}>Reason details</Text>
+                                <TextInput
+                                    style={styles.reportNotesInput}
+                                    value={reportNotes}
+                                    onChangeText={setReportNotes}
+                                    placeholder="Share more details..."
+                                    placeholderTextColor={colors.textMuted}
+                                    multiline
+                                />
+                            </View>
+                        )}
+                        <View style={styles.reportModalActions}>
+                            <TouchableOpacity style={styles.reportCancelBtn} onPress={() => setReportModalOpen(false)}>
+                                <Text style={styles.reportCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.reportSubmitBtn, reportSubmitting && styles.reportSubmitBtnDisabled]}
+                                onPress={submitReport}
+                                disabled={reportSubmitting}
+                            >
+                                <Text style={styles.reportSubmitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Moderation Detail Modal */}
+            <Modal visible={moderationDetailOpen} transparent animationType="fade" onRequestClose={() => setModerationDetailOpen(false)}>
+                <Pressable style={styles.modalOverlay} onPress={() => setModerationDetailOpen(false)}>
+                    <Pressable style={styles.moderationDetailCard} onPress={(event) => event.stopPropagation()}>
+                        <View style={styles.moderationDetailHeader}>
+                            <Text style={styles.moderationDetailTitle}>Content Detail</Text>
+                            <TouchableOpacity onPress={() => setModerationDetailOpen(false)}>
+                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.moderationDetailBody}>
+                            <View style={styles.moderationDetailAuthorRow}>
+                                <UserAvatar
+                                    uri={getMemberAvatarUrl(moderationAuthorMember)}
+                                    name={moderationAuthorName}
+                                    style={styles.moderationDetailAvatar}
+                                />
+                                <View>
+                                    <Text style={styles.moderationDetailAuthor}>{moderationAuthorName}</Text>
+                                    <Text style={styles.moderationDetailMeta}>
+                                        {formatDate(activeModerationItem?.createdAt) || 'Today'}
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.moderationDetailMessage}>
+                                <Text style={styles.moderationDetailText}>{moderationContentText}</Text>
+                            </View>
+                            {!!activeModerationItem?.reason && (
+                                <Text style={styles.moderationDetailReason}>Report reason: {activeModerationItem.reason}</Text>
+                            )}
+                        </View>
+                        <View style={styles.moderationDetailActions}>
+                            <TouchableOpacity
+                                style={[styles.moderationActionBtn, moderationActionLoading && styles.moderationActionBtnDisabled]}
+                                onPress={() => handleModerationAction(activeModerationItem, 'mute')}
+                                disabled={moderationActionLoading}
+                            >
+                                <Text style={styles.moderationActionText}>Restrict User</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.moderationActionBtn, styles.moderationActionRemove, moderationActionLoading && styles.moderationActionBtnDisabled]}
+                                onPress={() => handleModerationAction(activeModerationItem, 'remove')}
+                                disabled={moderationActionLoading}
+                            >
+                                <Text style={styles.moderationActionTextOnDark}>Remove Content</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.moderationActionBtn, styles.moderationActionWarn, moderationActionLoading && styles.moderationActionBtnDisabled]}
+                                onPress={() => handleModerationAction(activeModerationItem, 'warn')}
+                                disabled={moderationActionLoading}
+                            >
+                                <Text style={styles.moderationActionWarnText}>Warn user</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Notification Settings Modal */}
@@ -2702,6 +3962,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontWeight: '700',
             color: '#FFFFFF',
         },
+        railLogoImage: {
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+        },
         railButton: {
             width: 48,
             height: 48,
@@ -2709,6 +3974,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             backgroundColor: colors.surface,
             alignItems: 'center',
             justifyContent: 'center',
+        },
+        exitButton: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: '#EF4444',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: 8,
         },
         channelSidebar: {
             width: 240,
@@ -2838,6 +4112,47 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         channelActions: {
             flexDirection: 'row',
             gap: 8,
+        },
+        channelMenuWrap: {
+            position: 'relative',
+        },
+        channelMenuDropdown: {
+            position: 'absolute',
+            right: 0,
+            top: 22,
+            backgroundColor: '#1f2937',
+            borderRadius: 8,
+            paddingVertical: 6,
+            width: 200,
+            borderWidth: 1,
+            borderColor: '#374151',
+            zIndex: 100,
+            shadowColor: '#000',
+            shadowOpacity: 0.3,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 10,
+        },
+        channelMenuItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            gap: 12,
+        },
+        channelMenuItemPressed: {
+            backgroundColor: '#374151',
+        },
+        channelMenuText: {
+            fontSize: 14,
+            color: '#e5e7eb',
+            fontWeight: '500',
+        },
+        channelMenuTextDanger: {
+            fontSize: 14,
+            color: '#EF4444',
+            fontWeight: '500',
         },
         emptyText: {
             fontSize: 12,
@@ -2981,6 +4296,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             paddingVertical: 6,
             backgroundColor: colors.surfaceMuted,
             borderRadius: 6,
+            minWidth: 180,
+        },
+        searchInput: {
+            flex: 1,
+            fontSize: 13,
+            color: colors.text,
+            padding: 0,
+            margin: 0,
+            ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
         },
         searchPlaceholder: {
             fontSize: 13,
@@ -3107,11 +4431,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             borderRadius: 12,
             padding: 16,
             gap: 12,
+            overflow: 'visible',
         },
         postHeader: {
             flexDirection: 'row',
             alignItems: 'flex-start',
             gap: 12,
+            overflow: 'visible',
+            zIndex: 5,
         },
         postAvatar: {
             width: 44,
@@ -3123,6 +4450,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         itemMenuContainer: {
             position: 'relative',
+            zIndex: 10,
         },
         itemMenuDropdown: {
             position: 'absolute',
@@ -3147,8 +4475,52 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             paddingVertical: 10,
             paddingHorizontal: 12,
         },
+        itemMenuText: {
+            fontSize: 13,
+            color: colors.text,
+        },
         itemMenuTextDanger: {
             fontSize: 13,
+            color: '#EF4444',
+        },
+        // Floating menu styles for proper z-index handling
+        floatingMenuOverlay: {
+            position: 'fixed' as any,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9998,
+            backgroundColor: 'transparent',
+        },
+        floatingMenuDropdown: {
+            position: 'fixed' as any,
+            backgroundColor: colors.surface,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 10,
+            zIndex: 9999,
+            minWidth: 140,
+            paddingVertical: 4,
+        },
+        floatingMenuItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+        },
+        floatingMenuItemText: {
+            fontSize: 14,
+            color: colors.text,
+        },
+        floatingMenuItemTextDanger: {
+            fontSize: 14,
             color: '#EF4444',
         },
         postAuthorRow: {
@@ -3190,7 +4562,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         postImage: {
             width: '100%',
-            height: 200,
+            minHeight: 150,
+            maxHeight: 500,
             borderRadius: 12,
             backgroundColor: colors.surfaceMuted,
         },
@@ -3348,6 +4721,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             borderRadius: 12,
             padding: 24,
         },
+        permissionModalContent: {
+            width: '90%',
+            maxWidth: 360,
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 24,
+        },
         modalClose: {
             position: 'absolute',
             top: 16,
@@ -3394,6 +4774,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             letterSpacing: 0.5,
             marginBottom: 8,
             marginTop: 16,
+        },
+        permissionList: {
+            marginTop: 8,
+        },
+        permissionRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            paddingVertical: 6,
+        },
+        permissionLabel: {
+            fontSize: 14,
+            color: colors.text,
         },
         inputRow: {
             flexDirection: 'row',
@@ -3444,6 +4837,71 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.textMuted,
             marginTop: 20,
             marginBottom: 8,
+        },
+        badgeOptionsRow: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 10,
+            marginTop: 8,
+            marginBottom: 16,
+        },
+        badgeOption: {
+            alignItems: 'center',
+            padding: 8,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+            position: 'relative',
+        },
+        badgePreview: {
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 12,
+        },
+        badgePreviewText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        badgeCheckmark: {
+            position: 'absolute',
+            top: -4,
+            right: -4,
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        inviteBtn: {
+            backgroundColor: '#8B5CF6',
+            paddingVertical: 12,
+            borderRadius: 8,
+            alignItems: 'center',
+            marginTop: 8,
+        },
+        inviteBtnDisabled: {
+            opacity: 0.6,
+        },
+        inviteBtnText: {
+            color: '#FFFFFF',
+            fontSize: 14,
+            fontWeight: '600',
+        },
+        dividerRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginVertical: 20,
+            gap: 12,
+        },
+        dividerLine: {
+            flex: 1,
+            height: 1,
+            backgroundColor: colors.border,
+        },
+        dividerText: {
+            fontSize: 12,
+            color: colors.textMuted,
         },
         textArea: {
             paddingHorizontal: 12,
@@ -3660,14 +5118,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         settingsFullPage: {
             flex: 1,
             flexDirection: 'row',
-            backgroundColor: colors.appBg,
+            backgroundColor: '#E9E9E9',
+            padding: 16,
         },
         settingsSidebar: {
             width: 220,
-            backgroundColor: colors.surface,
+            backgroundColor: '#0B0B0C',
             paddingVertical: 16,
             borderRightWidth: 1,
-            borderRightColor: colors.border,
+            borderRightColor: '#E5E7EB',
+            borderTopLeftRadius: 12,
+            borderBottomLeftRadius: 12,
         },
         settingsSidebarHeader: {
             flexDirection: 'row',
@@ -3679,12 +5140,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         settingsSidebarTitle: {
             fontSize: 16,
             fontWeight: '700',
-            color: colors.text,
+            color: '#FFFFFF',
         },
         settingsSectionLabel: {
             fontSize: 11,
             fontWeight: '600',
-            color: colors.textMuted,
+            color: '#9CA3AF',
             paddingHorizontal: 16,
             paddingTop: 16,
             paddingBottom: 8,
@@ -3694,10 +5155,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             paddingHorizontal: 16,
             paddingVertical: 8,
             marginHorizontal: 8,
-            borderRadius: 4,
+            borderRadius: 6,
         },
         settingsNavItemActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: '#1F1F1F',
         },
         settingsNavItemRow: {
             flexDirection: 'row',
@@ -3706,15 +5167,20 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         settingsNavText: {
             fontSize: 14,
-            color: colors.textMuted,
+            color: '#B5B5B5',
         },
         settingsNavTextActive: {
-            color: colors.text,
+            color: '#FFFFFF',
             fontWeight: '500',
         },
         settingsContent: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: colors.surface,
+            borderTopRightRadius: 12,
+            borderBottomRightRadius: 12,
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            borderLeftWidth: 0,
         },
         settingsContentHeader: {
             flexDirection: 'row',
@@ -3723,7 +5189,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             paddingHorizontal: 32,
             paddingVertical: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: '#E5E7EB',
         },
         settingsContentTitle: {
             fontSize: 20,
@@ -3780,6 +5246,73 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 14,
             color: colors.text,
         },
+        engagementCard: {
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            padding: 16,
+        },
+        engagementSectionTitle: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 6,
+        },
+        engagementSectionDesc: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginBottom: 12,
+        },
+        engagementRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 10,
+        },
+        engagementInfo: {
+            flex: 1,
+            paddingRight: 16,
+        },
+        engagementLabel: {
+            fontSize: 13,
+            fontWeight: '500',
+            color: colors.text,
+        },
+        engagementDesc: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 4,
+        },
+        engagementDivider: {
+            height: 1,
+            backgroundColor: '#E5E7EB',
+        },
+        engagementSectionDivider: {
+            height: 1,
+            backgroundColor: '#E5E7EB',
+            marginVertical: 12,
+        },
+        engagementToggle: {
+            width: 38,
+            height: 20,
+            borderRadius: 10,
+            backgroundColor: '#E5E7EB',
+            padding: 2,
+            justifyContent: 'center',
+        },
+        engagementToggleOn: {
+            backgroundColor: '#111111',
+        },
+        engagementToggleKnob: {
+            width: 16,
+            height: 16,
+            borderRadius: 8,
+            backgroundColor: '#FFFFFF',
+        },
+        engagementToggleKnobOn: {
+            marginLeft: 16,
+        },
         serverProfileRow: {
             flexDirection: 'row',
             gap: 32,
@@ -3819,6 +5352,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: -24,
+        },
+        serverPreviewAvatarImage: {
+            width: 44,
+            height: 44,
+            borderRadius: 22,
         },
         serverPreviewAvatarText: {
             fontSize: 18,
@@ -3867,6 +5405,23 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 13,
             fontWeight: '500',
             color: '#FFFFFF',
+        },
+        serverIconActions: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+        },
+        removeIconBtn: {
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        removeIconBtnText: {
+            fontSize: 13,
+            fontWeight: '500',
+            color: colors.text,
         },
         bannerGrid: {
             flexDirection: 'row',
@@ -3931,6 +5486,98 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontWeight: '500',
             color: '#FFFFFF',
         },
+        serverCrudActions: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            marginTop: 16,
+        },
+        settingsSecondaryBtn: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        settingsSecondaryBtnText: {
+            fontSize: 13,
+            fontWeight: '500',
+            color: colors.text,
+        },
+        settingsDangerBtn: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 6,
+            backgroundColor: '#111111',
+        },
+        settingsDangerBtnText: {
+            fontSize: 13,
+            fontWeight: '500',
+            color: '#FFFFFF',
+        },
+        visibilityRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            marginTop: 8,
+        },
+        visibilityOption: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        visibilityOptionActive: {
+            backgroundColor: '#111111',
+            borderColor: '#111111',
+        },
+        visibilityText: {
+            fontSize: 13,
+            color: colors.textMuted,
+        },
+        visibilityTextActive: {
+            color: '#FFFFFF',
+            fontWeight: '600',
+        },
+        settingsCard: {
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            borderRadius: 12,
+            padding: 16,
+        },
+        settingsCardHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 16,
+        },
+        settingsCardTitle: {
+            fontSize: 15,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        settingsCardSubtitle: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 2,
+        },
+        membersSearchWrap: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            backgroundColor: colors.surfaceMuted,
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            borderRadius: 10,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            width: 220,
+        },
         membersSearchRow: {
             flexDirection: 'row',
             gap: 12,
@@ -3966,6 +5613,150 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 13,
             fontWeight: '500',
             color: '#FFFFFF',
+        },
+        membersSectionTitle: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 12,
+        },
+        membersTable: {
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            borderRadius: 10,
+            overflow: 'hidden',
+            backgroundColor: colors.surface,
+        },
+        invitesTable: {
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            borderRadius: 10,
+            overflow: 'hidden',
+            backgroundColor: colors.surface,
+        },
+        membersTableHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            backgroundColor: '#F4F4F5',
+        },
+        membersTableHeaderText: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: colors.textMuted,
+        },
+        membersTableRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: '#E5E7EB',
+        },
+        memberCell: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        memberCellText: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        memberNameText: {
+            fontSize: 12,
+            fontWeight: '500',
+            color: colors.text,
+        },
+        memberColName: {
+            width: 160,
+        },
+        memberColEmail: {
+            width: 180,
+        },
+        memberColRole: {
+            width: 110,
+        },
+        memberColAccess: {
+            width: 120,
+        },
+        memberColStatus: {
+            width: 90,
+            alignItems: 'flex-start',
+        },
+        memberColActions: {
+            width: 36,
+            alignItems: 'flex-end',
+        },
+        memberStatusWrap: {
+            alignItems: 'flex-start',
+        },
+        statusBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 999,
+        },
+        statusBadgeActive: {
+            backgroundColor: '#DCFCE7',
+        },
+        statusBadgePending: {
+            backgroundColor: '#FEF3C7',
+        },
+        statusBadgeMuted: {
+            backgroundColor: '#FDE68A',
+        },
+        statusBadgeSuspended: {
+            backgroundColor: '#FEE2E2',
+        },
+        statusBadgeText: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        statusBadgeTextActive: {
+            color: '#16A34A',
+        },
+        statusBadgeTextPending: {
+            color: '#D97706',
+        },
+        statusBadgeTextMuted: {
+            color: '#B45309',
+        },
+        statusBadgeTextSuspended: {
+            color: '#DC2626',
+        },
+        memberActions: {
+            alignItems: 'flex-end',
+        },
+        membersFooter: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: 12,
+        },
+        membersFooterText: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        membersFooterActions: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        inviteColInviter: {
+            width: 180,
+        },
+        inviteColCode: {
+            width: 140,
+        },
+        inviteColUsers: {
+            width: 80,
+        },
+        inviteColExpires: {
+            width: 120,
+        },
+        inviteColRole: {
+            width: 120,
         },
         membersListHeader: {
             flexDirection: 'row',
@@ -4086,12 +5877,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: '#5865F2',
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderRadius: 6,
-            alignSelf: 'flex-start',
-            marginBottom: 24,
+            backgroundColor: '#111111',
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 16,
         },
         createInviteBtnText: {
             fontSize: 13,
@@ -4173,6 +5962,341 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 14,
             color: colors.textMuted,
             marginTop: 4,
+        },
+        reportModalCard: {
+            width: '90%',
+            maxWidth: 420,
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            padding: 20,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        reportModalHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 8,
+        },
+        reportModalTitle: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        reportModalSubtitle: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginBottom: 16,
+        },
+        reportReasonGrid: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        reportReasonOption: {
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+        },
+        reportReasonOptionActive: {
+            borderColor: '#111111',
+            backgroundColor: '#111111',
+        },
+        reportReasonText: {
+            fontSize: 12,
+            color: colors.text,
+        },
+        reportReasonTextActive: {
+            color: '#FFFFFF',
+            fontWeight: '600',
+        },
+        reportNotesWrap: {
+            marginTop: 16,
+        },
+        reportNotesLabel: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.textMuted,
+            marginBottom: 6,
+        },
+        reportNotesInput: {
+            minHeight: 80,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 10,
+            padding: 12,
+            color: colors.text,
+            backgroundColor: colors.surfaceMuted,
+            textAlignVertical: 'top',
+        },
+        reportModalActions: {
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            gap: 12,
+            marginTop: 20,
+        },
+        reportCancelBtn: {
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 18,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        reportCancelText: {
+            fontSize: 13,
+            color: colors.text,
+        },
+        reportSubmitBtn: {
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 18,
+            backgroundColor: '#111111',
+        },
+        reportSubmitBtnDisabled: {
+            opacity: 0.6,
+        },
+        reportSubmitText: {
+            fontSize: 13,
+            color: '#FFFFFF',
+            fontWeight: '600',
+        },
+        moderationErrorText: {
+            fontSize: 12,
+            color: '#EF4444',
+            marginBottom: 12,
+        },
+        moderationTable: {
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 12,
+            overflow: 'hidden',
+        },
+        moderationTableHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surfaceMuted,
+        },
+        moderationHeaderText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.textMuted,
+        },
+        moderationRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+        },
+        moderationCell: {
+            justifyContent: 'center',
+        },
+        moderationCellText: {
+            fontSize: 12,
+            color: colors.text,
+        },
+        moderationCheckboxCell: {
+            width: 28,
+            alignItems: 'center',
+        },
+        moderationColSeverity: {
+            width: 110,
+        },
+        moderationColContent: {
+            flex: 2,
+        },
+        moderationColType: {
+            width: 110,
+        },
+        moderationColCommunity: {
+            flex: 1.2,
+        },
+        moderationColAuthor: {
+            flex: 1,
+        },
+        moderationColReport: {
+            flex: 1,
+        },
+        moderationColActions: {
+            width: 40,
+            alignItems: 'flex-end',
+        },
+        moderationActions: {
+            alignItems: 'flex-end',
+        },
+        severityBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 12,
+        },
+        severityDot: {
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+        },
+        severityText: {
+            fontSize: 11,
+            fontWeight: '600',
+        },
+        typeBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
+            alignSelf: 'flex-start',
+        },
+        typeBadgeText: {
+            fontSize: 11,
+            color: colors.text,
+        },
+        moderationMenuDropdown: {
+            position: 'absolute',
+            top: 24,
+            right: 0,
+            backgroundColor: colors.surface,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 4,
+            zIndex: 100,
+            minWidth: 160,
+        },
+        moderationMenuItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+        },
+        moderationMenuText: {
+            fontSize: 13,
+            color: colors.text,
+        },
+        moderationEmpty: {
+            alignItems: 'center',
+            paddingVertical: 36,
+        },
+        moderationEmptyText: {
+            fontSize: 15,
+            fontWeight: '500',
+            color: colors.text,
+            marginTop: 12,
+        },
+        moderationEmptyHint: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginTop: 4,
+        },
+        moderationDetailCard: {
+            width: '90%',
+            maxWidth: 520,
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            padding: 20,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        moderationDetailHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 12,
+        },
+        moderationDetailTitle: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        moderationDetailBody: {
+            gap: 12,
+        },
+        moderationDetailAuthorRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+        },
+        moderationDetailAvatar: {
+            width: 42,
+            height: 42,
+            borderRadius: 21,
+        },
+        moderationDetailAuthor: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        moderationDetailMeta: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        moderationDetailMessage: {
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 12,
+            padding: 12,
+        },
+        moderationDetailText: {
+            fontSize: 13,
+            color: colors.text,
+            lineHeight: 18,
+        },
+        moderationDetailReason: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        moderationDetailActions: {
+            flexDirection: 'row',
+            gap: 12,
+            marginTop: 20,
+        },
+        moderationActionBtn: {
+            flex: 1,
+            paddingVertical: 10,
+            borderRadius: 18,
+            borderWidth: 1,
+            borderColor: colors.border,
+            alignItems: 'center',
+            backgroundColor: colors.surface,
+        },
+        moderationActionBtnDisabled: {
+            opacity: 0.6,
+        },
+        moderationActionRemove: {
+            backgroundColor: '#111111',
+            borderColor: '#111111',
+        },
+        moderationActionWarn: {
+            backgroundColor: colors.surfaceMuted,
+        },
+        moderationActionText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        moderationActionTextOnDark: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        moderationActionWarnText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text,
         },
         comingSoonBox: {
             alignItems: 'center',

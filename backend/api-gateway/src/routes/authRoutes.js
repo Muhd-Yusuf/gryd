@@ -9,6 +9,17 @@ const {
     signupWithCode,
     loginWithRole,
     signupSuperAdmin,
+    sendOtp,
+    verifyOtp,
+    signupMember,
+    loginOtpRequest,
+    loginOtpVerify,
+    inviteStakeholder,
+    validateStakeholderInvite,
+    signupStakeholder,
+    getMySubgrids,
+    validateSetupToken,
+    completeSetup,
 } = require('../controllers/authController');
 const { attachUserContext } = require('../middleware/authMiddleware');
 
@@ -18,9 +29,32 @@ router.post('/login-with-role', loginWithRole);
 router.get('/me', attachUserContext, getMe);
 router.put('/password', attachUserContext, setPassword);
 
-// Member signup with invite code
+// Member signup with invite code (password-based - legacy)
 router.get('/validate-code/:code', validateInviteCode);
 router.post('/signup-with-code', signupWithCode);
+
+// OTP-based authentication
+router.post('/send-otp', sendOtp);
+router.post('/verify-otp', verifyOtp);
+
+// Member signup with OTP (passwordless)
+router.post('/signup-member', signupMember);
+
+// OTP-based login
+router.post('/login-otp-request', loginOtpRequest);
+router.post('/login-otp-verify', loginOtpVerify);
+
+// Stakeholder invite & signup
+router.post('/invite-stakeholder', attachUserContext, inviteStakeholder);
+router.get('/validate-stakeholder-invite/:token', validateStakeholderInvite);
+router.post('/signup-stakeholder', signupStakeholder);
+
+// CU Admin setup (from Super Admin invite)
+router.get('/validate-setup/:token', validateSetupToken);
+router.post('/complete-setup', completeSetup);
+
+// Get user's subgrids/servers
+router.get('/my-subgrids', attachUserContext, getMySubgrids);
 
 // Super admin signup (requires secret key)
 router.post('/signup-super-admin', signupSuperAdmin);

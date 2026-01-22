@@ -23,6 +23,8 @@ const RootStack = () => {
                 <Stack.Screen name="admin" />
                 <Stack.Screen name="super-admin" />
                 <Stack.Screen name="super-admin-signup" />
+                <Stack.Screen name="setup" />
+                <Stack.Screen name="stakeholder-signup" />
                 <Stack.Screen name="(main)" />
                 <Stack.Screen name="join" />
             </Stack>

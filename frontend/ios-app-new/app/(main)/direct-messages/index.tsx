@@ -20,12 +20,14 @@ import { Audio } from 'expo-av';
 import { Platform } from 'react-native';
 import { communityGet, communityPost, communityDelete, getAuthUser, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile } from '../../../lib/api';
 import { useTheme } from '../../../lib/theme';
-import { formatRelativeTime, formatMessageDate } from '../../../lib/chatMedia';
+import { formatRelativeTime, formatMessageDate, Attachment, twemojiUrl } from '../../../lib/chatMedia';
 import UserAvatar from '../../../components/UserAvatar';
+import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 
 type Subgrid = {
     _id: string;
     name?: string;
+    logoUrl?: string;
 };
 
 type Member = {
@@ -61,6 +63,14 @@ type Message = {
     body?: string;
     kind?: string;
     createdAt?: string;
+    attachments?: Array<Attachment | string>;
+    // Call history fields
+    callType?: 'video' | 'voice';
+    callDuration?: number;
+    callStatus?: 'ended' | 'missed' | 'declined';
+    isOutgoing?: boolean;
+    isMissed?: boolean;
+    isDeclined?: boolean;
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -81,6 +91,72 @@ const buildName = (value?: string, user?: UserProfile | null) => {
         return name || user.email || labelFromId(value);
     }
     return labelFromId(value);
+};
+
+const formatTimeOnly = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+};
+
+const formatCallDuration = (seconds?: number) => {
+    if (!seconds) return '0 min';
+    const mins = Math.floor(seconds / 60);
+    return `${mins} min`;
+};
+
+const normalizeAttachments = (message: Message) => {
+    const raw = Array.isArray(message.attachments) ? message.attachments : [];
+
+    const result = raw
+        .map((item) => {
+            if (!item) return null;
+            if (typeof item === 'string') {
+                // Try to determine type from URL
+                const lowerItem = item.toLowerCase();
+                if (lowerItem.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)) {
+                    return { type: 'image' as const, value: item, uri: item };
+                }
+                // Check for audio files (voice notes) - including cloudinary URLs
+                if (lowerItem.match(/\.(mp3|wav|webm|m4a|ogg|aac)(\?|$)/i) || lowerItem.includes('/video/upload/') || lowerItem.includes('/raw/upload/')) {
+                    return { type: 'audio' as const, value: item, uri: item };
+                }
+                // Check for cloudinary image URLs
+                if (lowerItem.includes('/image/upload/')) {
+                    return { type: 'image' as const, value: item, uri: item };
+                }
+                return { type: 'sticker' as const, value: item, uri: item };
+            }
+
+            // Handle object attachments
+            const typed = item as Attachment & { uri?: string; url?: string; src?: string; secure_url?: string };
+
+            // Get the URL from various possible properties
+            const attachmentUrl = typed.value || typed.uri || typed.url || typed.src || typed.secure_url || '';
+
+            // Determine type if not specified
+            let attachmentType = typed.type;
+            if (!attachmentType && attachmentUrl) {
+                const lowerUrl = attachmentUrl.toLowerCase();
+                if (lowerUrl.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || lowerUrl.includes('/image/upload/')) {
+                    attachmentType = 'image';
+                } else if (lowerUrl.match(/\.(mp3|wav|webm|m4a|ogg|aac)(\?|$)/i) || lowerUrl.includes('/video/upload/') || lowerUrl.includes('/raw/upload/')) {
+                    attachmentType = 'audio';
+                }
+            }
+
+            // Set uri appropriately
+            const uri = typed.uri || (attachmentType === 'emoji' ? twemojiUrl(typed.value) : attachmentUrl);
+
+            return { ...typed, type: attachmentType, value: attachmentUrl, uri };
+        })
+        .filter(Boolean) as Array<Attachment & { uri?: string }>;
+
+    return result;
 };
 
 const DirectMessagesScreen = () => {
@@ -187,7 +263,6 @@ const DirectMessagesScreen = () => {
     useEffect(() => {
         const loadSubgrids = async () => {
             if (!tenantId) return;
-            if (subgridId) return;
             try {
                 const response = await communityGet(`/tenants/${tenantId}/subgrids`);
                 const list = response?.data || [];
@@ -201,7 +276,12 @@ const DirectMessagesScreen = () => {
         };
 
         loadSubgrids();
-    }, [tenantId, subgridId]);
+    }, [tenantId]);
+
+    const activeSubgrid = useMemo(
+        () => subgrids.find((s) => s._id === subgridId) || null,
+        [subgrids, subgridId]
+    );
 
     const refreshFriendState = async (activeSubgridId: string) => {
         try {
@@ -739,7 +819,15 @@ const DirectMessagesScreen = () => {
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
                         <View style={styles.leftRail}>
                             <TouchableOpacity style={styles.railLogo} onPress={handleBack}>
-                                <MaterialIcons name="grid-view" size={20} color="#FFFFFF" />
+                                {activeSubgrid ? (
+                                    activeSubgrid.logoUrl ? (
+                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                                    ) : (
+                                        <Text style={styles.railLogoText}>
+                                            {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
+                                        </Text>
+                                    )
+                                ) : null}
                             </TouchableOpacity>
                             {railItems.map((item) => {
                                 const isActive = activeRail === item.id;
@@ -948,6 +1036,50 @@ const DirectMessagesScreen = () => {
                                         )}
                                         {sortedMessages.map((message) => {
                                             const isMe = message.senderId === userId;
+                                            const attachmentList = normalizeAttachments(message);
+
+                                            // Render call history entry (like WhatsApp)
+                                            if (message.callType || message.kind === 'call') {
+                                                const isOutgoing = message.isOutgoing || message.senderId === userId;
+                                                const isMissed = message.isMissed || message.callStatus === 'missed';
+                                                const isDeclined = message.isDeclined || message.callStatus === 'declined';
+                                                const callIcon = message.callType === 'video' ? 'videocam' : 'phone';
+                                                const arrowIcon = isOutgoing ? 'call-made' : 'call-received';
+                                                const arrowColor = isMissed || isDeclined ? '#EF4444' : '#22C55E';
+
+                                                let callLabel = message.callType === 'video' ? 'Video call' : 'Voice call';
+                                                if (isMissed) {
+                                                    callLabel = isOutgoing ? 'Cancelled' : 'Missed';
+                                                } else if (isDeclined) {
+                                                    callLabel = isOutgoing ? 'Not answered' : 'Declined';
+                                                }
+
+                                                return (
+                                                    <View key={message._id} style={styles.callHistoryItem}>
+                                                        <View style={[styles.callHistoryIcon, (isMissed || isDeclined) && styles.callHistoryIconMissed]}>
+                                                            <MaterialIcons name={callIcon} size={18} color={(isMissed || isDeclined) ? '#EF4444' : colors.primary} />
+                                                        </View>
+                                                        <View style={styles.callHistoryInfo}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                                <MaterialIcons name={arrowIcon} size={14} color={arrowColor} />
+                                                                <Text style={[styles.callHistoryType, (isMissed || isDeclined) && styles.callHistoryTypeMissed]}>
+                                                                    {callLabel}
+                                                                </Text>
+                                                            </View>
+                                                            <Text style={styles.callHistoryDuration}>
+                                                                {(isMissed || isDeclined) ? formatTimeOnly(message.createdAt) : formatCallDuration(message.callDuration)}
+                                                            </Text>
+                                                        </View>
+                                                        <TouchableOpacity
+                                                            style={styles.callHistoryAction}
+                                                            onPress={() => handleStartCall(message.callType === 'video' ? 'video' : 'audio')}
+                                                        >
+                                                            <MaterialIcons name={callIcon} size={20} color={colors.primary} />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                );
+                                            }
+
                                             return (
                                                 <View key={message._id} style={[styles.messageBubbleWrap, isMe && styles.messageBubbleWrapMe]}>
                                                     {!isMe && (
@@ -958,7 +1090,48 @@ const DirectMessagesScreen = () => {
                                                         />
                                                     )}
                                                     <View style={[styles.messageBubble, isMe && styles.messageBubbleMe]}>
-                                                        <Text style={[styles.messageText, isMe && styles.messageTextMe]}>{message.body}</Text>
+                                                        {!!message.body && <Text style={[styles.messageText, isMe && styles.messageTextMe]}>{message.body}</Text>}
+                                                        {attachmentList.map((attachment, idx) => {
+                                                            if (attachment.type === 'audio' || attachment.type === 'voice') {
+                                                                return (
+                                                                    <VoiceMessagePlayer
+                                                                        key={`${message._id}-audio-${idx}`}
+                                                                        source={attachment.value}
+                                                                        durationMs={attachment.durationMs}
+                                                                        colors={colors}
+                                                                        compact={false}
+                                                                    />
+                                                                );
+                                                            }
+                                                            if (attachment.type === 'image') {
+                                                                return (
+                                                                    <Image
+                                                                        key={`${message._id}-img-${idx}`}
+                                                                        source={{ uri: attachment.value }}
+                                                                        style={styles.msgAttachmentImage}
+                                                                        resizeMode="cover"
+                                                                    />
+                                                                );
+                                                            }
+                                                            if (attachment.type === 'emoji' || attachment.type === 'sticker') {
+                                                                return (
+                                                                    <Image
+                                                                        key={`${message._id}-sticker-${idx}`}
+                                                                        source={{ uri: attachment.uri }}
+                                                                        style={styles.msgStickerImage}
+                                                                    />
+                                                                );
+                                                            }
+                                                            if (attachment.type === 'file') {
+                                                                return (
+                                                                    <View key={`${message._id}-file-${idx}`} style={styles.msgFileBubble}>
+                                                                        <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                                                        <Text style={styles.msgFileText} numberOfLines={1}>{attachment.label || 'File'}</Text>
+                                                                    </View>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        })}
                                                         <Text style={[styles.messageTime, isMe && styles.messageTimeMe]}>
                                                             {formatMessageDate(message.createdAt)}
                                                         </Text>
@@ -1370,6 +1543,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             justifyContent: 'center',
             marginBottom: 8,
         },
+        railLogoImage: {
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+        },
+        railLogoText: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: '#FFFFFF',
+        },
         railButton: {
             width: 48,
             height: 48,
@@ -1713,6 +1896,80 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         messageTimeMe: {
             color: 'rgba(255,255,255,0.7)',
+        },
+        // Call history styles
+        callHistoryItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 12,
+            marginBottom: 12,
+            gap: 12,
+        },
+        callHistoryIcon: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        callHistoryIconMissed: {
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        },
+        callHistoryInfo: {
+            flex: 1,
+        },
+        callHistoryType: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        callHistoryTypeMissed: {
+            color: '#EF4444',
+        },
+        callHistoryDuration: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 2,
+        },
+        callHistoryAction: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        // Attachment styles for messages
+        msgAttachmentImage: {
+            width: 200,
+            height: 150,
+            borderRadius: 12,
+            marginTop: 8,
+        },
+        msgStickerImage: {
+            width: 80,
+            height: 80,
+            marginTop: 8,
+        },
+        msgFileBubble: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            backgroundColor: colors.surface,
+            borderRadius: 8,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            marginTop: 8,
+            alignSelf: 'flex-start',
+        },
+        msgFileText: {
+            fontSize: 13,
+            color: colors.text,
+            maxWidth: 150,
         },
         composer: {
             flexDirection: 'row',

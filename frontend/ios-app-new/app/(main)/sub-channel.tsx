@@ -11,16 +11,18 @@ import {
     Modal,
     Platform,
     Alert,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
-import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, uploadFile } from '../../lib/api';
+import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, uploadFile, StakeholderBadge } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 import { Attachment, EMOJI_SET, STICKER_SET, formatDuration, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
+import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
@@ -64,6 +66,16 @@ type Member = {
     email?: string;
     username?: string;
     avatarUrl?: string;
+    userRole?: string;
+    stakeholderBadge?: StakeholderBadge;
+};
+
+const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
+    stakeholder: '#3B82F6',
+    vendor: '#8B5CF6',
+    partner: '#10B981',
+    sponsor: '#F59E0B',
+    investor: '#EC4899',
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -118,6 +130,8 @@ const normalizeAttachments = (attachments?: Array<Attachment | string>) => {
         .filter(Boolean) as Array<Attachment & { uri?: string }>;
 };
 
+const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', 'Other'];
+
 const SubChannelScreen = () => {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
@@ -145,6 +159,13 @@ const SubChannelScreen = () => {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [recordingError, setRecordingError] = useState('');
     const [menuOpen, setMenuOpen] = useState<string | null>(null);
+    const [menuPosition, setMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+    const [menuItem, setMenuItem] = useState<any>(null);
+    const [reportModalOpen, setReportModalOpen] = useState(false);
+    const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
+    const [reportNotes, setReportNotes] = useState('');
+    const [reportTarget, setReportTarget] = useState<{ id: string; type: 'post' | 'message' } | null>(null);
+    const [reportSubmitting, setReportSubmitting] = useState(false);
     const [attachments, setAttachments] = useState<Array<{ type: 'image' | 'file'; uri: string; name?: string; mimeType?: string }>>([]);
     const [userRole, setUserRole] = useState<string | null>(null);
     const [likeLoading, setLikeLoading] = useState<string | null>(null);
@@ -282,6 +303,71 @@ const SubChannelScreen = () => {
         });
     }, [messages, posts]);
 
+    const openReportModal = (id: string, type: 'post' | 'message') => {
+        setReportTarget({ id, type });
+        setReportReason(REPORT_REASONS[0]);
+        setReportNotes('');
+        setReportModalOpen(true);
+    };
+
+    // Handle opening the action menu with proper position
+    const handleOpenMenu = (event: any, item: any) => {
+        if (menuOpen === item._id) {
+            setMenuOpen(null);
+            setMenuItem(null);
+            return;
+        }
+
+        // Get position from event target for web
+        const target = event.currentTarget || event.target;
+        if (target && target.getBoundingClientRect) {
+            const rect = target.getBoundingClientRect();
+            setMenuPosition({
+                top: rect.bottom + 5,
+                right: window.innerWidth - rect.right,
+            });
+        }
+        setMenuItem(item);
+        setMenuOpen(item._id);
+    };
+
+    // Close action menu
+    const closeMenu = () => {
+        setMenuOpen(null);
+        setMenuItem(null);
+    };
+
+    const submitReport = async () => {
+        if (!subgridId || !reportTarget) return;
+        const reason = reportReason === 'Other' ? reportNotes.trim() : reportReason;
+        if (!reason) {
+            if (Platform.OS === 'web') {
+                window.alert('Please select a report reason.');
+            } else {
+                Alert.alert('Missing reason', 'Please select a report reason.');
+            }
+            return;
+        }
+        setReportSubmitting(true);
+        try {
+            const path =
+                reportTarget.type === 'post'
+                    ? `/subgrids/${subgridId}/posts/${reportTarget.id}/flag`
+                    : `/subgrids/${subgridId}/messages/${reportTarget.id}/flag`;
+            await communityPost(path, { reason });
+            setReportModalOpen(false);
+            setReportTarget(null);
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to submit report.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to submit report.');
+            }
+        } finally {
+            setReportSubmitting(false);
+        }
+    };
+
     const memberMap = useMemo(() => {
         const map: Record<string, Member> = {};
         members.forEach((member) => {
@@ -304,10 +390,29 @@ const SubChannelScreen = () => {
         return labelFromId(id);
     };
 
+    const getUsername = (id?: string): string | null => {
+        if (!id) return null;
+        const member = memberMap[id];
+        return member?.username || null;
+    };
+
     const getAvatarUrl = (id?: string) => {
         if (!id) return null;
         const member = memberMap[id];
         return member?.avatarUrl || null;
+    };
+
+    const getStakeholderBadge = (id?: string): StakeholderBadge | null => {
+        if (!id) return null;
+        const member = memberMap[id];
+        if (member?.userRole === 'stakeholder' && member?.stakeholderBadge) {
+            return member.stakeholderBadge;
+        }
+        return null;
+    };
+
+    const formatStakeholderBadgeLabel = (badge: StakeholderBadge) => {
+        return badge.charAt(0).toUpperCase() + badge.slice(1);
     };
 
     const canDeleteItem = (item: any) => {
@@ -833,30 +938,29 @@ const SubChannelScreen = () => {
                                         style={styles.avatar}
                                     />
                                     <View style={styles.feedHeaderInfo}>
-                                        <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
-                                        <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
-                                    </View>
-                                    {showDelete && (
-                                        <View style={styles.menuContainer}>
-                                            <TouchableOpacity
-                                                style={styles.menuButton}
-                                                onPress={() => setMenuOpen(menuOpen === item._id ? null : item._id)}
-                                            >
-                                                <MoreHorizontal size={18} color={colors.textMuted} />
-                                            </TouchableOpacity>
-                                            {menuOpen === item._id && (
-                                                <View style={styles.menuDropdown}>
-                                                    <TouchableOpacity
-                                                        style={styles.menuItem}
-                                                        onPress={() => handleDeleteItem(item)}
-                                                    >
-                                                        <Trash2 size={14} color={colors.dangerText} />
-                                                        <Text style={styles.menuItemTextDanger}>Delete</Text>
-                                                    </TouchableOpacity>
+                                        <View style={styles.authorRow}>
+                                            <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
+                                            {getUsername(item.authorId || item.senderId) && (
+                                                <Text style={styles.feedUsername}>@{getUsername(item.authorId || item.senderId)}</Text>
+                                            )}
+                                            {getStakeholderBadge(item.authorId || item.senderId) && (
+                                                <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getStakeholderBadge(item.authorId || item.senderId)!] }]}>
+                                                    <Text style={styles.stakeholderBadgeText}>
+                                                        {formatStakeholderBadgeLabel(getStakeholderBadge(item.authorId || item.senderId)!)}
+                                                    </Text>
                                                 </View>
                                             )}
                                         </View>
-                                    )}
+                                        <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
+                                    </View>
+                                    <View style={styles.menuContainer}>
+                                        <TouchableOpacity
+                                            style={styles.menuButton}
+                                            onPress={(e) => handleOpenMenu(e, { ...item, isPost, showDelete })}
+                                        >
+                                            <MoreHorizontal size={18} color={colors.textMuted} />
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                                 {!!item.body && (
                                     <Text style={styles.feedText} numberOfLines={4}>
@@ -869,16 +973,13 @@ const SubChannelScreen = () => {
                                         {normalizeAttachments(item.attachments).map((attachment, idx) => {
                                             if (attachment.type === 'audio' || attachment.type === 'voice') {
                                                 return (
-                                                    <TouchableOpacity
+                                                    <VoiceMessagePlayer
                                                         key={`${item._id}-audio-${idx}`}
-                                                        style={styles.audioBubble}
-                                                        onPress={() => handlePlayAudio(attachment.value)}
-                                                    >
-                                                        <View style={styles.audioDot} />
-                                                        <Text style={styles.audioText}>
-                                                            Voice note {formatDuration(attachment.durationMs)}
-                                                        </Text>
-                                                    </TouchableOpacity>
+                                                        source={attachment.value}
+                                                        durationMs={attachment.durationMs}
+                                                        colors={colors}
+                                                        compact
+                                                    />
                                                 );
                                             }
                                             if (attachment.type === 'image' || attachment.type === 'emoji' || attachment.type === 'sticker') {
@@ -1035,6 +1136,59 @@ const SubChannelScreen = () => {
                 </View>
             </View>
 
+            <Modal visible={reportModalOpen} transparent animationType="fade" onRequestClose={() => setReportModalOpen(false)}>
+                <View style={styles.reportOverlay}>
+                    <TouchableOpacity style={styles.reportBackdrop} activeOpacity={1} onPress={() => setReportModalOpen(false)} />
+                    <View style={styles.reportCard}>
+                        <View style={styles.reportHeader}>
+                            <Text style={styles.reportTitle}>Report content</Text>
+                            <TouchableOpacity onPress={() => setReportModalOpen(false)}>
+                                <X size={16} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.reportSubtitle}>Select a reason for this report.</Text>
+                        <View style={styles.reportReasonGrid}>
+                            {REPORT_REASONS.map((reason) => (
+                                <TouchableOpacity
+                                    key={reason}
+                                    style={[styles.reportReasonChip, reportReason === reason && styles.reportReasonChipActive]}
+                                    onPress={() => setReportReason(reason)}
+                                >
+                                    <Text style={[styles.reportReasonText, reportReason === reason && styles.reportReasonTextActive]}>
+                                        {reason}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        {reportReason === 'Other' && (
+                            <View style={styles.reportNotesWrap}>
+                                <Text style={styles.reportNotesLabel}>Reason details</Text>
+                                <TextInput
+                                    style={styles.reportNotesInput}
+                                    value={reportNotes}
+                                    onChangeText={setReportNotes}
+                                    placeholder="Share more details..."
+                                    placeholderTextColor={colors.textMuted}
+                                    multiline
+                                />
+                            </View>
+                        )}
+                        <View style={styles.reportActions}>
+                            <TouchableOpacity style={styles.reportCancelBtn} onPress={() => setReportModalOpen(false)}>
+                                <Text style={styles.reportCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.reportSubmitBtn, reportSubmitting && styles.reportSubmitBtnDisabled]}
+                                onPress={submitReport}
+                                disabled={reportSubmitting}
+                            >
+                                <Text style={styles.reportSubmitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
             <Modal visible={emojiOpen} transparent={true} animationType="fade" onRequestClose={() => setEmojiOpen(false)}>
                 <View style={styles.modalOverlay}>
                     <TouchableOpacity
@@ -1107,6 +1261,41 @@ const SubChannelScreen = () => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Floating Action Menu */}
+            {menuOpen && menuItem && (
+                <>
+                    <Pressable
+                        style={styles.floatingMenuOverlay}
+                        onPress={closeMenu}
+                    />
+                    <View style={[styles.floatingMenuDropdown, { top: menuPosition.top, right: menuPosition.right }]}>
+                        <TouchableOpacity
+                            style={styles.floatingMenuItem}
+                            onPress={() => {
+                                const isPost = menuItem.isPost;
+                                openReportModal(menuItem._id, isPost ? 'post' : 'message');
+                                closeMenu();
+                            }}
+                        >
+                            <MaterialIcons name="flag" size={16} color={colors.textMuted} />
+                            <Text style={styles.floatingMenuItemText}>Report</Text>
+                        </TouchableOpacity>
+                        {menuItem.showDelete && (
+                            <TouchableOpacity
+                                style={styles.floatingMenuItem}
+                                onPress={() => {
+                                    handleDeleteItem(menuItem);
+                                    closeMenu();
+                                }}
+                            >
+                                <Trash2 size={16} color={colors.dangerText} />
+                                <Text style={styles.floatingMenuItemTextDanger}>Delete</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </>
+            )}
         </SafeAreaView>
     );
 };
@@ -1230,8 +1419,52 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             paddingVertical: 10,
             paddingHorizontal: 12,
         },
+        menuItemText: {
+            fontSize: 13,
+            color: colors.text,
+        },
         menuItemTextDanger: {
             fontSize: 13,
+            color: colors.dangerText,
+        },
+        // Floating menu styles (renders outside of feed items)
+        floatingMenuOverlay: {
+            position: 'fixed' as any,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9998,
+            backgroundColor: 'transparent',
+        },
+        floatingMenuDropdown: {
+            position: 'fixed' as any,
+            backgroundColor: colors.surface,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 12,
+            elevation: 20,
+            zIndex: 9999,
+            minWidth: 140,
+            paddingVertical: 6,
+        },
+        floatingMenuItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+        },
+        floatingMenuItemText: {
+            fontSize: 14,
+            color: colors.text,
+        },
+        floatingMenuItemTextDanger: {
+            fontSize: 14,
             color: colors.dangerText,
         },
         avatar: {
@@ -1239,10 +1472,31 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             height: 40,
             borderRadius: 20,
         },
+        authorRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            flexWrap: 'wrap',
+        },
         feedAuthor: {
             fontSize: 13,
             fontWeight: '600',
             color: colors.text,
+        },
+        feedUsername: {
+            fontSize: 12,
+            color: colors.textMuted,
+            fontWeight: '400',
+        },
+        stakeholderBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 8,
+        },
+        stakeholderBadgeText: {
+            fontSize: 9,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         feedMeta: {
             fontSize: 11,
@@ -1508,6 +1762,117 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 13,
             color: colors.dangerText,
             fontWeight: '500',
+        },
+        reportOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+        },
+        reportBackdrop: {
+            ...StyleSheet.absoluteFillObject,
+        },
+        reportCard: {
+            width: '100%',
+            maxWidth: 420,
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            padding: 20,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        reportHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 8,
+        },
+        reportTitle: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        reportSubtitle: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginBottom: 14,
+        },
+        reportReasonGrid: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        reportReasonChip: {
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+        },
+        reportReasonChipActive: {
+            backgroundColor: '#111111',
+            borderColor: '#111111',
+        },
+        reportReasonText: {
+            fontSize: 12,
+            color: colors.text,
+        },
+        reportReasonTextActive: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        reportNotesWrap: {
+            marginTop: 16,
+        },
+        reportNotesLabel: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.textMuted,
+            marginBottom: 6,
+        },
+        reportNotesInput: {
+            minHeight: 80,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 10,
+            padding: 12,
+            color: colors.text,
+            backgroundColor: colors.surfaceMuted,
+            textAlignVertical: 'top',
+        },
+        reportActions: {
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            gap: 12,
+            marginTop: 18,
+        },
+        reportCancelBtn: {
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 18,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        reportCancelText: {
+            fontSize: 12,
+            color: colors.text,
+        },
+        reportSubmitBtn: {
+            paddingVertical: 10,
+            paddingHorizontal: 18,
+            borderRadius: 18,
+            backgroundColor: '#111111',
+        },
+        reportSubmitBtnDisabled: {
+            opacity: 0.6,
+        },
+        reportSubmitText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         modalOverlay: {
             flex: 1,

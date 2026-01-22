@@ -304,10 +304,14 @@ const declineCall = async (callId, userId) => {
         return { success: false, error: 'call_not_found' };
     }
 
+    // Get caller ID before declining (for notification)
+    const callerParticipant = call.participants.find(p => p.role === 'caller');
+    const callerId = callerParticipant?.odId?.toString();
+
     await call.decline(userId);
 
-    // Notify caller
-    callSignaling.notifyCallDeclined(callId, userId);
+    // Notify caller - pass callerId in case pending call is not in memory
+    callSignaling.notifyCallDeclined(callId, userId, callerId);
 
     return { success: true, callId, status: call.status };
 };
@@ -356,7 +360,7 @@ const getCall = async (callId, populateUsers = true) => {
     if (populateUsers) {
         const userIds = call.participants.map(p => p.userId);
         const users = await User.find({ _id: { $in: userIds } })
-            .select('firstName lastName email avatarUrl');
+            .select('firstName lastName email username avatarUrl');
 
         const userMap = new Map(users.map(u => [u._id.toString(), u]));
 
@@ -373,6 +377,7 @@ const getCall = async (callId, populateUsers = true) => {
                     firstName: user.firstName,
                     lastName: user.lastName,
                     email: user.email,
+                    username: user.username,
                     avatarUrl: user.avatarUrl,
                     displayName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
                 } : null,

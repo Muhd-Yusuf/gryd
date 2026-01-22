@@ -222,8 +222,9 @@ class CallSignalingService extends EventEmitter {
      * Notify caller that call was declined
      * @param {string} callId - Call ID
      * @param {string} calleeId - Callee user ID
+     * @param {string} callerId - Caller user ID (optional, used when pendingCall not in memory)
      */
-    notifyCallDeclined(callId, calleeId) {
+    notifyCallDeclined(callId, calleeId, callerId = null) {
         const pendingCall = this.pendingCalls.get(callId);
         if (pendingCall) {
             clearTimeout(pendingCall.timeout);
@@ -231,6 +232,14 @@ class CallSignalingService extends EventEmitter {
 
             // Notify caller
             this.sendToUser(pendingCall.callerId, 'call_declined', {
+                callId,
+                calleeId,
+                timestamp: Date.now(),
+            });
+        } else if (callerId) {
+            // Pending call not in memory (server restart, timeout, etc.)
+            // Use the provided callerId to notify
+            this.sendToUser(callerId, 'call_declined', {
                 callId,
                 calleeId,
                 timestamp: Date.now(),

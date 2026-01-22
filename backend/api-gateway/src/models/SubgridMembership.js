@@ -21,7 +21,7 @@ const subgridMembershipSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['subgrid_admin', 'moderator', 'member'],
+        enum: ['subgrid_admin', 'moderator', 'member', 'stakeholder'],
         default: 'member',
     },
     status: {

@@ -13,6 +13,8 @@ const {
     updateConfiguration,
     getUsers,
     inviteUser,
+    getTeamMembers,
+    inviteTeamMember,
 } = require('../controllers/superAdminController');
 const { attachUserContext, requireUser } = require('../middleware/authMiddleware');
 
@@ -49,8 +51,12 @@ router.get('/moderation', getModerationQueue);
 router.get('/config', getConfiguration);
 router.patch('/config', updateConfiguration);
 
-// Users
+// Users (all users)
 router.get('/users', getUsers);
 router.post('/users/invite', inviteUser);
+
+// Team Members (admin and super_admin users who help manage the platform)
+router.get('/team', getTeamMembers);
+router.post('/team/invite', inviteTeamMember);
 
 module.exports = router;

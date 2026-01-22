@@ -33,8 +33,14 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['member', 'admin', 'super_admin'],
+        enum: ['member', 'stakeholder', 'admin', 'super_admin'],
         default: 'member',
+    },
+    // Badge type for stakeholders (vendor, stakeholder, partner, etc.)
+    stakeholderBadge: {
+        type: String,
+        enum: ['stakeholder', 'vendor', 'partner', 'sponsor', 'investor'],
+        default: null,
     },
     avatarUrl: {
         type: String,
@@ -56,6 +62,15 @@ const userSchema = new mongoose.Schema({
     defaultTenantId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Tenant',
+        default: null,
+    },
+    // Setup token for new customer account activation
+    setupToken: {
+        type: String,
+        default: null,
+    },
+    setupTokenExpires: {
+        type: Date,
         default: null,
     },
     createdAt: {

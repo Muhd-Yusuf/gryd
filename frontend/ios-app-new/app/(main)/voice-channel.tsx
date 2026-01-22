@@ -25,7 +25,9 @@ import UserAvatar from '../../components/UserAvatar';
 // Type for participant details fetched from the call API
 interface ParticipantDetails {
     agoraUid: number;
+    userId: string;
     displayName: string;
+    username: string | null;
     avatarUrl: string | null;
 }
 
@@ -48,12 +50,19 @@ const VoiceChannelScreen = () => {
     const token = normalizeParam(params.token);
     const uid = parseInt(normalizeParam(params.uid) || '0', 10);
     const appId = normalizeParam(params.appId);
+    // Peer info passed from navigation (for DM calls)
+    const peerName = normalizeParam(params.peerName);
+    const peerAvatar = normalizeParam(params.peerAvatar);
 
     const isWeb = Platform.OS === 'web';
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [currentUserName, setCurrentUserName] = useState('You');
+    const [currentUserUsername, setCurrentUserUsername] = useState<string | null>(null);
     const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
     // Map of agoraUid -> participant details for remote users
     const [participantMap, setParticipantMap] = useState<Map<number, ParticipantDetails>>(new Map());
+    // Store all participants from API for fallback lookup
+    const [allParticipants, setAllParticipants] = useState<ParticipantDetails[]>([]);
 
     // Fetch current user details
     useEffect(() => {
@@ -61,8 +70,10 @@ const VoiceChannelScreen = () => {
         getAuthUser()
             .then((user) => {
                 if (!isActive || !user) return;
+                setCurrentUserId(user.userId);
                 const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
                 setCurrentUserName(name || user.email || 'You');
+                setCurrentUserUsername(user.username || null);
                 setCurrentUserAvatar(user.avatarUrl || null);
             })
             .catch(() => {});
@@ -84,19 +95,30 @@ const VoiceChannelScreen = () => {
 
                 const participants = response?.data?.participants || [];
                 const newMap = new Map<number, ParticipantDetails>();
+                const allParts: ParticipantDetails[] = [];
 
                 participants.forEach((p: any) => {
-                    if (p.agoraUid && p.userDetails) {
-                        newMap.set(p.agoraUid, {
-                            agoraUid: p.agoraUid,
-                            displayName: p.userDetails.displayName || `User ${p.agoraUid}`,
+                    if (p.userDetails) {
+                        const detail: ParticipantDetails = {
+                            agoraUid: p.agoraUid || 0,
+                            userId: p.userId?.toString() || '',
+                            displayName: p.userDetails.displayName || `User ${p.agoraUid || 'Unknown'}`,
+                            username: p.userDetails.username || null,
                             avatarUrl: p.userDetails.avatarUrl || null,
-                        });
+                        };
+                        allParts.push(detail);
+
+                        // Only add to map if we have a valid agoraUid
+                        if (p.agoraUid) {
+                            newMap.set(p.agoraUid, detail);
+                        }
                     }
                 });
 
-                console.log('[VoiceChannel] Participant map updated:', newMap.size, 'participants');
+                console.log('[VoiceChannel] Participant map updated:', newMap.size, 'participants, allParts:', allParts.length);
+                console.log('[VoiceChannel] All participants:', JSON.stringify(allParts));
                 setParticipantMap(newMap);
+                setAllParticipants(allParts);
             } catch (err) {
                 console.error('[VoiceChannel] Failed to fetch call participants:', err);
             }
@@ -201,7 +223,12 @@ const VoiceChannelScreen = () => {
                             name={currentUserName}
                             style={styles.participantAvatar}
                         />
-                        <Text style={styles.participantName}>{currentUserName}</Text>
+                        <View style={styles.participantInfo}>
+                            <Text style={styles.participantName}>{currentUserName}</Text>
+                            {currentUserUsername && (
+                                <Text style={styles.participantUsername}>@{currentUserUsername}</Text>
+                            )}
+                        </View>
                         {isMuted ? (
                             <MicOff size={16} color={colors.error} />
                         ) : (
@@ -210,19 +237,50 @@ const VoiceChannelScreen = () => {
                     </View>
 
                     {/* Remote Users */}
-                    {remoteUsers.map((agoraUid) => {
-                        const participant = participantMap.get(agoraUid);
-                        const displayName = participant?.displayName || `User ${agoraUid}`;
-                        const avatarUrl = participant?.avatarUrl || null;
+                    {remoteUsers.map((agoraUid, index) => {
+                        // Strategy 1: Direct lookup by agoraUid in the map
+                        let participant = participantMap.get(agoraUid);
+                        let remoteDisplayName = participant?.displayName;
+                        let remoteUsername = participant?.username || null;
+                        let remoteAvatarUrl = participant?.avatarUrl || null;
+
+                        // Strategy 2: For DM calls, find the "other" participant (not current user)
+                        if (!remoteDisplayName && currentUserId && allParticipants.length > 0) {
+                            const otherParticipant = allParticipants.find(p => p.userId !== currentUserId);
+                            if (otherParticipant) {
+                                remoteDisplayName = otherParticipant.displayName;
+                                remoteUsername = otherParticipant.username;
+                                remoteAvatarUrl = otherParticipant.avatarUrl;
+                                console.log('[VoiceChannel] Using other participant fallback:', remoteDisplayName);
+                            }
+                        }
+
+                        // Strategy 3: Use peer info from navigation params (for DM calls)
+                        if (!remoteDisplayName && peerName) {
+                            remoteDisplayName = peerName;
+                            remoteAvatarUrl = peerAvatar || null;
+                            console.log('[VoiceChannel] Using peerName param fallback:', remoteDisplayName);
+                        }
+
+                        // Final fallback with agoraUid
+                        if (!remoteDisplayName) {
+                            remoteDisplayName = `User ${agoraUid}`;
+                            console.log('[VoiceChannel] Using UID fallback for agoraUid:', agoraUid, 'participantMap keys:', Array.from(participantMap.keys()));
+                        }
 
                         return (
                             <View key={agoraUid} style={styles.participantRow}>
                                 <UserAvatar
-                                    uri={avatarUrl}
-                                    name={displayName}
+                                    uri={remoteAvatarUrl}
+                                    name={remoteDisplayName}
                                     style={styles.participantAvatar}
                                 />
-                                <Text style={styles.participantName}>{displayName}</Text>
+                                <View style={styles.participantInfo}>
+                                    <Text style={styles.participantName}>{remoteDisplayName}</Text>
+                                    {remoteUsername && (
+                                        <Text style={styles.participantUsername}>@{remoteUsername}</Text>
+                                    )}
+                                </View>
                                 <Mic size={16} color={colors.success} />
                             </View>
                         );
@@ -334,10 +392,17 @@ const createStyles = (colors: any) =>
             borderRadius: 20,
             backgroundColor: colors.border,
         },
-        participantName: {
+        participantInfo: {
             flex: 1,
+        },
+        participantName: {
             fontSize: 16,
             color: colors.text,
+        },
+        participantUsername: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 2,
         },
         errorContainer: {
             backgroundColor: colors.error + '20',
