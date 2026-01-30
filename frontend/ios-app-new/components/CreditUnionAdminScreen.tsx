@@ -2352,8 +2352,8 @@ const CreditUnionAdminScreen = () => {
                                     </View>
                                 )}
                                 {feedItems.map((item: any) => {
-                                    // Posts have likeCount/commentCount fields; Messages have 'kind' field
-                                    const isPost = item.likeCount !== undefined || item.commentCount !== undefined;
+                                    // Messages have 'kind' field (text, emoji, sticker, audio), posts don't
+                                    const isPost = !item.kind;
                                     const authorId = item.authorId || item.senderId;
                                     const authorName = getAuthorName(authorId, members);
                                     const authorMember = members.find((member) =>

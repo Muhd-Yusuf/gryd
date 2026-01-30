@@ -1352,8 +1352,8 @@ const TenantCommunityScreen = () => {
                                     <Text style={styles.emptyText}>No channel updates yet.</Text>
                                 )}
                                 {feedItems.map((item: any) => {
-                                    // Posts have likeCount/reshareCount/commentCount fields, messages don't
-                                    const isPost = item.likeCount !== undefined || item.reshareCount !== undefined || item.commentCount !== undefined;
+                                    // Messages have 'kind' field (text, emoji, sticker, audio), posts don't
+                                    const isPost = !item.kind;
                                     const likeCount = item.likeCount ?? 0;
                                     const commentCount = item.commentCount ?? 0;
                                     const reshareCount = item.reshareCount ?? 0;
