@@ -464,7 +464,10 @@ The GRYD Team
  */
 const sendStakeholderInviteEmail = async ({ email, inviteToken, subgridId, subgridName, inviterName, stakeholderBadge }) => {
     const baseUrl = process.env.PUBLIC_APP_URL || 'http://localhost:8081';
+    console.log('[sendStakeholderInviteEmail] PUBLIC_APP_URL from env:', process.env.PUBLIC_APP_URL);
+    console.log('[sendStakeholderInviteEmail] Using baseUrl:', baseUrl);
     const inviteUrl = `${baseUrl}/stakeholder-signup?token=${inviteToken}&subgrid=${subgridId}`;
+    console.log('[sendStakeholderInviteEmail] Final inviteUrl:', inviteUrl);
 
     const badgeLabel = stakeholderBadge ? stakeholderBadge.charAt(0).toUpperCase() + stakeholderBadge.slice(1) : 'Stakeholder';
 
