@@ -291,7 +291,8 @@ const CreditUnionAdminScreen = () => {
     const [privacySettingsModalOpen, setPrivacySettingsModalOpen] = useState(false);
     const [editChannelModalOpen, setEditChannelModalOpen] = useState(false);
     const [channelPermissionModalOpen, setChannelPermissionModalOpen] = useState(false);
-    const [channelMenuOpen, setChannelMenuOpen] = useState<string | null>(null);
+    const [channelSettingsModalOpen, setChannelSettingsModalOpen] = useState(false);
+    const [selectedSettingsChannel, setSelectedSettingsChannel] = useState<Channel | null>(null);
 
     // Success & Confirmation Modal States
     const [successModalOpen, setSuccessModalOpen] = useState(false);
@@ -931,7 +932,12 @@ const CreditUnionAdminScreen = () => {
         setEditChannelType(channel.type === 'voice' ? 'voice' : 'text');
         setEditChannelPrivate(channel.visibility === 'admin');
         setEditChannelModalOpen(true);
-        setChannelMenuOpen(null);
+        setChannelSettingsModalOpen(false);
+    };
+
+    const openChannelSettingsModal = (channel: Channel) => {
+        setSelectedSettingsChannel(channel);
+        setChannelSettingsModalOpen(true);
     };
 
     const handleUpdateChannel = async () => {
@@ -968,7 +974,7 @@ const CreditUnionAdminScreen = () => {
             serverOwner: true,
         });
         setChannelPermissionModalOpen(true);
-        setChannelMenuOpen(null);
+        setChannelSettingsModalOpen(false);
     };
 
     const handleSaveChannelPermissions = async () => {
@@ -2091,7 +2097,6 @@ const CreditUnionAdminScreen = () => {
                                         style={[styles.channelItem, isActive && styles.channelItemActive]}
                                         onPress={() => {
                                             setActiveChannelId(channel._id);
-                                            setChannelMenuOpen(null);
                                         }}
                                     >
                                         <MaterialIcons name="tag" size={16} color={isActive ? colors.text : colors.textMuted} />
@@ -2108,45 +2113,15 @@ const CreditUnionAdminScreen = () => {
                                                 >
                                                     <MaterialIcons name="person-add" size={14} color={colors.textMuted} />
                                                 </TouchableOpacity>
-                                                <View style={styles.channelMenuWrap}>
-                                                    <TouchableOpacity
-                                                        onPress={(e) => {
-                                                            e.stopPropagation();
-                                                            setChannelMenuOpen(channelMenuOpen === channel._id ? null : channel._id);
-                                                        }}
-                                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                    >
-                                                        <MaterialIcons name="settings" size={14} color={colors.textMuted} />
-                                                    </TouchableOpacity>
-                                                    {channelMenuOpen === channel._id && (
-                                                        <Pressable
-                                                            style={styles.channelMenuDropdown}
-                                                            onPress={(e) => e.stopPropagation()}
-                                                        >
-                                                            <Pressable
-                                                                style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
-                                                                onPress={() => { openEditChannelModal(channel); }}
-                                                            >
-                                                                <Text style={[styles.channelMenuText, { flex: 1 }]} numberOfLines={1}>Rename Channel</Text>
-                                                                <MaterialIcons name="edit" size={16} color="#9ca3af" />
-                                                            </Pressable>
-                                                            <Pressable
-                                                                style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
-                                                                onPress={() => { handleDeleteChannel(channel._id, channel.name); }}
-                                                            >
-                                                                <Text style={[styles.channelMenuTextDanger, { flex: 1 }]} numberOfLines={1}>Delete Channel</Text>
-                                                                <MaterialIcons name="delete" size={16} color="#EF4444" />
-                                                            </Pressable>
-                                                            <Pressable
-                                                                style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
-                                                                onPress={() => { openChannelPermissionModal(channel); }}
-                                                            >
-                                                                <Text style={[styles.channelMenuText, { flex: 1 }]} numberOfLines={1}>Channel Permission</Text>
-                                                                <MaterialIcons name="settings" size={16} color="#9ca3af" />
-                                                            </Pressable>
-                                                        </Pressable>
-                                                    )}
-                                                </View>
+                                                <TouchableOpacity
+                                                    onPress={(e) => {
+                                                        e.stopPropagation();
+                                                        openChannelSettingsModal(channel);
+                                                    }}
+                                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                >
+                                                    <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                                </TouchableOpacity>
                                             </View>
                                         )}
                                     </TouchableOpacity>
@@ -2184,7 +2159,6 @@ const CreditUnionAdminScreen = () => {
                                     key={channel._id}
                                     style={styles.channelItem}
                                     onPress={() => {
-                                        setChannelMenuOpen(null);
                                         handleVoiceChannelClick(channel);
                                     }}
                                 >
@@ -2195,45 +2169,15 @@ const CreditUnionAdminScreen = () => {
                                         </Text>
                                     </View>
                                     <View style={styles.channelActions}>
-                                        <View style={styles.channelMenuWrap}>
-                                            <TouchableOpacity
-                                                onPress={(e) => {
-                                                    e.stopPropagation();
-                                                    setChannelMenuOpen(channelMenuOpen === channel._id ? null : channel._id);
-                                                }}
-                                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                            >
-                                                <MaterialIcons name="settings" size={14} color={colors.textMuted} />
-                                            </TouchableOpacity>
-                                            {channelMenuOpen === channel._id && (
-                                                <Pressable
-                                                    style={styles.channelMenuDropdown}
-                                                    onPress={(e) => e.stopPropagation()}
-                                                >
-                                                    <Pressable
-                                                        style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
-                                                        onPress={() => { openEditChannelModal(channel); }}
-                                                    >
-                                                        <Text style={[styles.channelMenuText, { flex: 1 }]} numberOfLines={1}>Rename Channel</Text>
-                                                        <MaterialIcons name="edit" size={16} color="#9ca3af" />
-                                                    </Pressable>
-                                                    <Pressable
-                                                        style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
-                                                        onPress={() => { handleDeleteChannel(channel._id, channel.name); }}
-                                                    >
-                                                        <Text style={[styles.channelMenuTextDanger, { flex: 1 }]} numberOfLines={1}>Delete Channel</Text>
-                                                        <MaterialIcons name="delete" size={16} color="#EF4444" />
-                                                    </Pressable>
-                                                    <Pressable
-                                                        style={({ pressed }) => [styles.channelMenuItem, pressed && styles.channelMenuItemPressed]}
-                                                        onPress={() => { openChannelPermissionModal(channel); }}
-                                                    >
-                                                        <Text style={[styles.channelMenuText, { flex: 1 }]} numberOfLines={1}>Channel Permission</Text>
-                                                        <MaterialIcons name="settings" size={16} color="#9ca3af" />
-                                                    </Pressable>
-                                                </Pressable>
-                                            )}
-                                        </View>
+                                        <TouchableOpacity
+                                            onPress={(e) => {
+                                                e.stopPropagation();
+                                                openChannelSettingsModal(channel);
+                                            }}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                        >
+                                            <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                        </TouchableOpacity>
                                     </View>
                                 </TouchableOpacity>
                             ))}
@@ -2312,7 +2256,6 @@ const CreditUnionAdminScreen = () => {
                     style={styles.mainContent}
                     onPress={() => {
                         if (serverMenuOpen) setServerMenuOpen(false);
-                        if (channelMenuOpen) setChannelMenuOpen(null);
                     }}
                 >
                     {/* Channel Header */}
@@ -2812,6 +2755,59 @@ const CreditUnionAdminScreen = () => {
                         </View>
                     </View>
                 </View>
+            </Modal>
+
+            {/* Channel Settings Modal */}
+            <Modal visible={channelSettingsModalOpen} transparent animationType="fade">
+                <Pressable
+                    style={styles.channelSettingsOverlay}
+                    onPress={() => setChannelSettingsModalOpen(false)}
+                >
+                    <Pressable
+                        style={styles.channelSettingsModal}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <Text style={styles.channelSettingsTitle}>
+                            {selectedSettingsChannel?.name || 'Channel'} Settings
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.channelSettingsItem}
+                            onPress={() => {
+                                if (selectedSettingsChannel) openEditChannelModal(selectedSettingsChannel);
+                            }}
+                        >
+                            <MaterialIcons name="edit" size={18} color={colors.text} />
+                            <Text style={styles.channelSettingsText}>Rename Channel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.channelSettingsItem}
+                            onPress={() => {
+                                if (selectedSettingsChannel) {
+                                    setChannelSettingsModalOpen(false);
+                                    handleDeleteChannel(selectedSettingsChannel._id, selectedSettingsChannel.name);
+                                }
+                            }}
+                        >
+                            <MaterialIcons name="delete" size={18} color="#EF4444" />
+                            <Text style={[styles.channelSettingsText, { color: '#EF4444' }]}>Delete Channel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.channelSettingsItem}
+                            onPress={() => {
+                                if (selectedSettingsChannel) openChannelPermissionModal(selectedSettingsChannel);
+                            }}
+                        >
+                            <MaterialIcons name="settings" size={18} color={colors.text} />
+                            <Text style={styles.channelSettingsText}>Channel Permission</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.channelSettingsItem, styles.channelSettingsCancel]}
+                            onPress={() => setChannelSettingsModalOpen(false)}
+                        >
+                            <Text style={styles.channelSettingsCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </Pressable>
+                </Pressable>
             </Modal>
 
             {/* Channel Permission Modal */}
@@ -5217,6 +5213,57 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: '#EF4444',
             fontWeight: '500',
         },
+        channelSettingsOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        channelSettingsModal: {
+            backgroundColor: colors.cardBg,
+            borderRadius: 12,
+            padding: 8,
+            minWidth: 220,
+            maxWidth: 280,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.25,
+            shadowRadius: 8,
+            elevation: 10,
+        },
+        channelSettingsTitle: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            marginBottom: 4,
+        },
+        channelSettingsItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 12,
+            borderRadius: 6,
+        },
+        channelSettingsText: {
+            fontSize: 14,
+            color: colors.text,
+        },
+        channelSettingsCancel: {
+            justifyContent: 'center',
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            marginTop: 4,
+        },
+        channelSettingsCancelText: {
+            fontSize: 14,
+            color: colors.textMuted,
+            textAlign: 'center',
+        },
         emptyText: {
             fontSize: 12,
             color: colors.textSubtle,
@@ -5792,6 +5839,57 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             elevation: 8,
             zIndex: 1000,
             minWidth: 160,
+        },
+        channelSettingsOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        channelSettingsModal: {
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 8,
+            minWidth: 220,
+            maxWidth: 280,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.25,
+            shadowRadius: 8,
+            elevation: 10,
+        },
+        channelSettingsTitle: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: '#E5E7EB',
+            marginBottom: 4,
+        },
+        channelSettingsItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 12,
+            borderRadius: 6,
+        },
+        channelSettingsText: {
+            fontSize: 14,
+            color: colors.text,
+        },
+        channelSettingsCancel: {
+            justifyContent: 'center',
+            borderTopWidth: 1,
+            borderTopColor: '#E5E7EB',
+            marginTop: 4,
+        },
+        channelSettingsCancelText: {
+            fontSize: 14,
+            color: colors.textMuted,
+            textAlign: 'center',
         },
         memberOnline: {
             position: 'absolute',
