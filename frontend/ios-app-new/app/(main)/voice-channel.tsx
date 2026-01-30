@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Mic, MicOff, PhoneOff, Users, Volume2 } from 'lucide-react-native';
 import { useTheme } from '../../lib/theme';
-import { getAuthUser, getCallDetails } from '../../lib/api';
+import { getAuthUser, getCallDetails, communityGet, joinVoiceChannel, leaveVoiceChannel, getVoiceChannelParticipants } from '../../lib/api';
 import useAgoraCall from '../../hooks/useAgoraCall';
 import useAgoraCallWeb from '../../hooks/useAgoraCallWeb';
 import UserAvatar from '../../components/UserAvatar';
@@ -29,7 +29,19 @@ interface ParticipantDetails {
     displayName: string;
     username: string | null;
     avatarUrl: string | null;
+    memberRole?: string;
+    stakeholderBadge?: string | null;
+    company?: string | null;
 }
+
+// Stakeholder badge colors
+const STAKEHOLDER_BADGE_COLORS: Record<string, string> = {
+    stakeholder: '#3B82F6',
+    vendor: '#8B5CF6',
+    partner: '#10B981',
+    sponsor: '#F59E0B',
+    investor: '#EC4899',
+};
 
 const normalizeParam = (value?: string | string[]) => {
     if (Array.isArray(value)) return value[0] || '';
@@ -63,6 +75,8 @@ const VoiceChannelScreen = () => {
     const [participantMap, setParticipantMap] = useState<Map<number, ParticipantDetails>>(new Map());
     // Store all participants from API for fallback lookup
     const [allParticipants, setAllParticipants] = useState<ParticipantDetails[]>([]);
+    // Store subgrid members for voice channel calls (no callId)
+    const [subgridMembers, setSubgridMembers] = useState<any[]>([]);
 
     // Fetch current user details
     useEffect(() => {
@@ -105,6 +119,9 @@ const VoiceChannelScreen = () => {
                             displayName: p.userDetails.displayName || `User ${p.agoraUid || 'Unknown'}`,
                             username: p.userDetails.username || null,
                             avatarUrl: p.userDetails.avatarUrl || null,
+                            memberRole: p.userDetails.memberRole || 'member',
+                            stakeholderBadge: p.userDetails.stakeholderBadge || null,
+                            company: p.userDetails.company || null,
                         };
                         allParts.push(detail);
 
@@ -134,6 +151,105 @@ const VoiceChannelScreen = () => {
             clearInterval(interval);
         };
     }, [callId]);
+
+    // Fetch subgrid members for voice channel calls (when no callId)
+    useEffect(() => {
+        if (!subgridId) return;
+
+        let isActive = true;
+        const fetchMembers = async () => {
+            try {
+                console.log('[VoiceChannel] Fetching subgrid members for:', subgridId);
+                const response = await communityGet(`/subgrids/${subgridId}/members`);
+                if (!isActive) return;
+
+                const members = response?.data || [];
+                console.log('[VoiceChannel] Fetched', members.length, 'members from subgrid');
+                setSubgridMembers(members);
+            } catch (err) {
+                console.error('[VoiceChannel] Failed to fetch subgrid members:', err);
+            }
+        };
+
+        fetchMembers();
+
+        return () => {
+            isActive = false;
+        };
+    }, [subgridId]);
+
+    // Join voice channel when connected and fetch participants
+    useEffect(() => {
+        if (callState !== 'connected' || !channelId || !uid) return;
+
+        let isActive = true;
+
+        // Register ourselves in the voice channel
+        const registerAndFetch = async () => {
+            try {
+                console.log('[VoiceChannel] Registering in voice channel:', channelId, 'uid:', uid);
+                await joinVoiceChannel(channelId, subgridId, uid);
+            } catch (err) {
+                console.error('[VoiceChannel] Failed to join voice channel tracking:', err);
+            }
+
+            // Fetch participants
+            fetchVoiceChannelParticipants();
+        };
+
+        const fetchVoiceChannelParticipants = async () => {
+            if (!isActive) return;
+            try {
+                console.log('[VoiceChannel] Fetching voice channel participants for:', channelId);
+                const response = await getVoiceChannelParticipants(channelId, subgridId);
+                if (!isActive) return;
+
+                const participants = response?.data?.participants || [];
+                const newMap = new Map<number, ParticipantDetails>();
+                const allParts: ParticipantDetails[] = [];
+
+                participants.forEach((p: any) => {
+                    if (p.userDetails) {
+                        const detail: ParticipantDetails = {
+                            agoraUid: p.agoraUid || 0,
+                            userId: p.userId?.toString() || '',
+                            displayName: p.userDetails.displayName || `User ${p.agoraUid || 'Unknown'}`,
+                            username: p.userDetails.username || null,
+                            avatarUrl: p.userDetails.avatarUrl || null,
+                            memberRole: p.userDetails.memberRole || 'member',
+                            stakeholderBadge: p.userDetails.stakeholderBadge || null,
+                            company: p.userDetails.company || null,
+                        };
+                        allParts.push(detail);
+
+                        if (p.agoraUid) {
+                            newMap.set(p.agoraUid, detail);
+                        }
+                    }
+                });
+
+                console.log('[VoiceChannel] Voice channel participants updated:', newMap.size, 'participants');
+                setParticipantMap(newMap);
+                setAllParticipants(allParts);
+            } catch (err) {
+                console.error('[VoiceChannel] Failed to fetch voice channel participants:', err);
+            }
+        };
+
+        registerAndFetch();
+
+        // Refresh participant list periodically
+        const interval = setInterval(fetchVoiceChannelParticipants, 5000);
+
+        return () => {
+            isActive = false;
+            clearInterval(interval);
+            // Unregister from voice channel
+            leaveVoiceChannel(channelId, uid).catch(err => {
+                console.error('[VoiceChannel] Failed to leave voice channel tracking:', err);
+            });
+        };
+    }, [callState, channelId, subgridId, uid]);
 
     // Use web hook for web platform, native hook for mobile
     const webHook = useAgoraCallWeb({
@@ -243,6 +359,8 @@ const VoiceChannelScreen = () => {
                         let remoteDisplayName = participant?.displayName;
                         let remoteUsername = participant?.username || null;
                         let remoteAvatarUrl = participant?.avatarUrl || null;
+                        let remoteBadge = participant?.stakeholderBadge || null;
+                        let remoteCompany = participant?.company || null;
 
                         // Strategy 2: For DM calls, find the "other" participant (not current user)
                         if (!remoteDisplayName && currentUserId && allParticipants.length > 0) {
@@ -251,6 +369,8 @@ const VoiceChannelScreen = () => {
                                 remoteDisplayName = otherParticipant.displayName;
                                 remoteUsername = otherParticipant.username;
                                 remoteAvatarUrl = otherParticipant.avatarUrl;
+                                remoteBadge = otherParticipant.stakeholderBadge || null;
+                                remoteCompany = otherParticipant.company || null;
                                 console.log('[VoiceChannel] Using other participant fallback:', remoteDisplayName);
                             }
                         }
@@ -260,6 +380,28 @@ const VoiceChannelScreen = () => {
                             remoteDisplayName = peerName;
                             remoteAvatarUrl = peerAvatar || null;
                             console.log('[VoiceChannel] Using peerName param fallback:', remoteDisplayName);
+                        }
+
+                        // Strategy 4: For voice channel calls, look up member from subgrid members
+                        // Find member who is not the current user (other members in channel)
+                        if (!remoteDisplayName && subgridMembers.length > 0 && currentUserId) {
+                            // Find a member who is not the current user
+                            // For multiple remote users, use index to pick different members
+                            const otherMembers = subgridMembers.filter(m => {
+                                const memberId = m.userId?.toString() || m.user?._id?.toString();
+                                return memberId !== currentUserId;
+                            });
+                            if (otherMembers.length > index) {
+                                const member = otherMembers[index];
+                                const firstName = member.firstName || member.user?.firstName || '';
+                                const lastName = member.lastName || member.user?.lastName || '';
+                                remoteDisplayName = [firstName, lastName].filter(Boolean).join(' ').trim() || member.email || member.user?.email;
+                                remoteUsername = member.username || member.user?.username || null;
+                                remoteAvatarUrl = member.avatarUrl || member.user?.avatarUrl || null;
+                                remoteBadge = member.stakeholderBadge || member.user?.stakeholderBadge || null;
+                                remoteCompany = member.company || member.user?.company || null;
+                                console.log('[VoiceChannel] Using subgrid member fallback:', remoteDisplayName);
+                            }
                         }
 
                         // Final fallback with agoraUid
@@ -276,9 +418,21 @@ const VoiceChannelScreen = () => {
                                     style={styles.participantAvatar}
                                 />
                                 <View style={styles.participantInfo}>
-                                    <Text style={styles.participantName}>{remoteDisplayName}</Text>
+                                    <View style={styles.participantNameRow}>
+                                        <Text style={styles.participantName}>{remoteDisplayName}</Text>
+                                        {remoteBadge && (
+                                            <View style={[styles.participantBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[remoteBadge] || '#3B82F6' }]}>
+                                                <Text style={styles.participantBadgeText}>
+                                                    {remoteBadge.charAt(0).toUpperCase() + remoteBadge.slice(1)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
                                     {remoteUsername && (
                                         <Text style={styles.participantUsername}>@{remoteUsername}</Text>
+                                    )}
+                                    {remoteCompany && (
+                                        <Text style={styles.participantCompany}>{remoteCompany}</Text>
                                     )}
                                 </View>
                                 <Mic size={16} color={colors.success} />
@@ -395,14 +549,36 @@ const createStyles = (colors: any) =>
         participantInfo: {
             flex: 1,
         },
+        participantNameRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+        },
         participantName: {
             fontSize: 16,
             color: colors.text,
+        },
+        participantBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 10,
+        },
+        participantBadgeText: {
+            fontSize: 10,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         participantUsername: {
             fontSize: 12,
             color: colors.textMuted,
             marginTop: 2,
+        },
+        participantCompany: {
+            fontSize: 11,
+            color: colors.textMuted,
+            fontStyle: 'italic',
+            marginTop: 1,
         },
         errorContainer: {
             backgroundColor: colors.error + '20',

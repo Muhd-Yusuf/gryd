@@ -360,12 +360,29 @@ const getCall = async (callId, populateUsers = true) => {
     if (populateUsers) {
         const userIds = call.participants.map(p => p.userId);
         const users = await User.find({ _id: { $in: userIds } })
-            .select('firstName lastName email username avatarUrl');
+            .select('firstName lastName email username avatarUrl role stakeholderBadge company');
 
         const userMap = new Map(users.map(u => [u._id.toString(), u]));
 
+        // Also get SubgridMembership data if this is a channel call
+        let membershipMap = new Map();
+        if (call.callContext?.subgridId) {
+            const SubgridMembership = require('../models/SubgridMembership');
+            const memberships = await SubgridMembership.find({
+                subgridId: call.callContext.subgridId,
+                userId: { $in: userIds },
+            }).select('userId role stakeholderBadge');
+            memberships.forEach(m => {
+                membershipMap.set(m.userId.toString(), m);
+            });
+        }
+
         participantsWithDetails = call.participants.map(p => {
             const user = userMap.get(p.userId.toString());
+            const membership = membershipMap.get(p.userId.toString());
+            // Prefer membership role/badge over user's global role/badge
+            const memberRole = membership?.role || user?.role || 'member';
+            const badge = membership?.stakeholderBadge || user?.stakeholderBadge || null;
             return {
                 userId: p.userId,
                 agoraUid: p.agoraUid,
@@ -380,6 +397,9 @@ const getCall = async (callId, populateUsers = true) => {
                     username: user.username,
                     avatarUrl: user.avatarUrl,
                     displayName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
+                    memberRole,
+                    stakeholderBadge: badge,
+                    company: user.company || null,
                 } : null,
             };
         });

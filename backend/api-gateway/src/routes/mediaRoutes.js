@@ -271,6 +271,28 @@ router.post('/calls/:callId/end',
 );
 
 // ===================
+// VOICE CHANNEL ROUTES
+// ===================
+
+// Join a voice channel (track participant)
+router.post('/calls/voice-channel/join',
+    requireUser,
+    mediaController.joinVoiceChannel
+);
+
+// Leave a voice channel (untrack participant)
+router.post('/calls/voice-channel/leave',
+    requireUser,
+    mediaController.leaveVoiceChannel
+);
+
+// Get voice channel participants with user details
+router.get('/calls/voice-channel/:channelId/participants',
+    requireUser,
+    mediaController.getVoiceChannelParticipants
+);
+
+// ===================
 // DEV/DEBUG ROUTES
 // ===================
 

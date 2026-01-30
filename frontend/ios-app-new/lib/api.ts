@@ -1133,6 +1133,18 @@ export const getCallHistory = (options?: { limit?: number; offset?: number; call
     return callsGet(`/history${query ? `?${query}` : ''}`);
 };
 
+// Voice channel participant tracking
+export const joinVoiceChannel = (channelId: string, subgridId?: string, agoraUid?: number) =>
+    callsPost('/voice-channel/join', { channelId, subgridId, agoraUid });
+
+export const leaveVoiceChannel = (channelId: string, agoraUid?: number) =>
+    callsPost('/voice-channel/leave', { channelId, agoraUid });
+
+export const getVoiceChannelParticipants = (channelId: string, subgridId?: string) => {
+    const params = subgridId ? `?subgridId=${subgridId}` : '';
+    return callsGet(`/voice-channel/${channelId}/participants${params}`);
+};
+
 // Subscribe to call events (SSE)
 // Returns a cleanup function. Call this after ensuring bootstrap is complete.
 export const subscribeToCallEvents = (onEvent: (event: string, data: any) => void): (() => void) => {

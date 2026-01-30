@@ -739,6 +739,168 @@ const subscribeToCallEvents = async (req, res) => {
     }
 };
 
+// In-memory voice channel participant tracking
+// Format: { channelId: Map<agoraUid, { userId, agoraUid, joinedAt }> }
+const voiceChannelParticipants = new Map();
+
+/**
+ * Join a voice channel (track participant)
+ * POST /api/media/calls/voice-channel/join
+ */
+const joinVoiceChannel = async (req, res) => {
+    try {
+        const { channelId, subgridId, agoraUid } = req.body;
+        const userId = req.user._id.toString();
+
+        if (!channelId || !agoraUid) {
+            return res.status(400).json({ success: false, error: 'channelId and agoraUid are required' });
+        }
+
+        // Initialize channel if not exists
+        if (!voiceChannelParticipants.has(channelId)) {
+            voiceChannelParticipants.set(channelId, new Map());
+        }
+
+        // Add participant
+        const channelMap = voiceChannelParticipants.get(channelId);
+        channelMap.set(agoraUid, {
+            userId,
+            agoraUid,
+            subgridId: subgridId || null,
+            joinedAt: new Date(),
+        });
+
+        console.log(`[VoiceChannel] User ${userId} joined channel ${channelId} with agoraUid ${agoraUid}`);
+
+        res.json({
+            success: true,
+            data: { channelId, agoraUid, participantCount: channelMap.size },
+        });
+    } catch (error) {
+        console.error('Join voice channel error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Leave a voice channel (untrack participant)
+ * POST /api/media/calls/voice-channel/leave
+ */
+const leaveVoiceChannel = async (req, res) => {
+    try {
+        const { channelId, agoraUid } = req.body;
+        const userId = req.user._id.toString();
+
+        if (!channelId) {
+            return res.status(400).json({ success: false, error: 'channelId is required' });
+        }
+
+        const channelMap = voiceChannelParticipants.get(channelId);
+        if (channelMap) {
+            // Remove by agoraUid if provided, otherwise by userId
+            if (agoraUid) {
+                channelMap.delete(agoraUid);
+            } else {
+                // Find and remove by userId
+                for (const [uid, participant] of channelMap.entries()) {
+                    if (participant.userId === userId) {
+                        channelMap.delete(uid);
+                        break;
+                    }
+                }
+            }
+
+            // Clean up empty channels
+            if (channelMap.size === 0) {
+                voiceChannelParticipants.delete(channelId);
+            }
+        }
+
+        console.log(`[VoiceChannel] User ${userId} left channel ${channelId}`);
+
+        res.json({
+            success: true,
+            data: { channelId, participantCount: channelMap?.size || 0 },
+        });
+    } catch (error) {
+        console.error('Leave voice channel error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Get voice channel participants with user details
+ * GET /api/media/calls/voice-channel/:channelId/participants
+ */
+const getVoiceChannelParticipants = async (req, res) => {
+    try {
+        const { channelId } = req.params;
+        const { subgridId } = req.query;
+
+        const channelMap = voiceChannelParticipants.get(channelId);
+        if (!channelMap || channelMap.size === 0) {
+            return res.json({ success: true, data: { participants: [] } });
+        }
+
+        // Get user details for all participants
+        const User = require('../models/User');
+        const SubgridMembership = require('../models/SubgridMembership');
+
+        const participantArray = Array.from(channelMap.values());
+        const userIds = participantArray.map(p => p.userId);
+
+        const users = await User.find({ _id: { $in: userIds } })
+            .select('firstName lastName email username avatarUrl role stakeholderBadge company');
+
+        const userMap = new Map(users.map(u => [u._id.toString(), u]));
+
+        // Get membership data if subgridId is provided
+        let membershipMap = new Map();
+        if (subgridId) {
+            const memberships = await SubgridMembership.find({
+                subgridId,
+                userId: { $in: userIds },
+            }).select('userId role stakeholderBadge');
+            memberships.forEach(m => {
+                membershipMap.set(m.userId.toString(), m);
+            });
+        }
+
+        // Build response with user details
+        const participants = participantArray.map(p => {
+            const user = userMap.get(p.userId);
+            const membership = membershipMap.get(p.userId);
+            const badge = membership?.stakeholderBadge || user?.stakeholderBadge || null;
+            const memberRole = membership?.role || user?.role || 'member';
+
+            return {
+                agoraUid: p.agoraUid,
+                userId: p.userId,
+                joinedAt: p.joinedAt,
+                userDetails: user ? {
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    email: user.email,
+                    username: user.username,
+                    avatarUrl: user.avatarUrl,
+                    displayName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
+                    memberRole,
+                    stakeholderBadge: badge,
+                    company: user.company || null,
+                } : null,
+            };
+        });
+
+        res.json({
+            success: true,
+            data: { participants },
+        });
+    } catch (error) {
+        console.error('Get voice channel participants error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 module.exports = {
     // File uploads
     uploadFile,
@@ -760,4 +922,8 @@ module.exports = {
     getCall,
     getCallHistory,
     subscribeToCallEvents,
+    // Voice channel tracking
+    joinVoiceChannel,
+    leaveVoiceChannel,
+    getVoiceChannelParticipants,
 };
