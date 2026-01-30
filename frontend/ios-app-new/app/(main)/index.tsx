@@ -1093,7 +1093,7 @@ const TenantCommunityScreen = () => {
         return (
             <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
                 <Image
-                    source={require('../../assets/images/icon.png')}
+                    source={require('../../assets/icon.png')}
                     style={{ width: 80, height: 80, borderRadius: 20, marginBottom: 20 }}
                 />
                 <Text style={{ fontSize: 16, color: colors.textMuted }}>Loading community...</Text>
