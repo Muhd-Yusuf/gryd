@@ -993,14 +993,25 @@ const TenantCommunityScreen = () => {
 
     // Like handler for posts
     const handleLikePost = async (postId: string, isLiked: boolean) => {
-        if (!activeSubgridId || likeLoading) return;
+        console.log('[Like] handleLikePost called:', { postId, isLiked, activeSubgridId, likeLoading });
+        if (!activeSubgridId) {
+            console.log('[Like] Early return: no activeSubgridId');
+            return;
+        }
+        if (likeLoading) {
+            console.log('[Like] Early return: likeLoading in progress');
+            return;
+        }
         setLikeLoading(postId);
         try {
             if (isLiked) {
+                console.log('[Like] Unliking post:', `/subgrids/${activeSubgridId}/posts/${postId}/like`);
                 await communityDelete(`/subgrids/${activeSubgridId}/posts/${postId}/like`);
             } else {
+                console.log('[Like] Liking post:', `/subgrids/${activeSubgridId}/posts/${postId}/like`);
                 await communityPost(`/subgrids/${activeSubgridId}/posts/${postId}/like`, {});
             }
+            console.log('[Like] API call successful');
             // Update local state optimistically
             setPosts((prev) =>
                 prev.map((p) =>
@@ -1014,6 +1025,7 @@ const TenantCommunityScreen = () => {
                 )
             );
         } catch (err: any) {
+            console.error('[Like] Error:', err.message, err);
             setError(err.message || 'Failed to update like.');
         } finally {
             setLikeLoading(null);
@@ -1022,14 +1034,25 @@ const TenantCommunityScreen = () => {
 
     // Reshare handler for posts
     const handleResharePost = async (postId: string, isReshared: boolean) => {
-        if (!activeSubgridId || reshareLoading) return;
+        console.log('[Reshare] handleResharePost called:', { postId, isReshared, activeSubgridId, reshareLoading });
+        if (!activeSubgridId) {
+            console.log('[Reshare] Early return: no activeSubgridId');
+            return;
+        }
+        if (reshareLoading) {
+            console.log('[Reshare] Early return: reshareLoading in progress');
+            return;
+        }
         setReshareLoading(postId);
         try {
             if (isReshared) {
+                console.log('[Reshare] Unresharing post:', `/subgrids/${activeSubgridId}/posts/${postId}/reshare`);
                 await communityDelete(`/subgrids/${activeSubgridId}/posts/${postId}/reshare`);
             } else {
+                console.log('[Reshare] Resharing post:', `/subgrids/${activeSubgridId}/posts/${postId}/reshare`);
                 await communityPost(`/subgrids/${activeSubgridId}/posts/${postId}/reshare`, {});
             }
+            console.log('[Reshare] API call successful');
             // Update local state optimistically
             setPosts((prev) =>
                 prev.map((p) =>
@@ -1043,6 +1066,7 @@ const TenantCommunityScreen = () => {
                 )
             );
         } catch (err: any) {
+            console.error('[Reshare] Error:', err.message, err);
             setError(err.message || 'Failed to update reshare.');
         } finally {
             setReshareLoading(null);
@@ -1051,6 +1075,7 @@ const TenantCommunityScreen = () => {
 
     // Comment handler - navigate to post detail/comments
     const handleCommentPress = (itemId: string) => {
+        console.log('[Comment] handleCommentPress called:', { itemId, activeSubgridId, activeChannelId });
         // Navigate to post detail or sub-channel with comment focus
         if (activeSubgridId && activeChannelId) {
             router.push({
@@ -1062,6 +1087,8 @@ const TenantCommunityScreen = () => {
                     focusPostId: itemId,
                 },
             });
+        } else {
+            console.log('[Comment] Early return: missing activeSubgridId or activeChannelId');
         }
     };
 
@@ -2191,9 +2218,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            paddingVertical: 4,
-            paddingHorizontal: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
             borderRadius: 8,
+            minHeight: 36, // Ensure minimum touch target size for mobile
         },
         reactionText: {
             fontSize: 12,

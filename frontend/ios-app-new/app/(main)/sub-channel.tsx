@@ -879,14 +879,25 @@ const SubChannelScreen = () => {
     };
 
     const handleLikePost = async (postId: string, isLiked: boolean) => {
-        if (!subgridId || likeLoading) return;
+        console.log('[SubChannel Like] handleLikePost called:', { postId, isLiked, subgridId, likeLoading });
+        if (!subgridId) {
+            console.log('[SubChannel Like] Early return: no subgridId');
+            return;
+        }
+        if (likeLoading) {
+            console.log('[SubChannel Like] Early return: likeLoading in progress');
+            return;
+        }
         setLikeLoading(postId);
         try {
             if (isLiked) {
+                console.log('[SubChannel Like] Unliking post:', `/subgrids/${subgridId}/posts/${postId}/like`);
                 await communityDelete(`/subgrids/${subgridId}/posts/${postId}/like`);
             } else {
+                console.log('[SubChannel Like] Liking post:', `/subgrids/${subgridId}/posts/${postId}/like`);
                 await communityPost(`/subgrids/${subgridId}/posts/${postId}/like`, {});
             }
+            console.log('[SubChannel Like] API call successful');
             // Update local state optimistically
             setPosts((prev) =>
                 prev.map((p) =>
@@ -900,6 +911,7 @@ const SubChannelScreen = () => {
                 )
             );
         } catch (err: any) {
+            console.error('[SubChannel Like] Error:', err.message, err);
             setError(err.message || 'Failed to update like.');
         } finally {
             setLikeLoading(null);
@@ -907,14 +919,25 @@ const SubChannelScreen = () => {
     };
 
     const handleResharePost = async (postId: string, isReshared: boolean) => {
-        if (!subgridId || reshareLoading) return;
+        console.log('[SubChannel Reshare] handleResharePost called:', { postId, isReshared, subgridId, reshareLoading });
+        if (!subgridId) {
+            console.log('[SubChannel Reshare] Early return: no subgridId');
+            return;
+        }
+        if (reshareLoading) {
+            console.log('[SubChannel Reshare] Early return: reshareLoading in progress');
+            return;
+        }
         setReshareLoading(postId);
         try {
             if (isReshared) {
+                console.log('[SubChannel Reshare] Unresharing post:', `/subgrids/${subgridId}/posts/${postId}/reshare`);
                 await communityDelete(`/subgrids/${subgridId}/posts/${postId}/reshare`);
             } else {
+                console.log('[SubChannel Reshare] Resharing post:', `/subgrids/${subgridId}/posts/${postId}/reshare`);
                 await communityPost(`/subgrids/${subgridId}/posts/${postId}/reshare`, {});
             }
+            console.log('[SubChannel Reshare] API call successful');
             // Update local state optimistically
             setPosts((prev) =>
                 prev.map((p) =>
@@ -928,6 +951,7 @@ const SubChannelScreen = () => {
                 )
             );
         } catch (err: any) {
+            console.error('[SubChannel Reshare] Error:', err.message, err);
             setError(err.message || 'Failed to update reshare.');
         } finally {
             setReshareLoading(null);
@@ -1585,6 +1609,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            minHeight: 36, // Ensure minimum touch target size for mobile
         },
         reactionText: {
             fontSize: 12,
