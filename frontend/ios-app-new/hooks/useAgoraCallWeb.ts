@@ -4,16 +4,15 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import AgoraRTC, {
-    IAgoraRTCClient,
-    IMicrophoneAudioTrack,
-    ICameraVideoTrack,
-    IAgoraRTCRemoteUser,
-} from 'agora-rtc-sdk-ng';
+import { Platform } from 'react-native';
 import {
     endCall as apiEndCall,
     subscribeToCallEventsAsync,
 } from '../lib/api';
+
+// Only impor types here if possible, or use 'any' for the library types to avoid runtime import
+// Since we can't easily import types without importing the library in some bundlers, we'll use 'any' for the library objects
+// inside the implementation, but keep our own types strict.
 
 export type CallState = 'idle' | 'initiating' | 'ringing' | 'connecting' | 'connected' | 'ended';
 export type CallType = 'audio' | 'video';
@@ -40,6 +39,8 @@ interface UseAgoraCallWebOptions {
 }
 
 export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
+    const isWeb = Platform.OS === 'web';
+
     const [callState, setCallState] = useState<CallState>('idle');
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoEnabled, setIsVideoEnabled] = useState(false);
@@ -47,14 +48,17 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
     const [error, setError] = useState<string | null>(null);
     const [callDuration, setCallDuration] = useState(0);
 
-    const clientRef = useRef<IAgoraRTCClient | null>(null);
-    const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
-    const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null);
+    const clientRef = useRef<any | null>(null);
+    const localAudioTrackRef = useRef<any | null>(null);
+    const localVideoTrackRef = useRef<any | null>(null);
     const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const cleanupSSERef = useRef<(() => void) | null>(null);
     const currentCallIdRef = useRef<string | null>(null);
     const hasJoinedRef = useRef(false);
     const optionsRef = useRef(options);
+
+    // Store the AgoraRTC instance dynamically imported
+    const agoraRtcRef = useRef<any>(null);
 
     // Keep options ref updated
     useEffect(() => {
@@ -63,6 +67,8 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
 
     // Cleanup function that doesn't depend on state
     const cleanup = useCallback(async () => {
+        if (!isWeb) return;
+
         // Stop duration timer
         if (durationIntervalRef.current) {
             clearInterval(durationIntervalRef.current);
@@ -90,65 +96,96 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
         }
 
         hasJoinedRef.current = false;
-    }, []);
+    }, [isWeb]);
 
-    // Initialize Agora client
+    // Initialize Agora client (WEB ONLY)
     useEffect(() => {
-        const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-        clientRef.current = client;
+        if (!isWeb) return;
 
-        // Handle remote user events
-        client.on('user-published', async (user: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
+        let isMounted = true;
+
+        const init = async () => {
             try {
-                await client.subscribe(user, mediaType);
+                // Dynamic import to avoid crash on native
+                const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+                agoraRtcRef.current = AgoraRTC;
 
-                if (mediaType === 'audio') {
-                    user.audioTrack?.play();
-                }
+                if (!isMounted) return;
 
-                setRemoteUsers(prev => {
-                    if (!prev.includes(user.uid as number)) {
-                        return [...prev, user.uid as number];
+                const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+                clientRef.current = client;
+
+                // Handle remote user events
+                client.on('user-published', async (user: any, mediaType: 'audio' | 'video') => {
+                    try {
+                        await client.subscribe(user, mediaType);
+
+                        if (mediaType === 'audio') {
+                            user.audioTrack?.play();
+                        }
+
+                        setRemoteUsers(prev => {
+                            if (!prev.includes(user.uid as number)) {
+                                return [...prev, user.uid as number];
+                            }
+                            return prev;
+                        });
+                    } catch (err) {
+                        console.error('[AgoraWeb] Subscribe error:', err);
                     }
-                    return prev;
+                });
+
+                client.on('user-unpublished', () => {
+                    // User stopped publishing
+                });
+
+                client.on('user-left', (user: any) => {
+                    setRemoteUsers(prev => prev.filter(uid => uid !== user.uid));
+                });
+
+                client.on('user-joined', (user: any) => {
+                    setRemoteUsers(prev => {
+                        if (!prev.includes(user.uid as number)) {
+                            return [...prev, user.uid as number];
+                        }
+                        return prev;
+                    });
                 });
             } catch (err) {
-                console.error('[AgoraWeb] Subscribe error:', err);
+                console.error('[AgoraWeb] Failed to load Agora SDK:', err);
             }
-        });
+        };
 
-        client.on('user-unpublished', () => {
-            // User stopped publishing
-        });
-
-        client.on('user-left', (user: IAgoraRTCRemoteUser) => {
-            setRemoteUsers(prev => prev.filter(uid => uid !== user.uid));
-        });
-
-        client.on('user-joined', (user: IAgoraRTCRemoteUser) => {
-            setRemoteUsers(prev => {
-                if (!prev.includes(user.uid as number)) {
-                    return [...prev, user.uid as number];
-                }
-                return prev;
-            });
-        });
+        init();
 
         return () => {
+            isMounted = false;
             cleanup();
-            client.removeAllListeners();
+            if (clientRef.current) {
+                clientRef.current.removeAllListeners();
+            }
         };
-    }, [cleanup]);
+    }, [isWeb, cleanup]);
 
     // Auto-join if params provided
     useEffect(() => {
+        if (!isWeb) return;
+
         if (options.autoJoin && options.channelName && options.token && options.appId && !hasJoinedRef.current) {
             const joinAsync = async () => {
-                const client = clientRef.current;
-                if (!client) {
-                    setError('Agora client not initialized');
+                // Wait for client to be initialized
+                if (!clientRef.current || !agoraRtcRef.current) {
+                    // Retry once after a short delay if init is slow
+                    setTimeout(() => {
+                        if (clientRef.current && agoraRtcRef.current && !hasJoinedRef.current) {
+                            joinAsync();
+                        }
+                    }, 500);
                     return;
                 }
+
+                const client = clientRef.current;
+                const AgoraRTC = agoraRtcRef.current;
 
                 try {
                     setCallState('connecting');
@@ -185,16 +222,18 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
 
             joinAsync();
         }
-    }, [options.autoJoin, options.channelName, options.token, options.appId, options.uid, options.callId]);
+    }, [isWeb, options.autoJoin, options.channelName, options.token, options.appId, options.uid, options.callId]);
 
     const leaveChannel = useCallback(async () => {
+        if (!isWeb) return;
         await cleanup();
         setCallState('ended');
         setRemoteUsers([]);
         setCallDuration(0);
-    }, [cleanup]);
+    }, [isWeb, cleanup]);
 
     const hangup = useCallback(async () => {
+        if (!isWeb) return;
         try {
             if (currentCallIdRef.current) {
                 await apiEndCall(currentCallIdRef.current);
@@ -205,9 +244,10 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
             console.error('[AgoraWeb] Hangup failed:', err);
             await leaveChannel();
         }
-    }, [leaveChannel]);
+    }, [isWeb, leaveChannel]);
 
     const toggleMute = useCallback(async () => {
+        if (!isWeb) return;
         const audioTrack = localAudioTrackRef.current;
         if (audioTrack) {
             setIsMuted(prev => {
@@ -216,11 +256,14 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
                 return newMuted;
             });
         }
-    }, []);
+    }, [isWeb]);
 
     const toggleVideo = useCallback(async () => {
+        if (!isWeb) return;
         const client = clientRef.current;
-        if (!client) return;
+        const AgoraRTC = agoraRtcRef.current;
+
+        if (!client || !AgoraRTC) return;
 
         if (isVideoEnabled && localVideoTrackRef.current) {
             // Disable video
@@ -240,18 +283,22 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
                 setError('Failed to enable camera');
             }
         }
-    }, [isVideoEnabled]);
+    }, [isWeb, isVideoEnabled]);
 
     // Handle call events from backend
     useEffect(() => {
+        // SSE setup is safe on native but we might not want it if using native Agora
+        // For now, let's keep it consistent
         let isMounted = true;
 
         const handleCallEvent = (event: string, data: any) => {
             switch (event) {
                 case 'call_ended':
                 case 'call_declined':
-                    leaveChannel();
-                    optionsRef.current.onCallEnded?.(data.callId, event);
+                    if (isWeb) {
+                        leaveChannel();
+                        optionsRef.current.onCallEnded?.(data.callId, event);
+                    }
                     break;
             }
         };
@@ -277,7 +324,7 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
             isMounted = false;
             cleanupSSERef.current?.();
         };
-    }, [leaveChannel]);
+    }, [isWeb, leaveChannel]);
 
     return {
         // State
