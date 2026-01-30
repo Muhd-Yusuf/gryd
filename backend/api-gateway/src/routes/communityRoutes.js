@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
     getUserProfile,
+    updateUserProfile,
     listTenants,
     createTenant,
     addTenantMember,
@@ -78,6 +79,11 @@ const {
     resendInviteEmail,
     listPendingInvites,
     validateInviteToken,
+    getContentModerationSettings,
+    updateContentModerationSettings,
+    addProhibitedWords,
+    removeProhibitedWords,
+    testContentFilter,
 } = require('../controllers/communityController');
 const { attachUserContext, requireUser } = require('../middleware/authMiddleware');
 const { attachEmbedContext } = require('../middleware/embedMiddleware');
@@ -94,6 +100,7 @@ router.use(attachEmbedContext);
 
 // User profile
 router.get('/users/me', requireUser, getUserProfile);
+router.patch('/users/me', requireUser, updateUserProfile);
 
 router.get('/tenants', requireUser, listTenants);
 router.post('/tenants', requireUser, createTenant);
@@ -180,6 +187,13 @@ router.get('/subgrids/:subgridId/moderation', requireUser, loadSubgrid, requireS
 router.post('/subgrids/:subgridId/moderation/:flagId/action', requireUser, loadSubgrid, requireSubgridModeration, moderateFlag);
 router.get('/subgrids/:subgridId/audit-log', requireUser, loadSubgrid, requireSubgridModeration, listAuditLog);
 router.get('/subgrids/:subgridId/analytics', requireUser, loadSubgrid, requireSubgridAdmin, getSubgridAnalytics);
+
+// Content Moderation Settings (Prohibited Words)
+router.get('/subgrids/:subgridId/content-moderation', requireUser, loadSubgrid, requireSubgridAdmin, getContentModerationSettings);
+router.patch('/subgrids/:subgridId/content-moderation', requireUser, loadSubgrid, requireSubgridAdmin, updateContentModerationSettings);
+router.post('/subgrids/:subgridId/content-moderation/words', requireUser, loadSubgrid, requireSubgridAdmin, addProhibitedWords);
+router.delete('/subgrids/:subgridId/content-moderation/words', requireUser, loadSubgrid, requireSubgridAdmin, removeProhibitedWords);
+router.post('/subgrids/:subgridId/content-moderation/test', requireUser, loadSubgrid, requireSubgridAdmin, testContentFilter);
 
 router.get('/subgrids/:subgridId/notifications', requireUser, loadSubgrid, requireSubgridRead, listNotifications);
 router.post('/subgrids/:subgridId/notifications/:notificationId/read', requireUser, loadSubgrid, requireSubgridRead, markNotificationRead);

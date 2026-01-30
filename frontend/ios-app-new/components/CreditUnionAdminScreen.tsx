@@ -98,6 +98,9 @@ type Member = {
     email?: string;
     username?: string;
     avatarUrl?: string;
+    userRole?: string;
+    stakeholderBadge?: StakeholderBadge;
+    company?: string;
     // Nested user object (fallback)
     user?: {
         _id?: string;
@@ -106,6 +109,9 @@ type Member = {
         email?: string;
         username?: string;
         avatarUrl?: string;
+        role?: string;
+        stakeholderBadge?: StakeholderBadge;
+        company?: string;
     };
 };
 
@@ -162,7 +168,46 @@ const getMemberEmail = (member: Member) => {
     return member.email || member.user?.email || '';
 };
 
+const getMemberUsername = (member?: Member) => {
+    if (!member) return null;
+    return member.username || member.user?.username || null;
+};
+
+const getMemberCompany = (member?: Member) => {
+    if (!member) return null;
+    return member.company || member.user?.company || null;
+};
+
+const getMemberBadge = (member?: Member): StakeholderBadge | null => {
+    if (!member) return null;
+    return member.stakeholderBadge || member.user?.stakeholderBadge || null;
+};
+
+const isMemberAdmin = (member?: Member): boolean => {
+    if (!member) return false;
+    const role = member.role || member.userRole || member.user?.role || '';
+    return ['owner', 'admin', 'subgrid_admin', 'super_admin'].includes(role.toLowerCase());
+};
+
+const getMemberDisplayUsername = (member?: Member): string => {
+    if (!member) return '';
+    // If admin, show "Server Admin" unless they have a custom username
+    if (isMemberAdmin(member)) {
+        const username = member.username || member.user?.username;
+        return username || 'Server Admin';
+    }
+    return member.username || member.user?.username || '';
+};
+
 const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', 'Other'];
+
+const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
+    stakeholder: '#3B82F6',
+    vendor: '#8B5CF6',
+    partner: '#10B981',
+    sponsor: '#F59E0B',
+    investor: '#EC4899',
+};
 
 type ModerationFlag = {
     _id: string;
@@ -221,6 +266,7 @@ const CreditUnionAdminScreen = () => {
     const expoRecordingRef = useRef<Audio.Recording | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    const feedScrollRef = useRef<ScrollView>(null);
 
     // Common emojis for picker
     const emojis = [
@@ -336,6 +382,9 @@ const CreditUnionAdminScreen = () => {
     const [accountEmail, setAccountEmail] = useState('');
     const [selectedBanner, setSelectedBanner] = useState(0);
     const [membersSearch, setMembersSearch] = useState('');
+    const [stakeholdersSearch, setStakeholdersSearch] = useState('');
+    const [selectedStakeholder, setSelectedStakeholder] = useState<Member | null>(null);
+    const [stakeholderDetailModalOpen, setStakeholderDetailModalOpen] = useState(false);
     const [feedSearchQuery, setFeedSearchQuery] = useState('');
     const bannerColors = [
         ['#1a1a2e', '#16213e'],
@@ -355,6 +404,16 @@ const CreditUnionAdminScreen = () => {
         autoEmoji: true,
         stickersAutocomplete: false,
     });
+
+    // Content Moderation (Prohibited Words) state
+    const [contentModerationEnabled, setContentModerationEnabled] = useState(true);
+    const [prohibitedWords, setProhibitedWords] = useState<string[]>([]);
+    const [contentModerationAction, setContentModerationAction] = useState<'block' | 'flag' | 'censor'>('block');
+    const [blockedMessage, setBlockedMessage] = useState('Your message contains prohibited content and cannot be sent.');
+    const [newProhibitedWord, setNewProhibitedWord] = useState('');
+    const [contentModerationLoading, setContentModerationLoading] = useState(false);
+    const [contentModerationTestText, setContentModerationTestText] = useState('');
+    const [contentModerationTestResult, setContentModerationTestResult] = useState<{ isProhibited: boolean; matchedWords: string[]; filteredContent: string } | null>(null);
 
     // Bootstrap tenant and load user info
     useEffect(() => {
@@ -460,6 +519,12 @@ const CreditUnionAdminScreen = () => {
         loadModerationQueue();
     }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
 
+    // Load content moderation settings when entering that tab
+    useEffect(() => {
+        if (!serverSettingsModalOpen || settingsTab !== 'content-moderation' || !activeSubgridId) return;
+        loadContentModerationSettings();
+    }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
+
     // Fetch and update member online statuses
     useEffect(() => {
         if (!activeSubgridId || members.length === 0) return;
@@ -533,10 +598,28 @@ const CreditUnionAdminScreen = () => {
         });
     }, [members, membersSearch]);
 
+    // Filter stakeholders only
+    const filteredStakeholders = useMemo(() => {
+        const stakeholders = members.filter((member) => {
+            const role = member.userRole || member.user?.role;
+            return role === 'stakeholder';
+        });
+        const query = stakeholdersSearch.trim().toLowerCase();
+        if (!query) return stakeholders;
+        return stakeholders.filter((member) => {
+            const name = getMemberName(member).toLowerCase();
+            const email = getMemberEmail(member).toLowerCase();
+            const company = (member.company || member.user?.company || '').toLowerCase();
+            const badge = (member.stakeholderBadge || member.user?.stakeholderBadge || '').toLowerCase();
+            return name.includes(query) || email.includes(query) || company.includes(query) || badge.includes(query);
+        });
+    }, [members, stakeholdersSearch]);
+
     // Combine posts and messages for feed, with search filtering
+    // Sort ascending (oldest first) so newest messages appear at the bottom like WhatsApp
     const feedItems = useMemo(() => {
         let items = [...posts, ...messages].sort((a, b) => {
-            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+            return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
         });
 
         // Filter by search query if present
@@ -558,6 +641,16 @@ const CreditUnionAdminScreen = () => {
 
         return items;
     }, [posts, messages, feedSearchQuery, members]);
+
+    // Scroll to bottom when new messages arrive (WhatsApp-style)
+    useEffect(() => {
+        if (feedItems.length > 0 && feedScrollRef.current) {
+            // Small delay to ensure content is rendered
+            setTimeout(() => {
+                feedScrollRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+        }
+    }, [feedItems.length]);
 
     const getSeverityLabel = (reason?: string) => {
         const value = (reason || '').toLowerCase();
@@ -643,6 +736,112 @@ const CreditUnionAdminScreen = () => {
             setModerationQueue([]);
         } finally {
             setModerationLoading(false);
+        }
+    };
+
+    // Content Moderation (Prohibited Words) functions
+    const loadContentModerationSettings = async () => {
+        if (!activeSubgridId) return;
+        setContentModerationLoading(true);
+        try {
+            const response = await communityGet(`/subgrids/${activeSubgridId}/content-moderation`);
+            const settings = response?.data || {};
+            setContentModerationEnabled(settings.enabled ?? true);
+            setProhibitedWords(settings.prohibitedWords || []);
+            setContentModerationAction(settings.action || 'block');
+            setBlockedMessage(settings.blockedMessage || 'Your message contains prohibited content and cannot be sent.');
+        } catch (err: any) {
+            console.error('Failed to load content moderation settings:', err);
+        } finally {
+            setContentModerationLoading(false);
+        }
+    };
+
+    const saveContentModerationSettings = async () => {
+        if (!activeSubgridId) return;
+        setContentModerationLoading(true);
+        try {
+            await communityPatch(`/subgrids/${activeSubgridId}/content-moderation`, {
+                enabled: contentModerationEnabled,
+                action: contentModerationAction,
+                blockedMessage,
+            });
+            showSuccessModal('Settings Saved', 'Content moderation settings have been updated.');
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to save content moderation settings.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to save content moderation settings.');
+            }
+        } finally {
+            setContentModerationLoading(false);
+        }
+    };
+
+    const addProhibitedWord = async () => {
+        if (!activeSubgridId || !newProhibitedWord.trim()) return;
+        const word = newProhibitedWord.trim().toLowerCase();
+        if (prohibitedWords.includes(word)) {
+            if (Platform.OS === 'web') {
+                window.alert('This word is already in the prohibited list.');
+            } else {
+                Alert.alert('Duplicate', 'This word is already in the prohibited list.');
+            }
+            return;
+        }
+        setContentModerationLoading(true);
+        try {
+            await communityPost(`/subgrids/${activeSubgridId}/content-moderation/words`, {
+                words: [word],
+            });
+            setProhibitedWords((prev) => [...prev, word]);
+            setNewProhibitedWord('');
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to add prohibited word.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to add prohibited word.');
+            }
+        } finally {
+            setContentModerationLoading(false);
+        }
+    };
+
+    const removeProhibitedWord = async (word: string) => {
+        if (!activeSubgridId) return;
+        setContentModerationLoading(true);
+        try {
+            await communityDelete(`/subgrids/${activeSubgridId}/content-moderation/words`, {
+                words: [word],
+            });
+            setProhibitedWords((prev) => prev.filter((w) => w !== word));
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to remove prohibited word.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to remove prohibited word.');
+            }
+        } finally {
+            setContentModerationLoading(false);
+        }
+    };
+
+    const testContentModeration = async () => {
+        if (!activeSubgridId || !contentModerationTestText.trim()) return;
+        setContentModerationLoading(true);
+        try {
+            const response = await communityPost(`/subgrids/${activeSubgridId}/content-moderation/test`, {
+                content: contentModerationTestText,
+            });
+            setContentModerationTestResult(response?.data || null);
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to test content moderation.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to test content moderation.');
+            }
+        } finally {
+            setContentModerationLoading(false);
         }
     };
 
@@ -818,6 +1017,41 @@ const CreditUnionAdminScreen = () => {
     const getMemberRoleLabel = (role?: string) => {
         const value = (role || 'member').replace(/_/g, ' ');
         return value.replace(/\b\w/g, (char) => char.toUpperCase());
+    };
+
+    // Handle stakeholder actions (mute, unmute, remove)
+    const handleStakeholderAction = async (memberId: string | undefined, action: 'mute' | 'unmute' | 'remove') => {
+        if (!memberId || !activeSubgridId) return;
+
+        try {
+            if (action === 'remove') {
+                // Remove member from subgrid
+                await communityDelete(`/subgrids/${activeSubgridId}/members/${memberId}`);
+                setMembers((prev) => prev.filter((m) => {
+                    const id = m.userId || m.user?._id || m._id;
+                    return String(id) !== String(memberId);
+                }));
+                showSuccessModal('Stakeholder Removed', 'The stakeholder has been removed from this server.');
+            } else {
+                // Mute or unmute member
+                const newStatus = action === 'mute' ? 'muted' : 'active';
+                await communityPatch(`/subgrids/${activeSubgridId}/members/${memberId}`, { status: newStatus });
+                setMembers((prev) => prev.map((m) => {
+                    const id = m.userId || m.user?._id || m._id;
+                    if (String(id) === String(memberId)) {
+                        return { ...m, status: newStatus };
+                    }
+                    return m;
+                }));
+                showSuccessModal(
+                    action === 'mute' ? 'Stakeholder Muted' : 'Stakeholder Unmuted',
+                    action === 'mute' ? 'The stakeholder has been muted and cannot send messages.' : 'The stakeholder can now send messages again.'
+                );
+            }
+        } catch (err: any) {
+            console.error('[handleStakeholderAction] Error:', err);
+            setError(err.message || `Failed to ${action} stakeholder`);
+        }
     };
 
     const getChannelAccessLabel = (role?: string) => {
@@ -2018,9 +2252,14 @@ const CreditUnionAdminScreen = () => {
                         <>
                             {/* Feed */}
                             <ScrollView
+                                ref={feedScrollRef}
                                 style={styles.feedContainer}
                                 contentContainerStyle={styles.feedContent}
                                 showsVerticalScrollIndicator={false}
+                                onContentSizeChange={() => {
+                                    // Auto-scroll to bottom when content changes (new messages)
+                                    feedScrollRef.current?.scrollToEnd({ animated: false });
+                                }}
                             >
                                 {feedItems.length === 0 && feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
@@ -2082,9 +2321,26 @@ const CreditUnionAdminScreen = () => {
                                                 <View style={styles.postHeaderInfo}>
                                                     <View style={styles.postAuthorRow}>
                                                         <Text style={styles.postAuthor}>{authorName}</Text>
-                                                        <Text style={styles.postHandle}>@{String(authorId).slice(-8)}</Text>
+                                                        {isMemberAdmin(authorMember) && (
+                                                            <View style={styles.verifiedBadge}>
+                                                                <MaterialIcons name="verified" size={14} color="#3B82F6" />
+                                                            </View>
+                                                        )}
+                                                        <Text style={styles.postHandle}>
+                                                            @{getMemberDisplayUsername(authorMember) || String(authorId).slice(-8)}
+                                                        </Text>
+                                                        {getMemberBadge(authorMember) && (
+                                                            <View style={[styles.stakeholderBadgeSmall, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getMemberBadge(authorMember)!] }]}>
+                                                                <Text style={styles.stakeholderBadgeSmallText}>
+                                                                    {getMemberBadge(authorMember)}
+                                                                </Text>
+                                                            </View>
+                                                        )}
                                                         <Text style={styles.postDate}>{formatDate(item.createdAt)}</Text>
                                                     </View>
+                                                    {getMemberCompany(authorMember) && (
+                                                        <Text style={styles.postCompany}>{getMemberCompany(authorMember)}</Text>
+                                                    )}
                                                 </View>
                                                 <View style={styles.itemMenuContainer}>
                                                     <TouchableOpacity onPress={(e) => handleOpenItemMenu(e, item, isPost)}>
@@ -2723,6 +2979,12 @@ const CreditUnionAdminScreen = () => {
                             <Text style={[styles.settingsNavText, settingsTab === 'members' && styles.settingsNavTextActive]}>Members</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
+                            style={[styles.settingsNavItem, settingsTab === 'stakeholders' && styles.settingsNavItemActive]}
+                            onPress={() => setSettingsTab('stakeholders')}
+                        >
+                            <Text style={[styles.settingsNavText, settingsTab === 'stakeholders' && styles.settingsNavTextActive]}>Stakeholders</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'roles' && styles.settingsNavItemActive]}
                             onPress={() => setSettingsTab('roles')}
                         >
@@ -2739,6 +3001,12 @@ const CreditUnionAdminScreen = () => {
                             onPress={() => setSettingsTab('bans')}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'bans' && styles.settingsNavTextActive]}>Ban Members</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.settingsNavItem, settingsTab === 'content-moderation' && styles.settingsNavItemActive]}
+                            onPress={() => setSettingsTab('content-moderation')}
+                        >
+                            <Text style={[styles.settingsNavText, settingsTab === 'content-moderation' && styles.settingsNavTextActive]}>Content Moderation</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -3136,6 +3404,114 @@ const CreditUnionAdminScreen = () => {
                                 </View>
                             )}
 
+                            {/* Stakeholders Tab */}
+                            {settingsTab === 'stakeholders' && (
+                                <View style={styles.settingsPanel}>
+                                    <Text style={styles.settingsPanelTitle}>Stakeholders Management</Text>
+                                    <Text style={styles.settingsPanelDesc}>Manage external stakeholders, vendors, partners, and investors</Text>
+
+                                    <View style={styles.membersContainer}>
+                                        <View style={styles.membersSearch}>
+                                            <MaterialIcons name="search" size={16} color={colors.textMuted} />
+                                            <TextInput
+                                                style={styles.membersSearchInput}
+                                                placeholder="Search stakeholders..."
+                                                placeholderTextColor={colors.textMuted}
+                                                value={stakeholdersSearch}
+                                                onChangeText={setStakeholdersSearch}
+                                            />
+                                        </View>
+                                        <Text style={styles.membersSectionTitle}>Stakeholders ({filteredStakeholders.length})</Text>
+
+                                        <View style={styles.membersList}>
+                                            {filteredStakeholders.map((member, index) => {
+                                                const memberId = member.userId || member.user?._id || member._id;
+                                                const stakeholderBadge = member.stakeholderBadge || member.user?.stakeholderBadge;
+                                                const company = member.company || member.user?.company;
+                                                const username = member.username || member.user?.username;
+                                                return (
+                                                    <View key={memberId || index} style={styles.stakeholderCard}>
+                                                        <View style={styles.stakeholderHeader}>
+                                                            <UserAvatar
+                                                                uri={getMemberAvatarUrl(member)}
+                                                                name={getMemberName(member)}
+                                                                style={styles.memberAvatarLarge}
+                                                            />
+                                                            <View style={styles.stakeholderInfo}>
+                                                                <View style={styles.stakeholderNameRow}>
+                                                                    <Text style={styles.stakeholderName}>{getMemberName(member)}</Text>
+                                                                    {stakeholderBadge && (
+                                                                        <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[stakeholderBadge] }]}>
+                                                                            <Text style={styles.stakeholderBadgeText}>
+                                                                                {stakeholderBadge.charAt(0).toUpperCase() + stakeholderBadge.slice(1)}
+                                                                            </Text>
+                                                                        </View>
+                                                                    )}
+                                                                </View>
+                                                                {username && (
+                                                                    <Text style={styles.stakeholderUsername}>@{username}</Text>
+                                                                )}
+                                                                {company && (
+                                                                    <Text style={styles.stakeholderCompany}>
+                                                                        <MaterialIcons name="business" size={12} color={colors.textMuted} /> {company}
+                                                                    </Text>
+                                                                )}
+                                                                <Text style={styles.stakeholderEmail}>{getMemberEmail(member)}</Text>
+                                                            </View>
+                                                        </View>
+                                                        <View style={styles.stakeholderDetails}>
+                                                            <View style={styles.stakeholderDetailRow}>
+                                                                <Text style={styles.stakeholderDetailLabel}>Status</Text>
+                                                                <View style={[styles.statusBadge, member.status === 'active' ? styles.statusActive : member.status === 'muted' ? styles.statusMuted : styles.statusBanned]}>
+                                                                    <Text style={styles.statusBadgeText}>{getMemberStatusLabel(member.status)}</Text>
+                                                                </View>
+                                                            </View>
+                                                            <View style={styles.stakeholderDetailRow}>
+                                                                <Text style={styles.stakeholderDetailLabel}>Role</Text>
+                                                                <Text style={styles.stakeholderDetailValue}>{getMemberRoleLabel(member.role)}</Text>
+                                                            </View>
+                                                        </View>
+                                                        <View style={styles.stakeholderActions}>
+                                                            <TouchableOpacity
+                                                                style={[styles.stakeholderActionBtn, styles.stakeholderActionBtnPrimary]}
+                                                                onPress={() => {
+                                                                    setSelectedStakeholder(member);
+                                                                    setStakeholderDetailModalOpen(true);
+                                                                }}
+                                                            >
+                                                                <MaterialIcons name="visibility" size={14} color="#FFFFFF" />
+                                                                <Text style={styles.stakeholderActionBtnTextPrimary}>View Details</Text>
+                                                            </TouchableOpacity>
+                                                            <TouchableOpacity
+                                                                style={styles.stakeholderActionBtn}
+                                                                onPress={() => handleStakeholderAction(memberId, member.status === 'muted' ? 'unmute' : 'mute')}
+                                                            >
+                                                                <MaterialIcons name={member.status === 'muted' ? 'volume-up' : 'volume-off'} size={14} color={colors.text} />
+                                                                <Text style={styles.stakeholderActionBtnText}>{member.status === 'muted' ? 'Unmute' : 'Mute'}</Text>
+                                                            </TouchableOpacity>
+                                                            <TouchableOpacity
+                                                                style={[styles.stakeholderActionBtn, styles.stakeholderActionBtnDanger]}
+                                                                onPress={() => handleStakeholderAction(memberId, 'remove')}
+                                                            >
+                                                                <MaterialIcons name="person-remove" size={14} color="#EF4444" />
+                                                                <Text style={styles.stakeholderActionBtnTextDanger}>Remove</Text>
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    </View>
+                                                );
+                                            })}
+                                            {filteredStakeholders.length === 0 && (
+                                                <View style={styles.emptyMembersList}>
+                                                    <MaterialIcons name="people-outline" size={48} color={colors.textMuted} />
+                                                    <Text style={styles.emptyMembersText}>No stakeholders yet</Text>
+                                                    <Text style={styles.emptyMembersHint}>Invite stakeholders to collaborate with your team</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
+
                             {/* Roles Tab */}
                             {settingsTab === 'roles' && (
                                 <View style={styles.settingsPanel}>
@@ -3391,6 +3767,267 @@ const CreditUnionAdminScreen = () => {
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* Content Moderation Tab */}
+                            {settingsTab === 'content-moderation' && (
+                                <View style={styles.settingsPanel}>
+                                    <View style={styles.settingsCard}>
+                                        <View style={styles.settingsCardHeader}>
+                                            <View>
+                                                <Text style={styles.settingsCardTitle}>Content Moderation</Text>
+                                                <Text style={styles.settingsCardSubtitle}>Set up prohibited words and language filters</Text>
+                                            </View>
+                                        </View>
+
+                                        {/* Enable/Disable Toggle */}
+                                        <View style={styles.contentModerationSection}>
+                                            <View style={styles.contentModerationRow}>
+                                                <View style={styles.contentModerationRowInfo}>
+                                                    <Text style={styles.contentModerationLabel}>Enable Content Filtering</Text>
+                                                    <Text style={styles.contentModerationHint}>When enabled, messages containing prohibited words will be filtered</Text>
+                                                </View>
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.toggleSwitch,
+                                                        contentModerationEnabled && styles.toggleSwitchActive
+                                                    ]}
+                                                    onPress={() => setContentModerationEnabled(!contentModerationEnabled)}
+                                                >
+                                                    <View style={[
+                                                        styles.toggleKnob,
+                                                        contentModerationEnabled && styles.toggleKnobActive
+                                                    ]} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+
+                                        {/* Filter Action */}
+                                        <View style={styles.contentModerationSection}>
+                                            <Text style={styles.contentModerationLabel}>Filter Action</Text>
+                                            <Text style={styles.contentModerationHint}>What happens when prohibited content is detected</Text>
+                                            <View style={styles.contentModerationActions}>
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.contentModerationActionBtn,
+                                                        contentModerationAction === 'block' && styles.contentModerationActionBtnActive
+                                                    ]}
+                                                    onPress={() => setContentModerationAction('block')}
+                                                >
+                                                    <MaterialIcons
+                                                        name="block"
+                                                        size={18}
+                                                        color={contentModerationAction === 'block' ? '#fff' : colors.textMuted}
+                                                    />
+                                                    <Text style={[
+                                                        styles.contentModerationActionText,
+                                                        contentModerationAction === 'block' && styles.contentModerationActionTextActive
+                                                    ]}>Block</Text>
+                                                    <Text style={[
+                                                        styles.contentModerationActionHint,
+                                                        contentModerationAction === 'block' && styles.contentModerationActionHintActive
+                                                    ]}>Prevent sending</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.contentModerationActionBtn,
+                                                        contentModerationAction === 'flag' && styles.contentModerationActionBtnActive
+                                                    ]}
+                                                    onPress={() => setContentModerationAction('flag')}
+                                                >
+                                                    <MaterialIcons
+                                                        name="flag"
+                                                        size={18}
+                                                        color={contentModerationAction === 'flag' ? '#fff' : colors.textMuted}
+                                                    />
+                                                    <Text style={[
+                                                        styles.contentModerationActionText,
+                                                        contentModerationAction === 'flag' && styles.contentModerationActionTextActive
+                                                    ]}>Flag</Text>
+                                                    <Text style={[
+                                                        styles.contentModerationActionHint,
+                                                        contentModerationAction === 'flag' && styles.contentModerationActionHintActive
+                                                    ]}>Send but flag for review</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.contentModerationActionBtn,
+                                                        contentModerationAction === 'censor' && styles.contentModerationActionBtnActive
+                                                    ]}
+                                                    onPress={() => setContentModerationAction('censor')}
+                                                >
+                                                    <MaterialIcons
+                                                        name="visibility-off"
+                                                        size={18}
+                                                        color={contentModerationAction === 'censor' ? '#fff' : colors.textMuted}
+                                                    />
+                                                    <Text style={[
+                                                        styles.contentModerationActionText,
+                                                        contentModerationAction === 'censor' && styles.contentModerationActionTextActive
+                                                    ]}>Censor</Text>
+                                                    <Text style={[
+                                                        styles.contentModerationActionHint,
+                                                        contentModerationAction === 'censor' && styles.contentModerationActionHintActive
+                                                    ]}>Replace with ***</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+
+                                        {/* Blocked Message */}
+                                        {contentModerationAction === 'block' && (
+                                            <View style={styles.contentModerationSection}>
+                                                <Text style={styles.contentModerationLabel}>Blocked Message</Text>
+                                                <Text style={styles.contentModerationHint}>Message shown to users when their content is blocked</Text>
+                                                <TextInput
+                                                    style={styles.contentModerationInput}
+                                                    value={blockedMessage}
+                                                    onChangeText={setBlockedMessage}
+                                                    placeholder="Your message contains prohibited content..."
+                                                    placeholderTextColor={colors.textSubtle}
+                                                    multiline
+                                                />
+                                            </View>
+                                        )}
+
+                                        {/* Save Settings Button */}
+                                        <TouchableOpacity
+                                            style={styles.contentModerationSaveBtn}
+                                            onPress={saveContentModerationSettings}
+                                            disabled={contentModerationLoading}
+                                        >
+                                            <Text style={styles.contentModerationSaveBtnText}>
+                                                {contentModerationLoading ? 'Saving...' : 'Save Settings'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Prohibited Words Section */}
+                                    <View style={styles.settingsCard}>
+                                        <View style={styles.settingsCardHeader}>
+                                            <View>
+                                                <Text style={styles.settingsCardTitle}>Prohibited Words</Text>
+                                                <Text style={styles.settingsCardSubtitle}>Add words or phrases to filter from messages</Text>
+                                            </View>
+                                        </View>
+
+                                        {/* Add New Word */}
+                                        <View style={styles.contentModerationAddWord}>
+                                            <TextInput
+                                                style={styles.contentModerationWordInput}
+                                                value={newProhibitedWord}
+                                                onChangeText={setNewProhibitedWord}
+                                                placeholder="Enter word or phrase to prohibit..."
+                                                placeholderTextColor={colors.textSubtle}
+                                                onSubmitEditing={addProhibitedWord}
+                                            />
+                                            <TouchableOpacity
+                                                style={styles.contentModerationAddBtn}
+                                                onPress={addProhibitedWord}
+                                                disabled={contentModerationLoading || !newProhibitedWord.trim()}
+                                            >
+                                                <MaterialIcons name="add" size={20} color="#fff" />
+                                                <Text style={styles.contentModerationAddBtnText}>Add</Text>
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        {/* Word List */}
+                                        <View style={styles.contentModerationWordList}>
+                                            {prohibitedWords.length === 0 ? (
+                                                <View style={styles.contentModerationEmpty}>
+                                                    <MaterialIcons name="filter-list-off" size={40} color={colors.textMuted} />
+                                                    <Text style={styles.contentModerationEmptyText}>No prohibited words yet</Text>
+                                                    <Text style={styles.contentModerationEmptyHint}>Add words above to start filtering content</Text>
+                                                </View>
+                                            ) : (
+                                                <View style={styles.contentModerationWordTags}>
+                                                    {prohibitedWords.map((word, index) => (
+                                                        <View key={index} style={styles.contentModerationWordTag}>
+                                                            <Text style={styles.contentModerationWordTagText}>{word}</Text>
+                                                            <TouchableOpacity
+                                                                style={styles.contentModerationWordTagRemove}
+                                                                onPress={() => removeProhibitedWord(word)}
+                                                            >
+                                                                <MaterialIcons name="close" size={14} color={colors.textMuted} />
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            )}
+                                        </View>
+
+                                        <Text style={styles.contentModerationWordCount}>
+                                            {prohibitedWords.length} word{prohibitedWords.length !== 1 ? 's' : ''} in filter list
+                                        </Text>
+                                    </View>
+
+                                    {/* Test Filter Section */}
+                                    <View style={styles.settingsCard}>
+                                        <View style={styles.settingsCardHeader}>
+                                            <View>
+                                                <Text style={styles.settingsCardTitle}>Test Filter</Text>
+                                                <Text style={styles.settingsCardSubtitle}>Test your content filter with sample text</Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.contentModerationTestSection}>
+                                            <TextInput
+                                                style={styles.contentModerationTestInput}
+                                                value={contentModerationTestText}
+                                                onChangeText={setContentModerationTestText}
+                                                placeholder="Enter text to test..."
+                                                placeholderTextColor={colors.textSubtle}
+                                                multiline
+                                            />
+                                            <TouchableOpacity
+                                                style={styles.contentModerationTestBtn}
+                                                onPress={testContentModeration}
+                                                disabled={contentModerationLoading || !contentModerationTestText.trim()}
+                                            >
+                                                <MaterialIcons name="play-arrow" size={18} color="#fff" />
+                                                <Text style={styles.contentModerationTestBtnText}>Test</Text>
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        {contentModerationTestResult && (
+                                            <View style={[
+                                                styles.contentModerationTestResult,
+                                                contentModerationTestResult.isProhibited
+                                                    ? styles.contentModerationTestResultBlocked
+                                                    : styles.contentModerationTestResultAllowed
+                                            ]}>
+                                                <View style={styles.contentModerationTestResultHeader}>
+                                                    <MaterialIcons
+                                                        name={contentModerationTestResult.isProhibited ? 'warning' : 'check-circle'}
+                                                        size={20}
+                                                        color={contentModerationTestResult.isProhibited ? '#DC2626' : '#16A34A'}
+                                                    />
+                                                    <Text style={[
+                                                        styles.contentModerationTestResultTitle,
+                                                        { color: contentModerationTestResult.isProhibited ? '#DC2626' : '#16A34A' }
+                                                    ]}>
+                                                        {contentModerationTestResult.isProhibited ? 'Content Would Be Filtered' : 'Content Is Allowed'}
+                                                    </Text>
+                                                </View>
+                                                {contentModerationTestResult.isProhibited && contentModerationTestResult.matchedWords.length > 0 && (
+                                                    <View style={styles.contentModerationTestResultDetails}>
+                                                        <Text style={styles.contentModerationTestResultLabel}>Matched words:</Text>
+                                                        <Text style={styles.contentModerationTestResultValue}>
+                                                            {contentModerationTestResult.matchedWords.join(', ')}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                                {contentModerationTestResult.isProhibited && contentModerationAction === 'censor' && (
+                                                    <View style={styles.contentModerationTestResultDetails}>
+                                                        <Text style={styles.contentModerationTestResultLabel}>Censored output:</Text>
+                                                        <Text style={styles.contentModerationTestResultValue}>
+                                                            {contentModerationTestResult.filteredContent}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                        )}
                                     </View>
                                 </View>
                             )}
@@ -3823,6 +4460,95 @@ const CreditUnionAdminScreen = () => {
                         >
                             <Text style={styles.successModalButtonText}>Done</Text>
                         </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Stakeholder Detail Modal */}
+            <Modal visible={stakeholderDetailModalOpen} transparent animationType="fade">
+                <View style={styles.successModalOverlay}>
+                    <View style={[styles.successModalContent, { maxWidth: 450 }]}>
+                        <TouchableOpacity
+                            style={styles.modalCloseBtn}
+                            onPress={() => {
+                                setStakeholderDetailModalOpen(false);
+                                setSelectedStakeholder(null);
+                            }}
+                        >
+                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        {selectedStakeholder && (() => {
+                            const stakeholderBadge = selectedStakeholder.stakeholderBadge || selectedStakeholder.user?.stakeholderBadge;
+                            const company = selectedStakeholder.company || selectedStakeholder.user?.company;
+                            const username = selectedStakeholder.username || selectedStakeholder.user?.username;
+                            const memberId = selectedStakeholder.userId || selectedStakeholder.user?._id || selectedStakeholder._id;
+                            return (
+                                <View style={styles.stakeholderDetailModal}>
+                                    <UserAvatar
+                                        uri={getMemberAvatarUrl(selectedStakeholder)}
+                                        name={getMemberName(selectedStakeholder)}
+                                        style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 16 }}
+                                    />
+                                    <View style={styles.stakeholderNameRow}>
+                                        <Text style={[styles.stakeholderName, { fontSize: 20 }]}>{getMemberName(selectedStakeholder)}</Text>
+                                        {stakeholderBadge && (
+                                            <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[stakeholderBadge] }]}>
+                                                <Text style={styles.stakeholderBadgeText}>
+                                                    {stakeholderBadge.charAt(0).toUpperCase() + stakeholderBadge.slice(1)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    {username && <Text style={[styles.stakeholderUsername, { marginBottom: 8 }]}>@{username}</Text>}
+
+                                    <View style={styles.stakeholderDetailSection}>
+                                        <View style={styles.stakeholderDetailItem}>
+                                            <MaterialIcons name="email" size={16} color={colors.textMuted} />
+                                            <Text style={styles.stakeholderDetailText}>{getMemberEmail(selectedStakeholder)}</Text>
+                                        </View>
+                                        {company && (
+                                            <View style={styles.stakeholderDetailItem}>
+                                                <MaterialIcons name="business" size={16} color={colors.textMuted} />
+                                                <Text style={styles.stakeholderDetailText}>{company}</Text>
+                                            </View>
+                                        )}
+                                        <View style={styles.stakeholderDetailItem}>
+                                            <MaterialIcons name="verified-user" size={16} color={colors.textMuted} />
+                                            <Text style={styles.stakeholderDetailText}>Role: {getMemberRoleLabel(selectedStakeholder.role)}</Text>
+                                        </View>
+                                        <View style={styles.stakeholderDetailItem}>
+                                            <MaterialIcons name="info" size={16} color={colors.textMuted} />
+                                            <Text style={styles.stakeholderDetailText}>Status: {getMemberStatusLabel(selectedStakeholder.status)}</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={[styles.stakeholderActions, { marginTop: 20, justifyContent: 'center' }]}>
+                                        <TouchableOpacity
+                                            style={styles.stakeholderActionBtn}
+                                            onPress={() => {
+                                                handleStakeholderAction(memberId, selectedStakeholder.status === 'muted' ? 'unmute' : 'mute');
+                                                setStakeholderDetailModalOpen(false);
+                                                setSelectedStakeholder(null);
+                                            }}
+                                        >
+                                            <MaterialIcons name={selectedStakeholder.status === 'muted' ? 'volume-up' : 'volume-off'} size={14} color={colors.text} />
+                                            <Text style={styles.stakeholderActionBtnText}>{selectedStakeholder.status === 'muted' ? 'Unmute' : 'Mute'}</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.stakeholderActionBtn, styles.stakeholderActionBtnDanger]}
+                                            onPress={() => {
+                                                handleStakeholderAction(memberId, 'remove');
+                                                setStakeholderDetailModalOpen(false);
+                                                setSelectedStakeholder(null);
+                                            }}
+                                        >
+                                            <MaterialIcons name="person-remove" size={14} color="#EF4444" />
+                                            <Text style={styles.stakeholderActionBtnTextDanger}>Remove</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            );
+                        })()}
                     </View>
                 </View>
             </Modal>
@@ -4541,6 +5267,28 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         postDate: {
             fontSize: 13,
             color: colors.textSubtle,
+        },
+        postCompany: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 2,
+        },
+        stakeholderBadgeSmall: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+            marginLeft: 4,
+        },
+        stakeholderBadgeSmallText: {
+            fontSize: 10,
+            fontWeight: '600',
+            color: '#FFFFFF',
+            textTransform: 'capitalize',
+        },
+        verifiedBadge: {
+            marginLeft: 4,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         postBody: {
             fontSize: 14,
@@ -6705,6 +7453,420 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: '#FFFFFF',
             fontSize: 16,
             fontWeight: '600',
+        },
+        // Stakeholder Management Styles
+        stakeholderCard: {
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        stakeholderHeader: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 12,
+            marginBottom: 12,
+        },
+        stakeholderInfo: {
+            flex: 1,
+        },
+        stakeholderNameRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+            marginBottom: 4,
+        },
+        stakeholderName: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        stakeholderBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 12,
+        },
+        stakeholderBadgeText: {
+            color: '#FFFFFF',
+            fontSize: 11,
+            fontWeight: '600',
+        },
+        stakeholderUsername: {
+            fontSize: 14,
+            color: colors.textMuted,
+            marginBottom: 2,
+        },
+        stakeholderCompany: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginBottom: 2,
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        stakeholderEmail: {
+            fontSize: 13,
+            color: colors.textSubtle,
+        },
+        stakeholderDetails: {
+            flexDirection: 'row',
+            gap: 24,
+            paddingVertical: 12,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            marginBottom: 12,
+        },
+        stakeholderDetailRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        stakeholderDetailLabel: {
+            fontSize: 13,
+            color: colors.textMuted,
+        },
+        stakeholderDetailValue: {
+            fontSize: 13,
+            color: colors.text,
+            fontWeight: '500',
+        },
+        stakeholderActions: {
+            flexDirection: 'row',
+            gap: 8,
+            flexWrap: 'wrap',
+        },
+        stakeholderActionBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 8,
+            backgroundColor: colors.background,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        stakeholderActionBtnPrimary: {
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
+        },
+        stakeholderActionBtnDanger: {
+            backgroundColor: 'transparent',
+            borderColor: '#EF4444',
+        },
+        stakeholderActionBtnText: {
+            fontSize: 13,
+            color: colors.text,
+            fontWeight: '500',
+        },
+        stakeholderActionBtnTextPrimary: {
+            fontSize: 13,
+            color: '#FFFFFF',
+            fontWeight: '500',
+        },
+        stakeholderActionBtnTextDanger: {
+            fontSize: 13,
+            color: '#EF4444',
+            fontWeight: '500',
+        },
+        memberAvatarLarge: {
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+        },
+        statusBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 12,
+        },
+        statusActive: {
+            backgroundColor: '#22C55E20',
+        },
+        statusMuted: {
+            backgroundColor: '#F59E0B20',
+        },
+        statusBanned: {
+            backgroundColor: '#EF444420',
+        },
+        statusBadgeText: {
+            fontSize: 11,
+            fontWeight: '600',
+        },
+        stakeholderDetailModal: {
+            alignItems: 'center',
+            paddingTop: 20,
+        },
+        stakeholderDetailSection: {
+            width: '100%',
+            marginTop: 16,
+            paddingTop: 16,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
+        stakeholderDetailItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            paddingVertical: 8,
+        },
+        stakeholderDetailText: {
+            fontSize: 14,
+            color: colors.text,
+        },
+        modalCloseBtn: {
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            padding: 8,
+            zIndex: 10,
+        },
+        // Content Moderation Styles
+        contentModerationSection: {
+            marginBottom: 20,
+        },
+        contentModerationRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+        },
+        contentModerationRowInfo: {
+            flex: 1,
+            marginRight: 16,
+        },
+        contentModerationLabel: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 4,
+        },
+        contentModerationHint: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginBottom: 12,
+        },
+        toggleSwitch: {
+            width: 48,
+            height: 26,
+            borderRadius: 13,
+            backgroundColor: colors.border,
+            padding: 3,
+        },
+        toggleSwitchActive: {
+            backgroundColor: colors.primary,
+        },
+        toggleKnob: {
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            backgroundColor: '#FFFFFF',
+        },
+        toggleKnobActive: {
+            transform: [{ translateX: 22 }],
+        },
+        contentModerationActions: {
+            flexDirection: 'row',
+            gap: 12,
+        },
+        contentModerationActionBtn: {
+            flex: 1,
+            alignItems: 'center',
+            padding: 16,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+        },
+        contentModerationActionBtnActive: {
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
+        },
+        contentModerationActionText: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+            marginTop: 8,
+        },
+        contentModerationActionTextActive: {
+            color: '#FFFFFF',
+        },
+        contentModerationActionHint: {
+            fontSize: 11,
+            color: colors.textMuted,
+            marginTop: 4,
+            textAlign: 'center',
+        },
+        contentModerationActionHintActive: {
+            color: 'rgba(255,255,255,0.8)',
+        },
+        contentModerationInput: {
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 8,
+            padding: 12,
+            fontSize: 14,
+            color: colors.text,
+            borderWidth: 1,
+            borderColor: colors.border,
+            minHeight: 80,
+            textAlignVertical: 'top',
+        },
+        contentModerationSaveBtn: {
+            backgroundColor: colors.primary,
+            paddingVertical: 12,
+            paddingHorizontal: 24,
+            borderRadius: 8,
+            alignItems: 'center',
+            alignSelf: 'flex-start',
+        },
+        contentModerationSaveBtnText: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        contentModerationAddWord: {
+            flexDirection: 'row',
+            gap: 12,
+            marginBottom: 16,
+        },
+        contentModerationWordInput: {
+            flex: 1,
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 8,
+            padding: 12,
+            fontSize: 14,
+            color: colors.text,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        contentModerationAddBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: colors.primary,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            borderRadius: 8,
+        },
+        contentModerationAddBtnText: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        contentModerationWordList: {
+            marginBottom: 12,
+        },
+        contentModerationEmpty: {
+            alignItems: 'center',
+            paddingVertical: 32,
+        },
+        contentModerationEmptyText: {
+            fontSize: 15,
+            fontWeight: '500',
+            color: colors.text,
+            marginTop: 12,
+        },
+        contentModerationEmptyHint: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginTop: 4,
+        },
+        contentModerationWordTags: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        contentModerationWordTag: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.surfaceMuted,
+            paddingVertical: 6,
+            paddingLeft: 12,
+            paddingRight: 6,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        contentModerationWordTagText: {
+            fontSize: 13,
+            color: colors.text,
+        },
+        contentModerationWordTagRemove: {
+            marginLeft: 6,
+            padding: 4,
+        },
+        contentModerationWordCount: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        contentModerationTestSection: {
+            flexDirection: 'row',
+            gap: 12,
+            marginBottom: 16,
+        },
+        contentModerationTestInput: {
+            flex: 1,
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 8,
+            padding: 12,
+            fontSize: 14,
+            color: colors.text,
+            borderWidth: 1,
+            borderColor: colors.border,
+            minHeight: 60,
+            textAlignVertical: 'top',
+        },
+        contentModerationTestBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: '#10B981',
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            borderRadius: 8,
+            alignSelf: 'flex-start',
+        },
+        contentModerationTestBtnText: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        contentModerationTestResult: {
+            borderRadius: 12,
+            padding: 16,
+        },
+        contentModerationTestResultBlocked: {
+            backgroundColor: '#FEE2E2',
+            borderWidth: 1,
+            borderColor: '#FECACA',
+        },
+        contentModerationTestResultAllowed: {
+            backgroundColor: '#DCFCE7',
+            borderWidth: 1,
+            borderColor: '#BBF7D0',
+        },
+        contentModerationTestResultHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 8,
+        },
+        contentModerationTestResultTitle: {
+            fontSize: 14,
+            fontWeight: '600',
+        },
+        contentModerationTestResultDetails: {
+            marginTop: 8,
+        },
+        contentModerationTestResultLabel: {
+            fontSize: 12,
+            fontWeight: '500',
+            color: '#6B7280',
+            marginBottom: 4,
+        },
+        contentModerationTestResultValue: {
+            fontSize: 13,
+            color: '#374151',
         },
     });
 

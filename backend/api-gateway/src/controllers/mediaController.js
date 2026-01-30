@@ -183,6 +183,61 @@ const uploadAvatar = async (req, res) => {
 };
 
 /**
+ * Upload banner/cover image
+ * POST /api/media/banner
+ */
+const uploadBanner = async (req, res) => {
+    try {
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).json({ success: false, error: 'No file provided' });
+        }
+
+        // Get file buffer (handles both memory and disk storage)
+        const fileBuffer = await getFileBuffer(file);
+
+        const result = await fileUploadService.uploadFile({
+            file: fileBuffer,
+            filename: file.originalname,
+            mimeType: file.mimetype,
+            type: 'banner',
+            userId: req.user._id.toString(),
+        });
+
+        // Track file metadata for cleanup
+        try {
+            await FileMetadata.createFromUpload(result, {
+                filename: file.originalname,
+                mimeType: file.mimetype,
+                type: 'banner',
+                userId: req.user._id,
+            });
+        } catch (metadataError) {
+            console.error('Failed to save banner metadata:', metadataError);
+        }
+
+        // Update the user's bannerUrl in the database
+        try {
+            const User = require('../models/User');
+            const bannerUrl = result.url || result.secureUrl || result.secure_url;
+            await User.findByIdAndUpdate(req.user._id, { bannerUrl });
+            result.bannerUrl = bannerUrl;
+        } catch (updateError) {
+            console.error('Failed to update user bannerUrl:', updateError);
+        }
+
+        res.json({
+            success: true,
+            data: result,
+        });
+    } catch (error) {
+        console.error('Banner upload error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
  * Upload voice note
  * POST /api/media/voice-note
  */
@@ -688,6 +743,7 @@ module.exports = {
     // File uploads
     uploadFile,
     uploadAvatar,
+    uploadBanner,
     uploadVoiceNote,
     getUploadSignature,
     getPresignedUrl,

@@ -42,7 +42,16 @@ const userSchema = new mongoose.Schema({
         enum: ['stakeholder', 'vendor', 'partner', 'sponsor', 'investor'],
         default: null,
     },
+    // Company name for stakeholders
+    company: {
+        type: String,
+        default: null,
+    },
     avatarUrl: {
+        type: String,
+        default: null,
+    },
+    bannerUrl: {
         type: String,
         default: null,
     },

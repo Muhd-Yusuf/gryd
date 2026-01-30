@@ -31,6 +31,7 @@ export default function StakeholderProfileIconScreen() {
         firstName: string;
         lastName: string;
         username: string;
+        company: string;
         subgridId: string;
         subgridName: string;
         stakeholderBadge: string;
@@ -82,6 +83,7 @@ export default function StakeholderProfileIconScreen() {
                 firstName: params.firstName,
                 lastName: params.lastName,
                 username: params.username,
+                company: params.company,
                 subgridId: params.subgridId,
                 subgridName: params.subgridName,
                 stakeholderBadge: selectedBadge,
@@ -220,7 +222,9 @@ export default function StakeholderProfileIconScreen() {
                                         </Text>
                                     </View>
                                 </View>
-                                <Text style={styles.previewUsername}>@{params.username}</Text>
+                                <Text style={styles.previewUsername}>
+                                    @{params.username}{params.company ? ` from ${params.company}` : ''}
+                                </Text>
                             </View>
                         </View>
                     </View>

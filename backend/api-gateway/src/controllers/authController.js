@@ -1034,7 +1034,7 @@ exports.validateStakeholderInvite = async (req, res) => {
 // @access  Public (with valid invite token)
 exports.signupStakeholder = async (req, res) => {
     try {
-        const { inviteToken, firstName, lastName, email, username, avatarUrl, stakeholderBadge } = req.body;
+        const { inviteToken, firstName, lastName, email, username, company, avatarUrl, stakeholderBadge } = req.body;
 
         if (!inviteToken) {
             return res.status(400).json({ message: 'Invite token is required' });
@@ -1092,6 +1092,7 @@ exports.signupStakeholder = async (req, res) => {
             lastName,
             username: username ? username.toLowerCase() : null,
             email: normalizedEmail,
+            company: company || null,
             avatarUrl: avatarUrl || null,
             role: 'stakeholder',
             stakeholderBadge: finalBadge,
@@ -1131,6 +1132,7 @@ exports.signupStakeholder = async (req, res) => {
                 email: user.email,
                 role: user.role,
                 stakeholderBadge: user.stakeholderBadge,
+                company: user.company,
                 avatarUrl: user.avatarUrl,
                 tenantId: subgrid.tenantId?._id,
                 subgrid: {

@@ -23,6 +23,7 @@ export default function StakeholderVerifyOtpScreen() {
         firstName: string;
         lastName: string;
         username: string;
+        company: string;
         subgridId: string;
         subgridName: string;
         stakeholderBadge: string;
@@ -106,6 +107,7 @@ export default function StakeholderVerifyOtpScreen() {
                     firstName: params.firstName,
                     lastName: params.lastName,
                     username: params.username,
+                    company: params.company,
                     subgridId: params.subgridId,
                     subgridName: params.subgridName,
                     stakeholderBadge: params.stakeholderBadge,

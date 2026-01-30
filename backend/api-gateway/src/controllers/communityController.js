@@ -23,6 +23,7 @@ const {
     isMembershipActive,
     canWriteInSubgrid,
 } = require('../services/permissionService');
+const { filterContent } = require('../services/contentFilterService');
 
 const slugify = (value) => {
     return String(value || '')
@@ -179,10 +180,91 @@ exports.getUserProfile = async (req, res) => {
                 email: user.email,
                 role: user.role,
                 avatarUrl: user.avatarUrl,
+                bannerUrl: user.bannerUrl,
+                stakeholderBadge: user.stakeholderBadge,
+                company: user.company,
             },
         });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to get user profile', error: error.message });
+    }
+};
+
+exports.updateUserProfile = async (req, res) => {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const { username, firstName, lastName } = req.body;
+        const updateData = {};
+
+        // Validate and set username if provided
+        if (username !== undefined) {
+            const trimmedUsername = String(username).trim().toLowerCase();
+
+            // Validate username format
+            if (trimmedUsername && !/^[a-z0-9_]{3,20}$/.test(trimmedUsername)) {
+                return res.status(400).json({
+                    message: 'Username must be 3-20 characters and contain only letters, numbers, and underscores'
+                });
+            }
+
+            // Check if username is already taken (if not empty)
+            if (trimmedUsername) {
+                const existingUser = await User.findOne({
+                    username: trimmedUsername,
+                    _id: { $ne: req.user.id }
+                });
+                if (existingUser) {
+                    return res.status(400).json({ message: 'Username is already taken' });
+                }
+            }
+
+            updateData.username = trimmedUsername || null;
+        }
+
+        // Update firstName if provided
+        if (firstName !== undefined) {
+            updateData.firstName = String(firstName).trim();
+        }
+
+        // Update lastName if provided
+        if (lastName !== undefined) {
+            updateData.lastName = String(lastName).trim();
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ message: 'No valid fields to update' });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { $set: updateData },
+            { new: true }
+        ).select('-password');
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                userId: user._id,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                username: user.username,
+                email: user.email,
+                role: user.role,
+                avatarUrl: user.avatarUrl,
+                bannerUrl: user.bannerUrl,
+                stakeholderBadge: user.stakeholderBadge,
+                company: user.company,
+            },
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to update user profile', error: error.message });
     }
 };
 
@@ -601,7 +683,7 @@ exports.listSubgridMembers = async (req, res) => {
         const User = require('../models/User');
         const userIds = members.map(m => m.userId);
         const users = await User.find({ _id: { $in: userIds } })
-            .select('_id firstName lastName email username avatarUrl createdAt role stakeholderBadge')
+            .select('_id firstName lastName email username avatarUrl createdAt role stakeholderBadge company')
             .lean();
 
         const userMap = {};
@@ -625,6 +707,7 @@ exports.listSubgridMembers = async (req, res) => {
                     createdAt: user.createdAt || m.createdAt,
                     role: user.role || 'member',
                     stakeholderBadge: user.stakeholderBadge || null,
+                    company: user.company || null,
                 },
                 // Keep flat fields for backward compatibility
                 firstName: user.firstName || '',
@@ -634,6 +717,7 @@ exports.listSubgridMembers = async (req, res) => {
                 avatarUrl: user.avatarUrl || '',
                 userRole: user.role || 'member',
                 stakeholderBadge: user.stakeholderBadge || null,
+                company: user.company || null,
             };
         });
 
@@ -1703,13 +1787,30 @@ exports.createMessage = async (req, res) => {
             return res.status(403).json({ message: error });
         }
 
+        // Apply content moderation filter
+        let filteredBody = normalizedBody;
+        let flagForReview = false;
+        if (normalizedBody) {
+            const filterResult = await filterContent(normalizedBody, subgridId);
+            if (!filterResult.allowed) {
+                return res.status(400).json({
+                    message: filterResult.message,
+                    code: 'CONTENT_BLOCKED',
+                    matchedWords: filterResult.matches,
+                });
+            }
+            filteredBody = filterResult.censoredContent || normalizedBody;
+            flagForReview = filterResult.flagged || false;
+        }
+
         const message = await Message.create({
             subgridId: String(subgridId),
             channelId,
             authorId: String(authorId),
-            body: normalizedBody,
+            body: filteredBody,
             kind: kind || (normalizedAttachments.length > 0 ? 'audio' : 'text'),
             attachments: normalizedAttachments,
+            flagged: flagForReview,
         });
 
         if (req.user) {
@@ -1889,13 +1990,47 @@ exports.createPost = async (req, res) => {
             return res.status(403).json({ message: error });
         }
 
+        // Apply content moderation filter to title and body
+        let filteredTitle = title || '';
+        let filteredBody = body;
+        let flagForReview = false;
+
+        // Check title
+        if (filteredTitle) {
+            const titleFilterResult = await filterContent(filteredTitle, subgridId);
+            if (!titleFilterResult.allowed) {
+                return res.status(400).json({
+                    message: titleFilterResult.message,
+                    code: 'CONTENT_BLOCKED',
+                    matchedWords: titleFilterResult.matches,
+                });
+            }
+            filteredTitle = titleFilterResult.censoredContent || filteredTitle;
+            flagForReview = flagForReview || titleFilterResult.flagged || false;
+        }
+
+        // Check body
+        if (filteredBody) {
+            const bodyFilterResult = await filterContent(filteredBody, subgridId);
+            if (!bodyFilterResult.allowed) {
+                return res.status(400).json({
+                    message: bodyFilterResult.message,
+                    code: 'CONTENT_BLOCKED',
+                    matchedWords: bodyFilterResult.matches,
+                });
+            }
+            filteredBody = bodyFilterResult.censoredContent || filteredBody;
+            flagForReview = flagForReview || bodyFilterResult.flagged || false;
+        }
+
         const post = await Post.create({
             subgridId: String(subgridId),
             channelId,
             authorId: String(authorId),
-            title: title || '',
-            body,
+            title: filteredTitle,
+            body: filteredBody,
             attachments: Array.isArray(attachments) ? attachments : [],
+            flagged: flagForReview,
         });
 
         await touchMemberActivity(subgrid.tenantId, subgridId, req.user.id);
@@ -1967,11 +2102,28 @@ exports.createComment = async (req, res) => {
             return res.status(404).json({ message: 'Post not found' });
         }
 
+        // Apply content moderation filter
+        let filteredBody = body;
+        let flagForReview = false;
+        if (body) {
+            const filterResult = await filterContent(body, subgridId);
+            if (!filterResult.allowed) {
+                return res.status(400).json({
+                    message: filterResult.message,
+                    code: 'CONTENT_BLOCKED',
+                    matchedWords: filterResult.matches,
+                });
+            }
+            filteredBody = filterResult.censoredContent || body;
+            flagForReview = filterResult.flagged || false;
+        }
+
         const comment = await Comment.create({
             subgridId: String(subgridId),
             postId,
             authorId: String(authorId),
-            body,
+            body: filteredBody,
+            flagged: flagForReview,
         });
 
         // Increment comment count on the post
@@ -2190,6 +2342,11 @@ exports.likePost = async (req, res) => {
     try {
         const { subgridId, postId } = req.params;
 
+        // Validate postId is a valid ObjectId
+        if (!mongoose.Types.ObjectId.isValid(postId)) {
+            return res.status(400).json({ message: 'Invalid post ID format' });
+        }
+
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
             return res.status(404).json({ message: 'Subgrid not found' });
@@ -2201,15 +2358,16 @@ exports.likePost = async (req, res) => {
         }
 
         const { Post, Like } = await getTenantModels(subgrid);
-        const post = await Post.findOne({ _id: postId, subgridId: String(subgridId), status: 'active' });
-        if (!post) {
+        // Use findById for more reliable ObjectId matching, then verify subgridId and status
+        const post = await Post.findById(postId);
+        if (!post || post.subgridId !== String(subgridId) || post.status !== 'active') {
             return res.status(404).json({ message: 'Post not found' });
         }
 
-        // Check if already liked
+        // Check if already liked - use String(postId) for consistent comparison
         const existingLike = await Like.findOne({
             subgridId: String(subgridId),
-            postId,
+            postId: String(postId),
             userId: String(userId),
         });
 
@@ -2217,10 +2375,10 @@ exports.likePost = async (req, res) => {
             return res.status(400).json({ message: 'Already liked this post' });
         }
 
-        // Create like and increment count atomically
+        // Create like and increment count atomically - store postId as string
         await Like.create({
             subgridId: String(subgridId),
-            postId,
+            postId: String(postId),
             userId: String(userId),
         });
 
@@ -2256,6 +2414,11 @@ exports.unlikePost = async (req, res) => {
     try {
         const { subgridId, postId } = req.params;
 
+        // Validate postId is a valid ObjectId
+        if (!mongoose.Types.ObjectId.isValid(postId)) {
+            return res.status(400).json({ message: 'Invalid post ID format' });
+        }
+
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
             return res.status(404).json({ message: 'Subgrid not found' });
@@ -2268,10 +2431,10 @@ exports.unlikePost = async (req, res) => {
 
         const { Post, Like } = await getTenantModels(subgrid);
 
-        // Check if like exists
+        // Check if like exists - use String(postId) for consistent comparison
         const existingLike = await Like.findOne({
             subgridId: String(subgridId),
-            postId,
+            postId: String(postId),
             userId: String(userId),
         });
 
@@ -2293,7 +2456,7 @@ exports.unlikePost = async (req, res) => {
             subgridId,
             postId,
             userId,
-            likeCount: Math.max(0, updatedPost.likeCount),
+            likeCount: Math.max(0, updatedPost?.likeCount || 0),
             timestamp: new Date().toISOString(),
         });
 
@@ -2301,7 +2464,7 @@ exports.unlikePost = async (req, res) => {
             success: true,
             data: {
                 postId,
-                likeCount: Math.max(0, updatedPost.likeCount),
+                likeCount: Math.max(0, updatedPost?.likeCount || 0),
                 liked: false,
             },
         });
@@ -2315,6 +2478,11 @@ exports.resharePost = async (req, res) => {
         const { subgridId, postId } = req.params;
         const { comment } = req.body;
 
+        // Validate postId is a valid ObjectId
+        if (!mongoose.Types.ObjectId.isValid(postId)) {
+            return res.status(400).json({ message: 'Invalid post ID format' });
+        }
+
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
             return res.status(404).json({ message: 'Subgrid not found' });
@@ -2326,15 +2494,16 @@ exports.resharePost = async (req, res) => {
         }
 
         const { Post, Reshare } = await getTenantModels(subgrid);
-        const post = await Post.findOne({ _id: postId, subgridId: String(subgridId), status: 'active' });
-        if (!post) {
+        // Use findById for more reliable ObjectId matching, then verify subgridId and status
+        const post = await Post.findById(postId);
+        if (!post || post.subgridId !== String(subgridId) || post.status !== 'active') {
             return res.status(404).json({ message: 'Post not found' });
         }
 
-        // Check if already reshared
+        // Check if already reshared - use String(postId) for consistent comparison
         const existingReshare = await Reshare.findOne({
             subgridId: String(subgridId),
-            postId,
+            postId: String(postId),
             userId: String(userId),
         });
 
@@ -2342,10 +2511,10 @@ exports.resharePost = async (req, res) => {
             return res.status(400).json({ message: 'Already reshared this post' });
         }
 
-        // Create reshare and increment count
+        // Create reshare and increment count - store postId as string
         const reshare = await Reshare.create({
             subgridId: String(subgridId),
-            postId,
+            postId: String(postId),
             userId: String(userId),
             comment: comment || '',
         });
@@ -2390,6 +2559,11 @@ exports.unresharePost = async (req, res) => {
     try {
         const { subgridId, postId } = req.params;
 
+        // Validate postId is a valid ObjectId
+        if (!mongoose.Types.ObjectId.isValid(postId)) {
+            return res.status(400).json({ message: 'Invalid post ID format' });
+        }
+
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
             return res.status(404).json({ message: 'Subgrid not found' });
@@ -2402,10 +2576,10 @@ exports.unresharePost = async (req, res) => {
 
         const { Post, Reshare } = await getTenantModels(subgrid);
 
-        // Check if reshare exists
+        // Check if reshare exists - use String(postId) for consistent comparison
         const existingReshare = await Reshare.findOne({
             subgridId: String(subgridId),
-            postId,
+            postId: String(postId),
             userId: String(userId),
         });
 
@@ -2427,7 +2601,7 @@ exports.unresharePost = async (req, res) => {
             subgridId,
             postId,
             userId,
-            reshareCount: Math.max(0, updatedPost.reshareCount),
+            reshareCount: Math.max(0, updatedPost?.reshareCount || 0),
             timestamp: new Date().toISOString(),
         });
 
@@ -2435,7 +2609,7 @@ exports.unresharePost = async (req, res) => {
             success: true,
             data: {
                 postId,
-                reshareCount: Math.max(0, updatedPost.reshareCount),
+                reshareCount: Math.max(0, updatedPost?.reshareCount || 0),
             },
         });
     } catch (error) {
@@ -2447,6 +2621,11 @@ exports.getPostEngagement = async (req, res) => {
     try {
         const { subgridId, postId } = req.params;
 
+        // Validate postId is a valid ObjectId
+        if (!mongoose.Types.ObjectId.isValid(postId)) {
+            return res.status(400).json({ message: 'Invalid post ID format' });
+        }
+
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
             return res.status(404).json({ message: 'Subgrid not found' });
@@ -2455,29 +2634,30 @@ exports.getPostEngagement = async (req, res) => {
         const userId = req.user?.id;
         const { Post, Like, Reshare, Comment } = await getTenantModels(subgrid);
 
-        const post = await Post.findOne({ _id: postId, subgridId: String(subgridId), status: 'active' });
-        if (!post) {
+        // Use findById for more reliable ObjectId matching
+        const post = await Post.findById(postId);
+        if (!post || post.subgridId !== String(subgridId) || post.status !== 'active') {
             return res.status(404).json({ message: 'Post not found' });
         }
 
-        // Check if current user has liked/reshared
+        // Check if current user has liked/reshared - use String(postId) for consistent comparison
         let userLiked = false;
         let userReshared = false;
 
         if (userId) {
             const [like, reshare] = await Promise.all([
-                Like.findOne({ subgridId: String(subgridId), postId, userId: String(userId) }),
-                Reshare.findOne({ subgridId: String(subgridId), postId, userId: String(userId) }),
+                Like.findOne({ subgridId: String(subgridId), postId: String(postId), userId: String(userId) }),
+                Reshare.findOne({ subgridId: String(subgridId), postId: String(postId), userId: String(userId) }),
             ]);
             userLiked = Boolean(like);
             userReshared = Boolean(reshare);
         }
 
-        // Get actual counts
+        // Get actual counts - use String(postId) for consistent comparison
         const [likeCount, reshareCount, commentCount] = await Promise.all([
-            Like.countDocuments({ subgridId: String(subgridId), postId }),
-            Reshare.countDocuments({ subgridId: String(subgridId), postId }),
-            Comment.countDocuments({ subgridId: String(subgridId), postId, status: 'active' }),
+            Like.countDocuments({ subgridId: String(subgridId), postId: String(postId) }),
+            Reshare.countDocuments({ subgridId: String(subgridId), postId: String(postId) }),
+            Comment.countDocuments({ subgridId: String(subgridId), postId: String(postId), status: 'active' }),
         ]);
 
         return res.status(200).json({
@@ -2615,13 +2795,30 @@ exports.createDirectMessage = async (req, res) => {
             return res.status(403).json({ message: 'Friendship required to send messages' });
         }
 
+        // Apply content moderation filter
+        let filteredBody = normalizedBody;
+        let flagForReview = false;
+        if (normalizedBody) {
+            const filterResult = await filterContent(normalizedBody, subgridId);
+            if (!filterResult.allowed) {
+                return res.status(400).json({
+                    message: filterResult.message,
+                    code: 'CONTENT_BLOCKED',
+                    matchedWords: filterResult.matches,
+                });
+            }
+            filteredBody = filterResult.censoredContent || normalizedBody;
+            flagForReview = filterResult.flagged || false;
+        }
+
         const message = await DirectMessage.create({
             subgridId: String(subgridId),
             senderId: String(senderId),
             recipientId: String(recipientId),
-            body: normalizedBody,
+            body: filteredBody,
             kind: kind || (normalizedAttachments.length > 0 ? 'audio' : 'text'),
             attachments: normalizedAttachments,
+            flagged: flagForReview,
         });
 
         await touchMemberActivity(subgrid.tenantId, subgridId, senderId);
@@ -2740,6 +2937,7 @@ const mapUsersById = async (ids) => {
             avatarUrl: user.avatarUrl,
             role: user.role || 'member',
             stakeholderBadge: user.stakeholderBadge || null,
+            company: user.company || null,
         };
         return acc;
     }, {});
@@ -3674,5 +3872,128 @@ exports.deleteComment = async (req, res) => {
         return res.status(200).json({ success: true, message: 'Comment deleted' });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to delete comment', error: error.message });
+    }
+};
+
+// ===================
+// CONTENT MODERATION
+// ===================
+
+const contentFilterService = require('../services/contentFilterService');
+
+// @desc    Get content moderation settings
+// @route   GET /api/community/subgrids/:subgridId/content-moderation
+// @access  Admin
+exports.getContentModerationSettings = async (req, res) => {
+    try {
+        const { subgridId } = req.params;
+
+        const settings = await contentFilterService.getModerationSettings(subgridId);
+        if (!settings) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: settings,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to get moderation settings', error: error.message });
+    }
+};
+
+// @desc    Update content moderation settings
+// @route   PATCH /api/community/subgrids/:subgridId/content-moderation
+// @access  Admin
+exports.updateContentModerationSettings = async (req, res) => {
+    try {
+        const { subgridId } = req.params;
+        const { enabled, prohibitedWords, action, blockedMessage } = req.body;
+
+        const settings = await contentFilterService.updateModerationSettings(subgridId, {
+            enabled,
+            prohibitedWords,
+            action,
+            blockedMessage,
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: settings,
+            message: 'Content moderation settings updated',
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to update moderation settings', error: error.message });
+    }
+};
+
+// @desc    Add prohibited words
+// @route   POST /api/community/subgrids/:subgridId/content-moderation/words
+// @access  Admin
+exports.addProhibitedWords = async (req, res) => {
+    try {
+        const { subgridId } = req.params;
+        const { words } = req.body;
+
+        if (!words || !Array.isArray(words) || words.length === 0) {
+            return res.status(400).json({ message: 'Words array is required' });
+        }
+
+        const updatedWords = await contentFilterService.addProhibitedWords(subgridId, words);
+
+        return res.status(200).json({
+            success: true,
+            data: { prohibitedWords: updatedWords },
+            message: `Added ${words.length} word(s) to prohibited list`,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to add prohibited words', error: error.message });
+    }
+};
+
+// @desc    Remove prohibited words
+// @route   DELETE /api/community/subgrids/:subgridId/content-moderation/words
+// @access  Admin
+exports.removeProhibitedWords = async (req, res) => {
+    try {
+        const { subgridId } = req.params;
+        const { words } = req.body;
+
+        if (!words || !Array.isArray(words) || words.length === 0) {
+            return res.status(400).json({ message: 'Words array is required' });
+        }
+
+        const updatedWords = await contentFilterService.removeProhibitedWords(subgridId, words);
+
+        return res.status(200).json({
+            success: true,
+            data: { prohibitedWords: updatedWords },
+            message: `Removed ${words.length} word(s) from prohibited list`,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to remove prohibited words', error: error.message });
+    }
+};
+
+// @desc    Test content against moderation filter
+// @route   POST /api/community/subgrids/:subgridId/content-moderation/test
+// @access  Admin
+exports.testContentFilter = async (req, res) => {
+    try {
+        const { subgridId } = req.params;
+        const { content } = req.body;
+
+        if (!content) {
+            return res.status(400).json({ message: 'Content is required' });
+        }
+
+        const result = await contentFilterService.filterContent(content, subgridId);
+
+        return res.status(200).json({
+            success: true,
+            data: result,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to test content filter', error: error.message });
     }
 };

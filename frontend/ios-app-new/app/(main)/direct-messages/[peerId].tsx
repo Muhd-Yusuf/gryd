@@ -70,6 +70,7 @@ type UserProfile = {
     avatarUrl?: string;
     role?: string;
     stakeholderBadge?: StakeholderBadge;
+    company?: string;
 };
 
 type Channel = {
@@ -273,6 +274,7 @@ const DirectMessageChatScreen = () => {
     const [friendUsername, setFriendUsername] = useState<string | null>(null);
     const [friendAvatar, setFriendAvatar] = useState<string | undefined>(undefined);
     const [friendStakeholderBadge, setFriendStakeholderBadge] = useState<StakeholderBadge | null>(null);
+    const [friendCompany, setFriendCompany] = useState<string | null>(null);
     const [currentUserAvatar, setCurrentUserAvatar] = useState<string | undefined>(undefined);
     const [isFriend, setIsFriend] = useState(true);
     const [isBlocked, setIsBlocked] = useState(false);
@@ -391,6 +393,7 @@ const DirectMessageChatScreen = () => {
                     setFriendName(name || user.email || 'Unknown User');
                     setFriendUsername(user.username || null);
                     setFriendAvatar(user.avatarUrl || undefined);
+                    setFriendCompany(user.company || null);
                     // Set stakeholder badge if user is a stakeholder
                     if (user.role === 'stakeholder' && user.stakeholderBadge) {
                         setFriendStakeholderBadge(user.stakeholderBadge);
@@ -401,6 +404,7 @@ const DirectMessageChatScreen = () => {
                     setFriendName('Unknown User');
                     setFriendUsername(null);
                     setFriendAvatar(undefined);
+                    setFriendCompany(null);
                     setFriendStakeholderBadge(null);
                 }
             }
@@ -910,6 +914,9 @@ const DirectMessageChatScreen = () => {
                             {friendUsername && (
                                 <Text style={styles.headerUsername}>@{friendUsername}</Text>
                             )}
+                            {friendCompany && (
+                                <Text style={styles.headerCompany}>from {friendCompany}</Text>
+                            )}
                             {friendStakeholderBadge && (
                                 <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[friendStakeholderBadge] }]}>
                                     <Text style={styles.stakeholderBadgeText}>
@@ -1289,6 +1296,7 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         headerNameRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
         headerName: { fontSize: 17, fontWeight: '600', color: colors.text },
         headerUsername: { fontSize: 13, color: colors.textMuted, fontWeight: '400' },
+        headerCompany: { fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
         stakeholderBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
         stakeholderBadgeText: { fontSize: 10, fontWeight: '600', color: '#FFFFFF' },
         headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },

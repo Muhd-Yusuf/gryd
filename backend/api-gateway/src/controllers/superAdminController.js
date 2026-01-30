@@ -230,7 +230,7 @@ exports.getCustomers = async (req, res) => {
                 clientName: subgrid.clientName || subgrid.name,
                 status: subgrid.status,
                 memberCount,
-                plan: subscription?.planName || 'Premium',
+                plan: subscription?.planName || 'Active',
                 subscriptionStatus: subscription?.status || 'active',
                 owner: owner?.userId ? {
                     _id: owner.userId._id,
@@ -325,7 +325,7 @@ exports.getCustomerDetails = async (req, res) => {
                     memberCount,
                     channelCount: channels.length,
                 },
-                subscription: subscription || { planName: 'Premium', status: 'active' },
+                subscription: subscription || { planName: 'Active', status: 'active' },
                 members: members.map((m) => ({
                     _id: m._id,
                     userId: m.userId?._id,
@@ -569,10 +569,10 @@ exports.createCustomer = async (req, res) => {
             status: 'active',
         });
 
-        // Create Premium subscription by default (customer has paid outside system)
+        // Create Active subscription by default (customer has paid outside system)
         await Subscription.create({
             tenantId: tenant._id,
-            planName: 'Premium',
+            planName: 'Active',
             status: 'active',
         });
 
@@ -718,11 +718,11 @@ exports.upgradeCustomerPlan = async (req, res) => {
                 durationDays = 5;
                 break;
             case 'premium_30':
-                planName = 'Premium';
+                planName = 'Active';
                 durationDays = 30;
                 break;
             case 'premium_60':
-                planName = 'Premium';
+                planName = 'Active';
                 durationDays = 60;
                 break;
             case 'revoke':

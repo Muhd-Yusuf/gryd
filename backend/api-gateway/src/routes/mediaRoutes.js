@@ -158,6 +158,17 @@ router.post('/avatar',
     mediaController.uploadAvatar
 );
 
+// Upload banner/cover image
+// Uses disk storage for larger images
+router.post('/banner',
+    requireUser,
+    avatarRateLimiter,
+    upload.single('file'),
+    handleMulterError,
+    cleanupTempFile,
+    mediaController.uploadBanner
+);
+
 // Upload voice note
 // Uses disk storage, dedicated rate limit
 router.post('/voice-note',

@@ -31,6 +31,7 @@ export default function StakeholderProfileSummaryScreen() {
         firstName: string;
         lastName: string;
         username: string;
+        company: string;
         subgridId: string;
         subgridName: string;
         stakeholderBadge: string;
@@ -87,6 +88,7 @@ export default function StakeholderProfileSummaryScreen() {
                 lastName: params.lastName,
                 email: params.email,
                 username: params.username,
+                company: params.company,
                 avatarUrl,
                 stakeholderBadge: params.stakeholderBadge as StakeholderBadge,
             });
@@ -252,6 +254,15 @@ export default function StakeholderProfileSummaryScreen() {
                             <TextInput
                                 style={styles.fieldInput}
                                 value={params.email}
+                                editable={false}
+                            />
+                        </View>
+
+                        <View style={styles.fieldGroup}>
+                            <Text style={styles.fieldLabel}>Company</Text>
+                            <TextInput
+                                style={styles.fieldInput}
+                                value={params.company || '-'}
                                 editable={false}
                             />
                         </View>

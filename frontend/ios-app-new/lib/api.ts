@@ -57,6 +57,7 @@ export interface AuthUser {
     lastName: string;
     role: UserRole;
     stakeholderBadge?: StakeholderBadge;
+    company?: string;
     avatarUrl?: string;
     tenantId?: string;
 }
@@ -503,6 +504,7 @@ export const authSignupStakeholder = async (data: {
     lastName: string;
     email: string;
     username?: string;
+    company?: string;
     avatarUrl?: string;
     stakeholderBadge?: StakeholderBadge;
 }): Promise<{ token: string; user: AuthUser; message: string }> => {
@@ -523,6 +525,7 @@ export const authSignupStakeholder = async (data: {
         lastName: userData.lastName,
         role: userData.role,
         stakeholderBadge: userData.stakeholderBadge,
+        company: userData.company,
         avatarUrl: userData.avatarUrl,
         tenantId: userData.tenantId,
     };
@@ -982,6 +985,54 @@ export const uploadAvatar = async (file: { uri: string; name: string; type: stri
     const data = await parseJson(response);
     if (!response.ok) {
         throw new Error(data?.error || 'Avatar upload failed');
+    }
+    return data;
+};
+
+// Upload banner/cover image
+export const uploadBanner = async (file: { uri: string; name: string; type: string }): Promise<any> => {
+    await ensureBootstrap();
+
+    const formData = new FormData();
+
+    console.log('[uploadBanner] Platform:', Platform.OS, 'URI prefix:', file.uri.substring(0, 50));
+
+    // For web, convert blob URL or data URI to actual Blob
+    if (Platform.OS === 'web') {
+        try {
+            const response = await fetch(file.uri);
+            const blob = await response.blob();
+            console.log('[uploadBanner] Web blob created, size:', blob.size, 'type:', blob.type);
+            formData.append('file', blob, file.name);
+        } catch (fetchError) {
+            console.error('[uploadBanner] Failed to fetch URI as blob:', fetchError);
+            formData.append('file', {
+                uri: file.uri,
+                name: file.name,
+                type: file.type,
+            } as any);
+        }
+    } else {
+        // React Native format
+        formData.append('file', {
+            uri: file.uri,
+            name: file.name,
+            type: file.type,
+        } as any);
+    }
+
+    const res = await safeFetch('/media/banner', {
+        method: 'POST',
+        headers: {
+            'x-user-id': resolvedUserId || USER_ID,
+            'x-user-role': resolvedUserRole || USER_ROLE,
+        },
+        body: formData,
+    });
+
+    const data = await parseJson(res);
+    if (!res.ok) {
+        throw new Error(data?.error || 'Banner upload failed');
     }
     return data;
 };

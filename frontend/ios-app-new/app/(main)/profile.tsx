@@ -8,13 +8,16 @@ import {
     ActivityIndicator,
     Alert,
     Platform,
+    Image,
+    useWindowDimensions,
+    TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { getAuthUser, communityGet, resolveTenantId, logout, uploadAvatar, updateAuthUser, StakeholderBadge } from '../../lib/api';
+import { getAuthUser, communityGet, communityPatch, resolveTenantId, logout, uploadAvatar, uploadBanner, updateAuthUser, StakeholderBadge } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../../components/UserAvatar';
 
@@ -25,7 +28,10 @@ type UserProfile = {
     lastName: string;
     role: string;
     avatarUrl?: string;
+    bannerUrl?: string;
     stakeholderBadge?: StakeholderBadge;
+    company?: string;
+    username?: string;
 };
 
 type SubgridMembership = {
@@ -36,15 +42,23 @@ type SubgridMembership = {
 
 const ProfileScreen = () => {
     const { colors, mode, toggleTheme } = useTheme();
-    const styles = useMemo(() => createStyles(colors), [colors]);
+    const { width } = useWindowDimensions();
+    const styles = useMemo(() => createStyles(colors, width), [colors, width]);
     const router = useRouter();
     const navigation = useNavigation();
     const [user, setUser] = useState<UserProfile | null>(null);
     const [memberships, setMemberships] = useState<SubgridMembership[]>([]);
     const [saving, setSaving] = useState(false);
+    const [savingBanner, setSavingBanner] = useState(false);
     const [error, setError] = useState('');
     const [profileImage, setProfileImage] = useState<string | null>(null);
+    const [bannerImage, setBannerImage] = useState<string | null>(null);
     const [stagedImage, setStagedImage] = useState<{ uri: string; name: string; type: string } | null>(null);
+    const [stagedBanner, setStagedBanner] = useState<{ uri: string; name: string; type: string } | null>(null);
+    const [username, setUsername] = useState('');
+    const [editingUsername, setEditingUsername] = useState(false);
+    const [savingUsername, setSavingUsername] = useState(false);
+    const [usernameError, setUsernameError] = useState('');
 
     useEffect(() => {
         loadProfile();
@@ -59,7 +73,7 @@ const ProfileScreen = () => {
                 return;
             }
 
-            // Load full user profile from API (includes avatar)
+            // Load full user profile from API (includes avatar and banner)
             try {
                 const profileRes = await communityGet('/users/me');
                 if (profileRes?.data) {
@@ -70,12 +84,21 @@ const ProfileScreen = () => {
                         lastName: profileRes.data.lastName,
                         role: profileRes.data.role,
                         avatarUrl: profileRes.data.avatarUrl,
+                        bannerUrl: profileRes.data.bannerUrl,
                         stakeholderBadge: profileRes.data.stakeholderBadge,
+                        company: profileRes.data.company,
+                        username: profileRes.data.username,
                     };
                     setUser(profileData);
                     await updateAuthUser(profileData);
                     if (profileRes.data.avatarUrl) {
                         setProfileImage(profileRes.data.avatarUrl);
+                    }
+                    if (profileRes.data.bannerUrl) {
+                        setBannerImage(profileRes.data.bannerUrl);
+                    }
+                    if (profileRes.data.username) {
+                        setUsername(profileRes.data.username);
                     }
                 } else {
                     // Fall back to auth user data
@@ -167,6 +190,69 @@ const ProfileScreen = () => {
         }
     };
 
+    const pickBanner = async () => {
+        try {
+            const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!permissionResult.granted) {
+                Alert.alert('Permission Required', 'Please allow access to your photo library to change your banner.');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [3, 1], // Twitter-style banner aspect ratio
+                quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                const uri = result.assets[0].uri;
+                const filename = uri.split('/').pop() || 'banner.jpg';
+                const match = /\.(\w+)$/.exec(filename);
+                const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+                setStagedBanner({ uri, name: filename, type });
+                setError('');
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to pick banner image');
+        }
+    };
+
+    const handleSaveBanner = async () => {
+        if (!stagedBanner) return;
+
+        setSavingBanner(true);
+        setError('');
+        try {
+            const response = await uploadBanner(stagedBanner);
+
+            const bannerUrl = response?.bannerUrl || response?.url || response?.secureUrl || response?.secure_url;
+            if (bannerUrl) {
+                setBannerImage(bannerUrl);
+                await updateAuthUser({ bannerUrl });
+                setStagedBanner(null);
+
+                if (Platform.OS === 'web') {
+                    window.alert('Banner updated successfully!');
+                } else {
+                    Alert.alert('Success', 'Banner updated successfully!');
+                }
+            } else {
+                throw new Error('No banner URL returned from server');
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to save banner');
+        } finally {
+            setSavingBanner(false);
+        }
+    };
+
+    const handleCancelBanner = () => {
+        setStagedBanner(null);
+        setError('');
+    };
+
     const handleSaveAvatar = async () => {
         if (!stagedImage) return;
 
@@ -204,6 +290,47 @@ const ProfileScreen = () => {
     const handleCancelAvatar = () => {
         setStagedImage(null);
         setError('');
+    };
+
+    const handleSaveUsername = async () => {
+        if (!username.trim()) {
+            setUsernameError('Username cannot be empty');
+            return;
+        }
+
+        const trimmedUsername = username.trim().toLowerCase();
+        if (!/^[a-z0-9_]{3,20}$/.test(trimmedUsername)) {
+            setUsernameError('Username must be 3-20 characters with only letters, numbers, and underscores');
+            return;
+        }
+
+        setSavingUsername(true);
+        setUsernameError('');
+        try {
+            const response = await communityPatch('/users/me', { username: trimmedUsername });
+            if (response?.success) {
+                setUser(prev => prev ? { ...prev, username: trimmedUsername } : prev);
+                await updateAuthUser({ username: trimmedUsername });
+                setEditingUsername(false);
+                if (Platform.OS === 'web') {
+                    window.alert('Username updated successfully!');
+                } else {
+                    Alert.alert('Success', 'Username updated successfully!');
+                }
+            } else {
+                throw new Error(response?.message || 'Failed to update username');
+            }
+        } catch (err: any) {
+            setUsernameError(err.message || 'Failed to save username');
+        } finally {
+            setSavingUsername(false);
+        }
+    };
+
+    const handleCancelUsername = () => {
+        setUsername(user?.username || '');
+        setEditingUsername(false);
+        setUsernameError('');
     };
 
     const handleLogout = async () => {
@@ -312,6 +439,7 @@ const ProfileScreen = () => {
     const roleBadge = getRoleBadgeColor(effectiveRole);
     // Show staged image if user selected a new one, otherwise show saved avatar
     const avatarUri = stagedImage?.uri || profileImage || user?.avatarUrl || null;
+    const bannerUri = stagedBanner?.uri || bannerImage || user?.bannerUrl || null;
 
     return (
         <SafeAreaView style={styles.safe}>
@@ -336,8 +464,30 @@ const ProfileScreen = () => {
                     contentContainerStyle={styles.contentContainer}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Profile Card with Avatar */}
+                    {/* Profile Card with Banner and Avatar */}
                     <View style={styles.profileCard}>
+                        {/* Banner Section */}
+                        <TouchableOpacity
+                            style={styles.bannerContainer}
+                            onPress={pickBanner}
+                            disabled={savingBanner}
+                            activeOpacity={0.8}
+                        >
+                            {bannerUri ? (
+                                <Image source={{ uri: bannerUri }} style={styles.bannerImage} />
+                            ) : (
+                                <View style={[styles.bannerPlaceholder, { backgroundColor: mode === 'dark' ? '#1a1a2e' : '#667eea' }]} />
+                            )}
+                            <View style={styles.bannerOverlay}>
+                                {savingBanner ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+                                )}
+                            </View>
+                        </TouchableOpacity>
+
+                        {/* Avatar Section - Positioned over banner */}
                         <View style={styles.avatarSection}>
                             <TouchableOpacity style={styles.avatarContainer} onPress={pickImage} disabled={saving}>
                                 <UserAvatar
@@ -383,8 +533,40 @@ const ProfileScreen = () => {
                                 <Text style={styles.avatarHint}>Tap to change photo</Text>
                             )}
                         </View>
+
+                        {/* Banner Actions - Moved below avatar to prevent overlap */}
+                        {stagedBanner && (
+                            <View style={styles.bannerActions}>
+                                <TouchableOpacity
+                                    style={styles.cancelBannerButton}
+                                    onPress={handleCancelBanner}
+                                    disabled={savingBanner}
+                                >
+                                    <MaterialIcons name="close" size={14} color={colors.text} />
+                                    <Text style={styles.cancelBannerText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.saveBannerButton}
+                                    onPress={handleSaveBanner}
+                                    disabled={savingBanner}
+                                >
+                                    {savingBanner ? (
+                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                    ) : (
+                                        <>
+                                            <MaterialIcons name="check" size={14} color="#FFFFFF" />
+                                            <Text style={styles.saveBannerText}>Save Banner</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
                         <View style={styles.profileInfo}>
                             <Text style={styles.fullName}>{fullName}</Text>
+                            {user?.username && (
+                                <Text style={styles.usernameDisplay}>@{user.username}</Text>
+                            )}
                             <Text style={styles.email}>{user?.email}</Text>
                             <View style={styles.badgesContainer}>
                                 {/* Show stakeholder badge if user is a stakeholder */}
@@ -411,6 +593,64 @@ const ProfileScreen = () => {
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Account Information</Text>
                         <View style={styles.infoCard}>
+                            {/* Username Field */}
+                            <View style={styles.infoRow}>
+                                <MaterialIcons name="alternate-email" size={20} color={colors.textMuted} />
+                                <View style={styles.infoContent}>
+                                    <Text style={styles.infoLabel}>Username</Text>
+                                    {editingUsername ? (
+                                        <View style={styles.usernameEditContainer}>
+                                            <TextInput
+                                                style={styles.usernameInput}
+                                                value={username}
+                                                onChangeText={(text) => {
+                                                    setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                                                    setUsernameError('');
+                                                }}
+                                                placeholder="Choose a username"
+                                                placeholderTextColor={colors.textMuted}
+                                                autoCapitalize="none"
+                                                autoCorrect={false}
+                                                maxLength={20}
+                                            />
+                                            {usernameError ? (
+                                                <Text style={styles.usernameErrorText}>{usernameError}</Text>
+                                            ) : null}
+                                            <View style={styles.usernameActions}>
+                                                <TouchableOpacity
+                                                    style={styles.cancelUsernameButton}
+                                                    onPress={handleCancelUsername}
+                                                    disabled={savingUsername}
+                                                >
+                                                    <Text style={styles.cancelUsernameText}>Cancel</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.saveUsernameButton}
+                                                    onPress={handleSaveUsername}
+                                                    disabled={savingUsername}
+                                                >
+                                                    {savingUsername ? (
+                                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                                    ) : (
+                                                        <Text style={styles.saveUsernameText}>Save</Text>
+                                                    )}
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity
+                                            style={styles.usernameValueContainer}
+                                            onPress={() => setEditingUsername(true)}
+                                        >
+                                            <Text style={styles.infoValue}>
+                                                {user?.username ? `@${user.username}` : 'Not set - tap to add'}
+                                            </Text>
+                                            <MaterialIcons name="edit" size={16} color={colors.primary} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                            <View style={styles.divider} />
                             <View style={styles.infoRow}>
                                 <MaterialIcons name="person" size={20} color={colors.textMuted} />
                                 <View style={styles.infoContent}>
@@ -442,6 +682,18 @@ const ProfileScreen = () => {
                                     <Text style={styles.infoValueMono}>{user?.userId}</Text>
                                 </View>
                             </View>
+                            {user?.company && (
+                                <>
+                                    <View style={styles.divider} />
+                                    <View style={styles.infoRow}>
+                                        <MaterialIcons name="business" size={20} color={colors.textMuted} />
+                                        <View style={styles.infoContent}>
+                                            <Text style={styles.infoLabel}>Company</Text>
+                                            <Text style={styles.infoValue}>{user.company}</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
                         </View>
                     </View>
 
@@ -492,7 +744,7 @@ const ProfileScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: number) =>
     StyleSheet.create({
         safe: {
             flex: 1,
@@ -541,14 +793,82 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         profileCard: {
             backgroundColor: colors.surface,
             borderRadius: 16,
-            padding: 24,
             borderWidth: 1,
             borderColor: colors.border,
-            alignItems: 'center',
+            overflow: 'hidden',
         },
+        // Banner Styles
+        bannerContainer: {
+            width: '100%',
+            height: width > 600 ? 180 : 140,
+            position: 'relative',
+        },
+        bannerImage: {
+            width: '100%',
+            height: '100%',
+            resizeMode: 'cover',
+        },
+        bannerPlaceholder: {
+            width: '100%',
+            height: '100%',
+        },
+        bannerOverlay: {
+            position: 'absolute',
+            bottom: 12,
+            right: 12,
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            // Ensure the overlay doesn't block parent touch (it's inside TouchableOpacity)
+            pointerEvents: 'none',
+        },
+        bannerActions: {
+            flexDirection: 'row',
+            justifyContent: 'center',
+            gap: 12,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            backgroundColor: colors.surfaceMuted,
+        },
+        cancelBannerButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+        },
+        cancelBannerText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        saveBannerButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 8,
+            backgroundColor: '#22C55E',
+        },
+        saveBannerText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        // Avatar Section - Positioned to overlap banner
         avatarSection: {
             alignItems: 'center',
-            marginBottom: 16,
+            marginTop: -50,
+            paddingHorizontal: 24,
+            paddingBottom: 16,
         },
         avatarContainer: {
             position: 'relative',
@@ -560,6 +880,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             height: 100,
             borderRadius: 50,
             backgroundColor: colors.surfaceMuted,
+            borderWidth: 4,
+            borderColor: colors.surface,
         },
         avatarOverlay: {
             position: 'absolute',
@@ -619,6 +941,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         profileInfo: {
             alignItems: 'center',
             gap: 4,
+            paddingHorizontal: 24,
+            paddingBottom: 24,
         },
         fullName: {
             fontSize: 22,
@@ -746,6 +1070,66 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 13,
             color: colors.error,
             textAlign: 'center',
+        },
+        usernameDisplay: {
+            fontSize: 15,
+            color: colors.primary,
+            fontWeight: '500',
+        },
+        usernameEditContainer: {
+            flex: 1,
+            gap: 8,
+        },
+        usernameInput: {
+            fontSize: 15,
+            fontWeight: '500',
+            color: colors.text,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 8,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            backgroundColor: colors.surfaceMuted,
+        },
+        usernameValueContainer: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        usernameActions: {
+            flexDirection: 'row',
+            gap: 8,
+            marginTop: 4,
+        },
+        cancelUsernameButton: {
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+        },
+        cancelUsernameText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        saveUsernameButton: {
+            paddingHorizontal: 16,
+            paddingVertical: 6,
+            borderRadius: 6,
+            backgroundColor: colors.primary,
+            minWidth: 60,
+            alignItems: 'center',
+        },
+        saveUsernameText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        usernameErrorText: {
+            fontSize: 12,
+            color: colors.error,
         },
     });
 

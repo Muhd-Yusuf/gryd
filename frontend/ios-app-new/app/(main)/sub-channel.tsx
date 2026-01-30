@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
     StyleSheet,
     Text,
@@ -66,8 +66,10 @@ type Member = {
     email?: string;
     username?: string;
     avatarUrl?: string;
+    role?: string;
     userRole?: string;
     stakeholderBadge?: StakeholderBadge;
+    company?: string;
 };
 
 const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
@@ -177,6 +179,7 @@ const SubChannelScreen = () => {
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const activeAudioStreamRef = useRef<any | null>(null);
     const expoRecordingRef = useRef<Audio.Recording | null>(null);
+    const feedScrollRef = useRef<ScrollView>(null);
 
     useEffect(() => {
         let isActive = true;
@@ -294,14 +297,24 @@ const SubChannelScreen = () => {
         fetchRole();
     }, [subgridId]);
 
+    // Sort ascending (oldest first) so newest messages appear at the bottom like WhatsApp
     const feedItems = useMemo(() => {
         const merged = [...messages, ...posts];
         return merged.sort((a, b) => {
             const aTime = new Date(a.createdAt || 0).getTime();
             const bTime = new Date(b.createdAt || 0).getTime();
-            return bTime - aTime;
+            return aTime - bTime; // Ascending: oldest first, newest at bottom
         });
     }, [messages, posts]);
+
+    // Scroll to bottom when new messages arrive (WhatsApp-style)
+    useEffect(() => {
+        if (feedItems.length > 0 && feedScrollRef.current) {
+            setTimeout(() => {
+                feedScrollRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+        }
+    }, [feedItems.length]);
 
     const openReportModal = (id: string, type: 'post' | 'message') => {
         setReportTarget({ id, type });
@@ -396,6 +409,25 @@ const SubChannelScreen = () => {
         return member?.username || null;
     };
 
+    const isMemberAdmin = (id?: string): boolean => {
+        if (!id) return false;
+        const member = memberMap[id];
+        if (!member) return false;
+        const role = member.role || member.userRole || '';
+        return ['owner', 'admin', 'subgrid_admin', 'super_admin'].includes(role.toLowerCase());
+    };
+
+    const getMemberDisplayUsername = (id?: string): string | null => {
+        if (!id) return null;
+        const member = memberMap[id];
+        if (!member) return null;
+        // If admin, show "Server Admin" unless they have a custom username
+        if (isMemberAdmin(id)) {
+            return member.username || 'Server Admin';
+        }
+        return member.username || null;
+    };
+
     const getAvatarUrl = (id?: string) => {
         if (!id) return null;
         const member = memberMap[id];
@@ -409,6 +441,12 @@ const SubChannelScreen = () => {
             return member.stakeholderBadge;
         }
         return null;
+    };
+
+    const getCompany = (id?: string): string | null => {
+        if (!id) return null;
+        const member = memberMap[id];
+        return member?.company || null;
     };
 
     const formatStakeholderBadgeLabel = (badge: StakeholderBadge) => {
@@ -916,7 +954,14 @@ const SubChannelScreen = () => {
                     {!!error && <Text style={styles.errorText}>{error}</Text>}
                     {loading && <Text style={styles.helperText}>Loading channel...</Text>}
 
-                    <ScrollView contentContainerStyle={styles.feedList} showsVerticalScrollIndicator={false}>
+                    <ScrollView
+                        ref={feedScrollRef}
+                        contentContainerStyle={styles.feedList}
+                        showsVerticalScrollIndicator={false}
+                        onContentSizeChange={() => {
+                            feedScrollRef.current?.scrollToEnd({ animated: false });
+                        }}
+                    >
                         {feedItems.length === 0 && !loading && (
                             <Text style={styles.emptyText}>No channel updates yet.</Text>
                         )}
@@ -940,8 +985,16 @@ const SubChannelScreen = () => {
                                     <View style={styles.feedHeaderInfo}>
                                         <View style={styles.authorRow}>
                                             <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
-                                            {getUsername(item.authorId || item.senderId) && (
-                                                <Text style={styles.feedUsername}>@{getUsername(item.authorId || item.senderId)}</Text>
+                                            {isMemberAdmin(item.authorId || item.senderId) && (
+                                                <View style={styles.verifiedBadge}>
+                                                    <MaterialIcons name="verified" size={14} color="#3B82F6" />
+                                                </View>
+                                            )}
+                                            {getMemberDisplayUsername(item.authorId || item.senderId) && (
+                                                <Text style={styles.feedUsername}>@{getMemberDisplayUsername(item.authorId || item.senderId)}</Text>
+                                            )}
+                                            {getCompany(item.authorId || item.senderId) && (
+                                                <Text style={styles.feedCompany}>from {getCompany(item.authorId || item.senderId)}</Text>
                                             )}
                                             {getStakeholderBadge(item.authorId || item.senderId) && (
                                                 <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getStakeholderBadge(item.authorId || item.senderId)!] }]}>
@@ -1488,6 +1541,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.textMuted,
             fontWeight: '400',
         },
+        feedCompany: {
+            fontSize: 12,
+            color: colors.textMuted,
+            fontStyle: 'italic',
+        },
         stakeholderBadge: {
             paddingHorizontal: 6,
             paddingVertical: 2,
@@ -1497,6 +1555,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 9,
             fontWeight: '600',
             color: '#FFFFFF',
+        },
+        verifiedBadge: {
+            marginLeft: 4,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         feedMeta: {
             fontSize: 11,

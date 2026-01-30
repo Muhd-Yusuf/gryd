@@ -268,12 +268,6 @@ const SuperAdminDashboard = () => {
     const [deleteConfirmChecked, setDeleteConfirmChecked] = useState(false);
     const [deletingCustomer, setDeletingCustomer] = useState(false);
 
-    // Upgrade access modal
-    const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
-    const [upgradeCustomerId, setUpgradeCustomerId] = useState<string | null>(null);
-    const [selectedPlan, setSelectedPlan] = useState<string>('');
-    const [upgradingCustomer, setUpgradingCustomer] = useState(false);
-
     // User info
     const [adminUser, setAdminUser] = useState<any>(null);
 
@@ -395,14 +389,12 @@ const SuperAdminDashboard = () => {
                 // Calculate customer stats
                 const all = response.data.total;
                 const active = response.data.customers.filter((c: Customer) => c.status === 'active').length;
-                const trial = response.data.customers.filter((c: Customer) => c.plan === 'Trial').length;
-                const premium = response.data.customers.filter((c: Customer) => c.plan === 'Premium').length;
 
                 setCustomerStats({
                     totalCustomers: all,
                     activeCustomers: active,
-                    trialCustomers: trial,
-                    premiumCustomers: premium,
+                    trialCustomers: 0,
+                    premiumCustomers: 0,
                 });
             }
         } catch (err: any) {
@@ -626,39 +618,6 @@ const SuperAdminDashboard = () => {
             setError(err.message || 'Failed to delete customer');
         } finally {
             setDeletingCustomer(false);
-        }
-    };
-
-    // Open upgrade modal
-    const openUpgradeModal = (customerId: string) => {
-        setUpgradeCustomerId(customerId);
-        setSelectedPlan('');
-        setUpgradeModalOpen(true);
-        setActionMenuOpen(null);
-    };
-
-    // Handle upgrade plan
-    const handleUpgradePlan = async () => {
-        if (!upgradeCustomerId || !selectedPlan) return;
-
-        const customerId = upgradeCustomerId;
-        const newPlan = selectedPlan;
-
-        // Optimistic update
-        setCustomers(prev => prev.map(c => c._id === customerId ? { ...c, plan: newPlan } : c));
-        setUpgradeModalOpen(false);
-        setUpgradeCustomerId(null);
-        setSelectedPlan('');
-
-        try {
-            setUpgradingCustomer(true);
-            await superAdminPost(`/customers/${customerId}/upgrade`, { plan: newPlan });
-            loadCustomersData(true);
-        } catch (err: any) {
-            loadCustomersData(true);
-            setError(err.message || 'Failed to upgrade customer plan');
-        } finally {
-            setUpgradingCustomer(false);
         }
     };
 
@@ -965,7 +924,6 @@ const SuperAdminDashboard = () => {
                         <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Customer Details</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Server Name</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Server members</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Plan</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Status</Text>
                         <View style={[styles.tableHeaderCell, { width: 50 }]} />
                     </View>
@@ -985,11 +943,6 @@ const SuperAdminDashboard = () => {
                             </View>
                             <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.name || '-'}</Text>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{customer.memberCount}</Text>
-                            <View style={[styles.tableCell, { flex: 1 }]}>
-                                <View style={[styles.planBadge, customer.plan === 'Premium' ? styles.planPremium : styles.planTrial]}>
-                                    <Text style={styles.planBadgeText}>{customer.plan}</Text>
-                                </View>
-                            </View>
                             <View style={[styles.tableCell, { flex: 1 }]}>
                                 <View style={[styles.statusBadge, customer.status === 'active' ? styles.statusActive : customer.status === 'pending' ? styles.statusPending : styles.statusSuspended]}>
                                     <View style={[styles.statusDot, customer.status === 'active' ? styles.statusDotActive : customer.status === 'pending' ? styles.statusDotPending : styles.statusDotSuspended]} />
@@ -1109,26 +1062,6 @@ const SuperAdminDashboard = () => {
                         <Text style={styles.customerStatValue}>{customerStats.activeCustomers}</Text>
                     </View>
                 </View>
-
-                <View style={styles.customerStatCard}>
-                    <View style={[styles.customerStatIcon, { backgroundColor: '#f0fdf4' }]}>
-                        <MaterialIcons name="group" size={24} color="#16a34a" />
-                    </View>
-                    <View style={styles.customerStatInfo}>
-                        <Text style={styles.customerStatLabel}>Trial Customers</Text>
-                        <Text style={styles.customerStatValue}>{customerStats.trialCustomers}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.customerStatCard}>
-                    <View style={[styles.customerStatIcon, { backgroundColor: '#f0fdf4' }]}>
-                        <MaterialIcons name="group" size={24} color="#16a34a" />
-                    </View>
-                    <View style={styles.customerStatInfo}>
-                        <Text style={styles.customerStatLabel}>Premium Customers</Text>
-                        <Text style={styles.customerStatValue}>{customerStats.premiumCustomers}</Text>
-                    </View>
-                </View>
             </View>
 
             {/* Customers Table Card */}
@@ -1168,7 +1101,6 @@ const SuperAdminDashboard = () => {
                         <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Customer Details</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Server Name</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Server members</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Plan</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Status</Text>
                         <View style={[styles.tableHeaderCell, { width: 50 }]} />
                     </View>
@@ -1191,11 +1123,6 @@ const SuperAdminDashboard = () => {
                             </View>
                             <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.name || '-'}</Text>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{customer.memberCount}</Text>
-                            <View style={[styles.tableCell, { flex: 1 }]}>
-                                <View style={[styles.planBadge, customer.plan === 'Premium' ? styles.planPremium : styles.planTrial]}>
-                                    <Text style={styles.planBadgeText}>{customer.plan}</Text>
-                                </View>
-                            </View>
                             <View style={[styles.tableCell, { flex: 1 }]}>
                                 <View style={[styles.statusBadge, customer.status === 'active' ? styles.statusActive : customer.status === 'pending' ? styles.statusPending : styles.statusSuspended]}>
                                     <View style={[styles.statusDot, customer.status === 'active' ? styles.statusDotActive : customer.status === 'pending' ? styles.statusDotPending : styles.statusDotSuspended]} />
@@ -1328,10 +1255,6 @@ const SuperAdminDashboard = () => {
                                 <View style={styles.detailGridItem}>
                                     <Text style={styles.detailLabel}>Account created</Text>
                                     <Text style={styles.detailValue}>{formatDate(customerDetailData.customer?.createdAt)}</Text>
-                                </View>
-                                <View style={styles.detailGridItem}>
-                                    <Text style={styles.detailLabel}>Plan</Text>
-                                    <Text style={styles.detailValue}>{customerDetailData.subscription?.planName || 'Trial'}</Text>
                                 </View>
                             </View>
 
@@ -1916,89 +1839,6 @@ const SuperAdminDashboard = () => {
         </Modal>
     );
 
-    // Render Upgrade Access Plan Modal
-    const renderUpgradeModal = () => (
-        <Modal
-            visible={upgradeModalOpen}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setUpgradeModalOpen(false)}
-        >
-            <Pressable style={styles.modalOverlay} onPress={() => setUpgradeModalOpen(false)}>
-                <Pressable style={styles.upgradeModal} onPress={(e) => e.stopPropagation()}>
-                    <View style={styles.confirmModalHeader}>
-                        <Text style={styles.confirmModalTitle}>Upgrade Access Plan</Text>
-                        <TouchableOpacity onPress={() => setUpgradeModalOpen(false)}>
-                            <MaterialIcons name="close" size={24} color={colors.textMuted} />
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.planOptions}>
-                        <TouchableOpacity
-                            style={styles.planOptionRow}
-                            onPress={() => setSelectedPlan('trial_5')}
-                        >
-                            <View style={[styles.planCheckbox, selectedPlan === 'trial_5' && styles.planCheckboxChecked]}>
-                                {selectedPlan === 'trial_5' && <MaterialIcons name="check" size={14} color="#fff" />}
-                            </View>
-                            <Text style={styles.planOptionText}>Trial (5 Days)</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.planOptionRow}
-                            onPress={() => setSelectedPlan('premium_30')}
-                        >
-                            <View style={[styles.planCheckbox, selectedPlan === 'premium_30' && styles.planCheckboxChecked]}>
-                                {selectedPlan === 'premium_30' && <MaterialIcons name="check" size={14} color="#fff" />}
-                            </View>
-                            <Text style={styles.planOptionText}>Premium (30 days)</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.planOptionRow}
-                            onPress={() => setSelectedPlan('premium_60')}
-                        >
-                            <View style={[styles.planCheckbox, selectedPlan === 'premium_60' && styles.planCheckboxChecked]}>
-                                {selectedPlan === 'premium_60' && <MaterialIcons name="check" size={14} color="#fff" />}
-                            </View>
-                            <Text style={styles.planOptionText}>Premium (60 days)</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.planOptionRow}
-                            onPress={() => setSelectedPlan('revoke')}
-                        >
-                            <View style={[styles.planCheckbox, selectedPlan === 'revoke' && styles.planCheckboxChecked]}>
-                                {selectedPlan === 'revoke' && <MaterialIcons name="check" size={14} color="#fff" />}
-                            </View>
-                            <Text style={styles.planOptionText}>Revoke Access</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.confirmModalActions}>
-                        <TouchableOpacity
-                            style={styles.upgradeCancelButton}
-                            onPress={() => setUpgradeModalOpen(false)}
-                        >
-                            <Text style={styles.upgradeCancelText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.upgradeSubmitButton, !selectedPlan && styles.upgradeSubmitButtonDisabled]}
-                            onPress={handleUpgradePlan}
-                            disabled={!selectedPlan || upgradingCustomer}
-                        >
-                            {upgradingCustomer ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <Text style={styles.upgradeSubmitText}>Update Access</Text>
-                            )}
-                        </TouchableOpacity>
-                    </View>
-                </Pressable>
-            </Pressable>
-        </Modal>
-    );
-
     // Role dropdown state for invite modal
     const [inviteRoleDropdownOpen, setInviteRoleDropdownOpen] = useState(false);
 
@@ -2165,9 +2005,6 @@ const SuperAdminDashboard = () => {
             {/* Delete Account Modal */}
             {renderDeleteModal()}
 
-            {/* Upgrade Access Modal */}
-            {renderUpgradeModal()}
-
             {/* Invite Team Member Modal */}
             {renderInviteModal()}
 
@@ -2185,20 +2022,6 @@ const SuperAdminDashboard = () => {
                         >
                             <MaterialIcons name="visibility" size={18} color={colors.text} style={{ marginRight: 10 }} />
                             <Text style={styles.actionMenuText}>View Customer</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.actionMenuItem}
-                            onPress={() => { openUpgradeModal(actionMenuCustomer._id); closeActionMenu(); }}
-                        >
-                            <MaterialIcons name="upgrade" size={18} color={colors.text} style={{ marginRight: 10 }} />
-                            <Text style={styles.actionMenuText}>Upgrade Access</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.actionMenuItem}
-                            onPress={() => { handleCustomerStatusUpdate(actionMenuCustomer._id, 'revoked'); closeActionMenu(); }}
-                        >
-                            <MaterialIcons name="block" size={18} color={colors.text} style={{ marginRight: 10 }} />
-                            <Text style={styles.actionMenuText}>Revoke Access</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.actionMenuItem}
@@ -2718,7 +2541,7 @@ const createStyles = (colors: any) =>
         planTrial: {
             borderColor: colors.border,
         },
-        planPremium: {
+        planActive: {
             borderColor: colors.border,
         },
         planBadgeText: {

@@ -79,6 +79,8 @@ type Message = {
     createdAt?: string;
 };
 
+type StakeholderBadge = 'stakeholder' | 'vendor' | 'partner' | 'sponsor' | 'investor';
+
 type Member = {
     userId?: string;
     firstName?: string;
@@ -86,6 +88,18 @@ type Member = {
     email?: string;
     role?: string;
     avatarUrl?: string;
+    username?: string;
+    userRole?: string;
+    stakeholderBadge?: StakeholderBadge;
+    company?: string;
+};
+
+const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
+    stakeholder: '#3B82F6',
+    vendor: '#8B5CF6',
+    partner: '#10B981',
+    sponsor: '#F59E0B',
+    investor: '#EC4899',
 };
 
 type UserProfile = {
@@ -216,6 +230,7 @@ const TenantCommunityScreen = () => {
     const activeAudioStreamRef = useRef<any | null>(null);
     const expoRecordingRef = useRef<Audio.Recording | null>(null);
     const waveformAnim = useRef(new Animated.Value(0)).current;
+    const feedScrollRef = useRef<ScrollView>(null);
 
     const EMOJI_GRID = [
         ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊'],
@@ -433,6 +448,50 @@ const TenantCommunityScreen = () => {
         const friend = friendUsers[id];
         if (friend?.avatarUrl) return friend.avatarUrl;
         return null;
+    };
+
+    const getUsername = (id?: string) => {
+        if (!id) return null;
+        const member = memberMap[id];
+        return member?.username || null;
+    };
+
+    const isMemberAdmin = (id?: string): boolean => {
+        if (!id) return false;
+        const member = memberMap[id];
+        if (!member) return false;
+        const role = member.role || member.userRole || '';
+        return ['owner', 'admin', 'subgrid_admin', 'super_admin'].includes(role.toLowerCase());
+    };
+
+    const getMemberDisplayUsername = (id?: string): string | null => {
+        if (!id) return null;
+        const member = memberMap[id];
+        if (!member) return null;
+        // If admin, show "Server Admin" unless they have a custom username
+        if (isMemberAdmin(id)) {
+            return member.username || 'Server Admin';
+        }
+        return member.username || null;
+    };
+
+    const getStakeholderBadge = (id?: string): StakeholderBadge | null => {
+        if (!id) return null;
+        const member = memberMap[id];
+        if (member?.userRole === 'stakeholder' && member?.stakeholderBadge) {
+            return member.stakeholderBadge;
+        }
+        return null;
+    };
+
+    const getCompany = (id?: string): string | null => {
+        if (!id) return null;
+        const member = memberMap[id];
+        return member?.company || null;
+    };
+
+    const formatStakeholderBadgeLabel = (badge: StakeholderBadge) => {
+        return badge.charAt(0).toUpperCase() + badge.slice(1);
     };
 
     const railItems = [
@@ -814,14 +873,24 @@ const TenantCommunityScreen = () => {
         }
     };
 
+    // Sort ascending (oldest first) so newest messages appear at the bottom like WhatsApp
     const feedItems = useMemo(() => {
         const merged = [...messages, ...posts];
         return merged.sort((a, b) => {
             const aTime = new Date(a.createdAt || 0).getTime();
             const bTime = new Date(b.createdAt || 0).getTime();
-            return bTime - aTime;
+            return aTime - bTime; // Ascending: oldest first, newest at bottom
         });
     }, [messages, posts]);
+
+    // Scroll to bottom when new messages arrive (WhatsApp-style)
+    useEffect(() => {
+        if (feedItems.length > 0 && feedScrollRef.current) {
+            setTimeout(() => {
+                feedScrollRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+        }
+    }, [feedItems.length]);
 
     const openReportModal = (id: string, type: 'post' | 'message') => {
         setReportTarget({ id, type });
@@ -1201,7 +1270,14 @@ const TenantCommunityScreen = () => {
                                 <Search size={16} color={colors.textMuted} />
                             </View>
 
-                            <ScrollView contentContainerStyle={styles.feedList} showsVerticalScrollIndicator={false}>
+                            <ScrollView
+                                ref={feedScrollRef}
+                                contentContainerStyle={styles.feedList}
+                                showsVerticalScrollIndicator={false}
+                                onContentSizeChange={() => {
+                                    feedScrollRef.current?.scrollToEnd({ animated: false });
+                                }}
+                            >
                                 {/* Channel Welcome Banner */}
                                 {activeChannel && (
                                     <View style={styles.channelWelcome}>
@@ -1231,7 +1307,27 @@ const TenantCommunityScreen = () => {
                                                 style={styles.avatar}
                                             />
                                             <View style={styles.feedHeaderInfo}>
-                                                <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
+                                                <View style={styles.authorRow}>
+                                                    <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
+                                                    {isMemberAdmin(item.authorId || item.senderId) && (
+                                                        <View style={styles.verifiedBadge}>
+                                                            <MaterialIcons name="verified" size={14} color="#3B82F6" />
+                                                        </View>
+                                                    )}
+                                                    {getMemberDisplayUsername(item.authorId || item.senderId) && (
+                                                        <Text style={styles.feedUsername}>@{getMemberDisplayUsername(item.authorId || item.senderId)}</Text>
+                                                    )}
+                                                    {getCompany(item.authorId || item.senderId) && (
+                                                        <Text style={styles.feedCompany}>from {getCompany(item.authorId || item.senderId)}</Text>
+                                                    )}
+                                                    {getStakeholderBadge(item.authorId || item.senderId) && (
+                                                        <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getStakeholderBadge(item.authorId || item.senderId)!] }]}>
+                                                            <Text style={styles.stakeholderBadgeText}>
+                                                                {formatStakeholderBadgeLabel(getStakeholderBadge(item.authorId || item.senderId)!)}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                </View>
                                                 <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
                                             </View>
                                             <View style={styles.feedHeaderActions}>
@@ -2018,10 +2114,41 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             height: 40,
             borderRadius: 20,
         },
+        authorRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            flexWrap: 'wrap',
+        },
         feedAuthor: {
             fontSize: 13,
             fontWeight: '600',
             color: colors.text,
+        },
+        feedUsername: {
+            fontSize: 12,
+            color: colors.textMuted,
+            fontWeight: '400',
+        },
+        feedCompany: {
+            fontSize: 12,
+            color: colors.textMuted,
+            fontStyle: 'italic',
+        },
+        stakeholderBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 8,
+        },
+        stakeholderBadgeText: {
+            fontSize: 9,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        verifiedBadge: {
+            marginLeft: 4,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         feedMeta: {
             fontSize: 11,

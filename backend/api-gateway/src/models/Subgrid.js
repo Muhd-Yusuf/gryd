@@ -78,6 +78,29 @@ const subgridSchema = new mongoose.Schema({
         type: [String],
         default: [],
     },
+    // Content moderation settings
+    contentModeration: {
+        enabled: {
+            type: Boolean,
+            default: true,
+        },
+        // Prohibited words/phrases (case-insensitive matching)
+        prohibitedWords: {
+            type: [String],
+            default: [],
+        },
+        // Action to take when prohibited content is detected
+        action: {
+            type: String,
+            enum: ['block', 'flag', 'censor'],
+            default: 'block', // block = prevent sending, flag = send but flag for review, censor = replace with ***
+        },
+        // Custom message shown when content is blocked
+        blockedMessage: {
+            type: String,
+            default: 'Your message contains prohibited content and cannot be sent.',
+        },
+    },
     embedSettings: {
         enabled: {
             type: Boolean,

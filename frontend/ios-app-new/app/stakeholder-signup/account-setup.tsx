@@ -31,6 +31,7 @@ export default function StakeholderAccountSetupScreen() {
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState(params.email || '');
     const [username, setUsername] = useState('');
+    const [company, setCompany] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -52,6 +53,10 @@ export default function StakeholderAccountSetupScreen() {
         }
         if (!username.trim()) {
             setError('Please enter a username');
+            return;
+        }
+        if (!company.trim()) {
+            setError('Please enter your company name');
             return;
         }
 
@@ -84,6 +89,7 @@ export default function StakeholderAccountSetupScreen() {
                     firstName,
                     lastName,
                     username: username.trim().toLowerCase(),
+                    company: company.trim(),
                     subgridId: params.subgridId,
                     subgridName: params.subgridName,
                     stakeholderBadge: params.stakeholderBadge,
@@ -190,6 +196,21 @@ export default function StakeholderAccountSetupScreen() {
                                 }}
                                 autoCapitalize="none"
                                 autoCorrect={false}
+                            />
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Company</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. UBA Bank"
+                                placeholderTextColor={colors.textSubtle}
+                                value={company}
+                                onChangeText={(text) => {
+                                    setCompany(text);
+                                    setError('');
+                                }}
+                                autoCapitalize="words"
                             />
                         </View>
 
