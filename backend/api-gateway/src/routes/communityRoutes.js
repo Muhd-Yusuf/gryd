@@ -84,6 +84,12 @@ const {
     addProhibitedWords,
     removeProhibitedWords,
     testContentFilter,
+    likeMessage,
+    unlikeMessage,
+    reshareMessage,
+    unreshareMessage,
+    listMessageComments,
+    createMessageComment,
 } = require('../controllers/communityController');
 const { attachUserContext, requireUser } = require('../middleware/authMiddleware');
 const { attachEmbedContext } = require('../middleware/embedMiddleware');
@@ -147,6 +153,14 @@ router.get('/subgrids/:subgridId/messages', loadSubgrid, requireSubgridRead, lis
 router.post('/subgrids/:subgridId/messages', loadSubgrid, requireSubgridWrite, createMessage);
 router.delete('/subgrids/:subgridId/messages/:messageId', requireUser, loadSubgrid, requireSubgridRead, deleteMessage);
 router.post('/subgrids/:subgridId/messages/:messageId/flag', loadSubgrid, requireSubgridRead, flagMessage);
+
+// Message likes, reshares, and comments
+router.post('/subgrids/:subgridId/messages/:messageId/like', requireUser, loadSubgrid, requireSubgridWrite, likeMessage);
+router.delete('/subgrids/:subgridId/messages/:messageId/like', requireUser, loadSubgrid, requireSubgridWrite, unlikeMessage);
+router.post('/subgrids/:subgridId/messages/:messageId/reshare', requireUser, loadSubgrid, requireSubgridWrite, reshareMessage);
+router.delete('/subgrids/:subgridId/messages/:messageId/reshare', requireUser, loadSubgrid, requireSubgridWrite, unreshareMessage);
+router.get('/subgrids/:subgridId/messages/:messageId/comments', loadSubgrid, requireSubgridRead, listMessageComments);
+router.post('/subgrids/:subgridId/messages/:messageId/comments', requireUser, loadSubgrid, requireSubgridWrite, createMessageComment);
 
 router.get('/subgrids/:subgridId/posts', loadSubgrid, requireSubgridRead, listPosts);
 router.post('/subgrids/:subgridId/posts', requireUser, loadSubgrid, requireSubgridWrite, createPost);

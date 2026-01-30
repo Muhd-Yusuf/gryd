@@ -991,9 +991,9 @@ const TenantCommunityScreen = () => {
         }
     };
 
-    // Like handler for posts (NOT messages - messages don't have like functionality)
-    const handleLikePost = async (postId: string, isLiked: boolean) => {
-        console.log('[Like] handleLikePost called:', { postId, isLiked, activeSubgridId, likeLoading });
+    // Like handler for feed items (posts and messages)
+    const handleLikeItem = async (itemId: string, isLiked: boolean, isPost: boolean) => {
+        console.log('[Like] handleLikeItem called:', { itemId, isLiked, isPost, activeSubgridId, likeLoading });
         if (!activeSubgridId) {
             console.log('[Like] Early return: no activeSubgridId');
             return;
@@ -1002,28 +1002,35 @@ const TenantCommunityScreen = () => {
             console.log('[Like] Early return: likeLoading in progress');
             return;
         }
-        setLikeLoading(postId);
+        setLikeLoading(itemId);
+        const endpoint = isPost ? 'posts' : 'messages';
         try {
             if (isLiked) {
-                console.log('[Like] Unliking post:', `/subgrids/${activeSubgridId}/posts/${postId}/like`);
-                await communityDelete(`/subgrids/${activeSubgridId}/posts/${postId}/like`);
+                console.log(`[Like] Unliking ${endpoint}:`, `/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
+                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
             } else {
-                console.log('[Like] Liking post:', `/subgrids/${activeSubgridId}/posts/${postId}/like`);
-                await communityPost(`/subgrids/${activeSubgridId}/posts/${postId}/like`, {});
+                console.log(`[Like] Liking ${endpoint}:`, `/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
+                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`, {});
             }
             console.log('[Like] API call successful');
             // Update local state optimistically
-            setPosts((prev) =>
-                prev.map((p) =>
-                    p._id === postId
-                        ? {
-                            ...p,
-                            userLiked: !isLiked,
-                            likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1),
-                        }
-                        : p
-                )
-            );
+            if (isPost) {
+                setPosts((prev) =>
+                    prev.map((p) =>
+                        p._id === itemId
+                            ? { ...p, userLiked: !isLiked, likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1) }
+                            : p
+                    )
+                );
+            } else {
+                setMessages((prev) =>
+                    prev.map((m) =>
+                        m._id === itemId
+                            ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
+                            : m
+                    )
+                );
+            }
         } catch (err: any) {
             console.error('[Like] Error:', err.message, err);
             setError(err.message || 'Failed to update like.');
@@ -1032,9 +1039,9 @@ const TenantCommunityScreen = () => {
         }
     };
 
-    // Reshare handler for posts
-    const handleResharePost = async (postId: string, isReshared: boolean) => {
-        console.log('[Reshare] handleResharePost called:', { postId, isReshared, activeSubgridId, reshareLoading });
+    // Reshare handler for feed items (posts and messages)
+    const handleReshareItem = async (itemId: string, isReshared: boolean, isPost: boolean) => {
+        console.log('[Reshare] handleReshareItem called:', { itemId, isReshared, isPost, activeSubgridId, reshareLoading });
         if (!activeSubgridId) {
             console.log('[Reshare] Early return: no activeSubgridId');
             return;
@@ -1043,28 +1050,35 @@ const TenantCommunityScreen = () => {
             console.log('[Reshare] Early return: reshareLoading in progress');
             return;
         }
-        setReshareLoading(postId);
+        setReshareLoading(itemId);
+        const endpoint = isPost ? 'posts' : 'messages';
         try {
             if (isReshared) {
-                console.log('[Reshare] Unresharing post:', `/subgrids/${activeSubgridId}/posts/${postId}/reshare`);
-                await communityDelete(`/subgrids/${activeSubgridId}/posts/${postId}/reshare`);
+                console.log(`[Reshare] Unresharing ${endpoint}:`, `/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
+                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
             } else {
-                console.log('[Reshare] Resharing post:', `/subgrids/${activeSubgridId}/posts/${postId}/reshare`);
-                await communityPost(`/subgrids/${activeSubgridId}/posts/${postId}/reshare`, {});
+                console.log(`[Reshare] Resharing ${endpoint}:`, `/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
+                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`, {});
             }
             console.log('[Reshare] API call successful');
             // Update local state optimistically
-            setPosts((prev) =>
-                prev.map((p) =>
-                    p._id === postId
-                        ? {
-                            ...p,
-                            userReshared: !isReshared,
-                            reshareCount: (p.reshareCount || 0) + (isReshared ? -1 : 1),
-                        }
-                        : p
-                )
-            );
+            if (isPost) {
+                setPosts((prev) =>
+                    prev.map((p) =>
+                        p._id === itemId
+                            ? { ...p, userReshared: !isReshared, reshareCount: (p.reshareCount || 0) + (isReshared ? -1 : 1) }
+                            : p
+                    )
+                );
+            } else {
+                setMessages((prev) =>
+                    prev.map((m) =>
+                        m._id === itemId
+                            ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
+                            : m
+                    )
+                );
+            }
         } catch (err: any) {
             console.error('[Reshare] Error:', err.message, err);
             setError(err.message || 'Failed to update reshare.');
@@ -1438,45 +1452,43 @@ const TenantCommunityScreen = () => {
                                                     })}
                                                 </View>
                                             )}
-                                            {/* Only show reactions for posts, not messages */}
-                                            {isPost && (
-                                                <View style={styles.feedReactions}>
-                                                    <TouchableOpacity
-                                                        style={styles.reactionItem}
-                                                        onPress={() => handleCommentPress(item._id)}
-                                                    >
-                                                        <MessageCircle size={14} color={colors.textMuted} />
-                                                        <Text style={styles.reactionText}>{commentCount}</Text>
-                                                    </TouchableOpacity>
-                                                    <TouchableOpacity
-                                                        style={styles.reactionItem}
-                                                        onPress={() => handleLikePost(item._id, item.userLiked)}
-                                                        disabled={likeLoading === item._id}
-                                                    >
-                                                        <Heart
-                                                            size={14}
-                                                            color={item.userLiked ? '#EF4444' : colors.textMuted}
-                                                            fill={item.userLiked ? '#EF4444' : 'transparent'}
-                                                        />
-                                                        <Text style={[styles.reactionText, item.userLiked && styles.reactionTextActive]}>
-                                                            {likeCount}
-                                                        </Text>
-                                                    </TouchableOpacity>
-                                                    <TouchableOpacity
-                                                        style={styles.reactionItem}
-                                                        onPress={() => handleResharePost(item._id, item.userReshared)}
-                                                        disabled={reshareLoading === item._id}
-                                                    >
-                                                        <Repeat2
-                                                            size={14}
-                                                            color={item.userReshared ? '#22C55E' : colors.textMuted}
-                                                        />
-                                                        <Text style={[styles.reactionText, item.userReshared && styles.reactionTextReshared]}>
-                                                            {reshareCount}
-                                                        </Text>
-                                                    </TouchableOpacity>
-                                                </View>
-                                            )}
+                                            {/* Show reactions for all feed items (posts and messages) */}
+                                            <View style={styles.feedReactions}>
+                                                <TouchableOpacity
+                                                    style={styles.reactionItem}
+                                                    onPress={() => handleCommentPress(item._id)}
+                                                >
+                                                    <MessageCircle size={14} color={colors.textMuted} />
+                                                    <Text style={styles.reactionText}>{commentCount}</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.reactionItem}
+                                                    onPress={() => handleLikeItem(item._id, item.userLiked, isPost)}
+                                                    disabled={likeLoading === item._id}
+                                                >
+                                                    <Heart
+                                                        size={14}
+                                                        color={item.userLiked ? '#EF4444' : colors.textMuted}
+                                                        fill={item.userLiked ? '#EF4444' : 'transparent'}
+                                                    />
+                                                    <Text style={[styles.reactionText, item.userLiked && styles.reactionTextActive]}>
+                                                        {likeCount}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.reactionItem}
+                                                    onPress={() => handleReshareItem(item._id, item.userReshared, isPost)}
+                                                    disabled={reshareLoading === item._id}
+                                                >
+                                                    <Repeat2
+                                                        size={14}
+                                                        color={item.userReshared ? '#22C55E' : colors.textMuted}
+                                                    />
+                                                    <Text style={[styles.reactionText, item.userReshared && styles.reactionTextReshared]}>
+                                                        {reshareCount}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            </View>
                                         </View>
                                     );
                                 })}

@@ -1730,57 +1730,63 @@ const CreditUnionAdminScreen = () => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // Like a post
-    const handleLikePost = async (postId: string) => {
+    // Like a feed item (post or message)
+    const handleLikeItem = async (itemId: string, isPost: boolean) => {
         if (!activeSubgridId) return;
+        const endpoint = isPost ? 'posts' : 'messages';
+        const items = isPost ? posts : messages;
+        const setItems = isPost ? setPosts : setMessages;
         try {
-            const post = posts.find(p => p._id === postId);
-            if (post?.userLiked) {
+            const item = items.find(i => i._id === itemId);
+            if (item?.userLiked) {
                 // Unlike
-                await communityDelete(`/subgrids/${activeSubgridId}/posts/${postId}/like`);
-                setPosts(prev => prev.map(p =>
-                    p._id === postId
-                        ? { ...p, likeCount: Math.max(0, (p.likeCount || 0) - 1), userLiked: false }
-                        : p
+                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
+                setItems(prev => prev.map(i =>
+                    i._id === itemId
+                        ? { ...i, likeCount: Math.max(0, (i.likeCount || 0) - 1), userLiked: false }
+                        : i
                 ));
             } else {
                 // Like
-                await communityPost(`/subgrids/${activeSubgridId}/posts/${postId}/like`, {});
-                setPosts(prev => prev.map(p =>
-                    p._id === postId
-                        ? { ...p, likeCount: (p.likeCount || 0) + 1, userLiked: true }
-                        : p
+                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`, {});
+                setItems(prev => prev.map(i =>
+                    i._id === itemId
+                        ? { ...i, likeCount: (i.likeCount || 0) + 1, userLiked: true }
+                        : i
                 ));
             }
         } catch (err: any) {
-            console.error('Failed to like/unlike post:', err.message);
+            console.error(`Failed to like/unlike ${endpoint}:`, err.message);
         }
     };
 
-    // Reshare a post
-    const handleResharePost = async (postId: string) => {
+    // Reshare a feed item (post or message)
+    const handleReshareItem = async (itemId: string, isPost: boolean) => {
         if (!activeSubgridId) return;
+        const endpoint = isPost ? 'posts' : 'messages';
+        const items = isPost ? posts : messages;
+        const setItems = isPost ? setPosts : setMessages;
         try {
-            const post = posts.find(p => p._id === postId);
-            if (post?.userReshared) {
+            const item = items.find(i => i._id === itemId);
+            if (item?.userReshared) {
                 // Unreshare
-                await communityDelete(`/subgrids/${activeSubgridId}/posts/${postId}/reshare`);
-                setPosts(prev => prev.map(p =>
-                    p._id === postId
-                        ? { ...p, reshareCount: Math.max(0, (p.reshareCount || 0) - 1), userReshared: false }
-                        : p
+                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
+                setItems(prev => prev.map(i =>
+                    i._id === itemId
+                        ? { ...i, reshareCount: Math.max(0, (i.reshareCount || 0) - 1), userReshared: false }
+                        : i
                 ));
             } else {
                 // Reshare
-                await communityPost(`/subgrids/${activeSubgridId}/posts/${postId}/reshare`, {});
-                setPosts(prev => prev.map(p =>
-                    p._id === postId
-                        ? { ...p, reshareCount: (p.reshareCount || 0) + 1, userReshared: true }
-                        : p
+                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`, {});
+                setItems(prev => prev.map(i =>
+                    i._id === itemId
+                        ? { ...i, reshareCount: (i.reshareCount || 0) + 1, userReshared: true }
+                        : i
                 ));
             }
         } catch (err: any) {
-            console.error('Failed to reshare/unreshare post:', err.message);
+            console.error(`Failed to reshare/unreshare ${endpoint}:`, err.message);
         }
     };
 
@@ -2466,26 +2472,21 @@ const CreditUnionAdminScreen = () => {
                                                     })}
                                                 </View>
                                             )}
-                                            {isPost ? (
-                                                <View style={styles.postStats}>
-                                                    <TouchableOpacity style={styles.statItem}>
-                                                        <MaterialIcons name="chat-bubble" size={16} color={colors.textMuted} />
-                                                        <Text style={styles.statText}>{commentCount}</Text>
-                                                    </TouchableOpacity>
-                                                    <TouchableOpacity style={styles.statItem} onPress={() => handleLikePost(item._id)}>
-                                                        <MaterialIcons name="favorite" size={16} color={userLiked ? '#EF4444' : colors.textMuted} />
-                                                        <Text style={[styles.statText, userLiked && { color: '#EF4444' }]}>{likeCount}</Text>
-                                                    </TouchableOpacity>
-                                                    <TouchableOpacity style={styles.statItem} onPress={() => handleResharePost(item._id)}>
-                                                        <MaterialIcons name="repeat" size={16} color={userReshared ? '#22C55E' : colors.textMuted} />
-                                                        <Text style={[styles.statText, userReshared && { color: '#22C55E' }]}>{reshareCount}</Text>
-                                                    </TouchableOpacity>
-                                                </View>
-                                            ) : (
-                                                <View style={styles.postStats}>
-                                                    <Text style={[styles.statText, { fontSize: 11 }]}>Message</Text>
-                                                </View>
-                                            )}
+                                            {/* Show reactions for all feed items (posts and messages) */}
+                                            <View style={styles.postStats}>
+                                                <TouchableOpacity style={styles.statItem}>
+                                                    <MaterialIcons name="chat-bubble" size={16} color={colors.textMuted} />
+                                                    <Text style={styles.statText}>{commentCount}</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity style={styles.statItem} onPress={() => handleLikeItem(item._id, isPost)}>
+                                                    <MaterialIcons name="favorite" size={16} color={userLiked ? '#EF4444' : colors.textMuted} />
+                                                    <Text style={[styles.statText, userLiked && { color: '#EF4444' }]}>{likeCount}</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity style={styles.statItem} onPress={() => handleReshareItem(item._id, isPost)}>
+                                                    <MaterialIcons name="repeat" size={16} color={userReshared ? '#22C55E' : colors.textMuted} />
+                                                    <Text style={[styles.statText, userReshared && { color: '#22C55E' }]}>{reshareCount}</Text>
+                                                </TouchableOpacity>
+                                            </View>
                                         </View>
                                     );
                                 })}

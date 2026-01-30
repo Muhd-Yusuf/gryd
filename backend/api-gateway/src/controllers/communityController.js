@@ -1727,7 +1727,7 @@ exports.listMessages = async (req, res) => {
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
-        const { Message } = await getTenantModels(subgrid);
+        const { Message, MessageLike, MessageReshare } = await getTenantModels(subgrid);
         const filter = { subgridId: String(subgridId), status: 'active' };
         if (req.embed?.channelId) {
             if (channelId && channelId !== req.embed.channelId) {
@@ -1742,7 +1742,36 @@ exports.listMessages = async (req, res) => {
             .sort({ createdAt: -1 })
             .limit(Math.min(Number(limit), 200));
 
-        return res.status(200).json({ success: true, data: messages });
+        // Add userLiked and userReshared flags if user is authenticated
+        const userId = req.user?.id;
+        let messagesWithUserFlags = messages.map(m => m.toObject());
+
+        if (userId && messages.length > 0) {
+            const messageIds = messages.map(m => String(m._id));
+            const [userLikes, userReshares] = await Promise.all([
+                MessageLike.find({
+                    subgridId: String(subgridId),
+                    messageId: { $in: messageIds },
+                    userId: String(userId),
+                }),
+                MessageReshare.find({
+                    subgridId: String(subgridId),
+                    messageId: { $in: messageIds },
+                    userId: String(userId),
+                }),
+            ]);
+
+            const likedMessageIds = new Set(userLikes.map(l => l.messageId));
+            const resharedMessageIds = new Set(userReshares.map(r => r.messageId));
+
+            messagesWithUserFlags = messagesWithUserFlags.map(m => ({
+                ...m,
+                userLiked: likedMessageIds.has(String(m._id)),
+                userReshared: resharedMessageIds.has(String(m._id)),
+            }));
+        }
+
+        return res.status(200).json({ success: true, data: messagesWithUserFlags });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to list messages', error: error.message });
     }
@@ -4034,5 +4063,388 @@ exports.testContentFilter = async (req, res) => {
         });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to test content filter', error: error.message });
+    }
+};
+
+// ===================
+// MESSAGE INTERACTIONS (Like/Reshare/Comment)
+// ===================
+
+// @desc    Like a message
+// @route   POST /api/community/subgrids/:subgridId/messages/:messageId/like
+// @access  Member
+exports.likeMessage = async (req, res) => {
+    try {
+        const { subgridId, messageId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            return res.status(400).json({ message: 'Invalid message ID format' });
+        }
+
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const { Message, MessageLike } = await getTenantModels(subgrid);
+        const message = await Message.findById(messageId);
+        if (!message || message.subgridId !== String(subgridId) || message.status !== 'active') {
+            return res.status(404).json({ message: 'Message not found' });
+        }
+
+        // Check if already liked
+        const existingLike = await MessageLike.findOne({
+            subgridId: String(subgridId),
+            messageId: String(messageId),
+            userId: String(userId),
+        });
+
+        if (existingLike) {
+            return res.status(400).json({ message: 'Already liked this message' });
+        }
+
+        // Create like and increment count
+        await MessageLike.create({
+            subgridId: String(subgridId),
+            messageId: String(messageId),
+            userId: String(userId),
+        });
+
+        const updatedMessage = await Message.findByIdAndUpdate(
+            messageId,
+            { $inc: { likeCount: 1 } },
+            { new: true }
+        );
+
+        // Emit WebSocket event
+        websocketService.sendToRoom('subgrid', subgridId, 'message_liked', {
+            subgridId,
+            messageId,
+            userId,
+            likeCount: updatedMessage.likeCount,
+            timestamp: new Date().toISOString(),
+        });
+
+        return res.status(201).json({
+            success: true,
+            data: {
+                messageId,
+                likeCount: updatedMessage.likeCount,
+                liked: true,
+            },
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to like message', error: error.message });
+    }
+};
+
+// @desc    Unlike a message
+// @route   DELETE /api/community/subgrids/:subgridId/messages/:messageId/like
+// @access  Member
+exports.unlikeMessage = async (req, res) => {
+    try {
+        const { subgridId, messageId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            return res.status(400).json({ message: 'Invalid message ID format' });
+        }
+
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const { Message, MessageLike } = await getTenantModels(subgrid);
+
+        const existingLike = await MessageLike.findOne({
+            subgridId: String(subgridId),
+            messageId: String(messageId),
+            userId: String(userId),
+        });
+
+        if (!existingLike) {
+            return res.status(400).json({ message: 'Message not liked' });
+        }
+
+        await MessageLike.findByIdAndDelete(existingLike._id);
+
+        const updatedMessage = await Message.findByIdAndUpdate(
+            messageId,
+            { $inc: { likeCount: -1 } },
+            { new: true }
+        );
+
+        websocketService.sendToRoom('subgrid', subgridId, 'message_unliked', {
+            subgridId,
+            messageId,
+            userId,
+            likeCount: Math.max(0, updatedMessage?.likeCount || 0),
+            timestamp: new Date().toISOString(),
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                messageId,
+                likeCount: Math.max(0, updatedMessage?.likeCount || 0),
+                liked: false,
+            },
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to unlike message', error: error.message });
+    }
+};
+
+// @desc    Reshare a message
+// @route   POST /api/community/subgrids/:subgridId/messages/:messageId/reshare
+// @access  Member
+exports.reshareMessage = async (req, res) => {
+    try {
+        const { subgridId, messageId } = req.params;
+        const { comment } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            return res.status(400).json({ message: 'Invalid message ID format' });
+        }
+
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const { Message, MessageReshare } = await getTenantModels(subgrid);
+        const message = await Message.findById(messageId);
+        if (!message || message.subgridId !== String(subgridId) || message.status !== 'active') {
+            return res.status(404).json({ message: 'Message not found' });
+        }
+
+        const existingReshare = await MessageReshare.findOne({
+            subgridId: String(subgridId),
+            messageId: String(messageId),
+            userId: String(userId),
+        });
+
+        if (existingReshare) {
+            return res.status(400).json({ message: 'Already reshared this message' });
+        }
+
+        const reshare = await MessageReshare.create({
+            subgridId: String(subgridId),
+            messageId: String(messageId),
+            userId: String(userId),
+            comment: comment || '',
+        });
+
+        const updatedMessage = await Message.findByIdAndUpdate(
+            messageId,
+            { $inc: { reshareCount: 1 } },
+            { new: true }
+        );
+
+        websocketService.sendToRoom('subgrid', subgridId, 'message_reshared', {
+            subgridId,
+            messageId,
+            userId,
+            reshareCount: updatedMessage.reshareCount,
+            reshare,
+            timestamp: new Date().toISOString(),
+        });
+
+        return res.status(201).json({
+            success: true,
+            data: {
+                messageId,
+                reshareCount: updatedMessage.reshareCount,
+                reshare,
+            },
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to reshare message', error: error.message });
+    }
+};
+
+// @desc    Unreshare a message
+// @route   DELETE /api/community/subgrids/:subgridId/messages/:messageId/reshare
+// @access  Member
+exports.unreshareMessage = async (req, res) => {
+    try {
+        const { subgridId, messageId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            return res.status(400).json({ message: 'Invalid message ID format' });
+        }
+
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const { Message, MessageReshare } = await getTenantModels(subgrid);
+
+        const existingReshare = await MessageReshare.findOne({
+            subgridId: String(subgridId),
+            messageId: String(messageId),
+            userId: String(userId),
+        });
+
+        if (!existingReshare) {
+            return res.status(400).json({ message: 'Message not reshared' });
+        }
+
+        await MessageReshare.findByIdAndDelete(existingReshare._id);
+
+        const updatedMessage = await Message.findByIdAndUpdate(
+            messageId,
+            { $inc: { reshareCount: -1 } },
+            { new: true }
+        );
+
+        websocketService.sendToRoom('subgrid', subgridId, 'message_unreshared', {
+            subgridId,
+            messageId,
+            userId,
+            reshareCount: Math.max(0, updatedMessage?.reshareCount || 0),
+            timestamp: new Date().toISOString(),
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                messageId,
+                reshareCount: Math.max(0, updatedMessage?.reshareCount || 0),
+            },
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to unreshare message', error: error.message });
+    }
+};
+
+// @desc    Get message comments
+// @route   GET /api/community/subgrids/:subgridId/messages/:messageId/comments
+// @access  Member
+exports.listMessageComments = async (req, res) => {
+    try {
+        const { subgridId, messageId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            return res.status(400).json({ message: 'Invalid message ID format' });
+        }
+
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const { Message, MessageComment } = await getTenantModels(subgrid);
+        const message = await Message.findById(messageId);
+        if (!message || message.subgridId !== String(subgridId) || message.status !== 'active') {
+            return res.status(404).json({ message: 'Message not found' });
+        }
+
+        const comments = await MessageComment.find({
+            subgridId: String(subgridId),
+            messageId: String(messageId),
+            status: 'active',
+        }).sort({ createdAt: 1 });
+
+        return res.status(200).json({
+            success: true,
+            data: comments,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to fetch comments', error: error.message });
+    }
+};
+
+// @desc    Create message comment
+// @route   POST /api/community/subgrids/:subgridId/messages/:messageId/comments
+// @access  Member
+exports.createMessageComment = async (req, res) => {
+    try {
+        const { subgridId, messageId } = req.params;
+        const { body } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            return res.status(400).json({ message: 'Invalid message ID format' });
+        }
+
+        if (!body || !body.trim()) {
+            return res.status(400).json({ message: 'Comment body is required' });
+        }
+
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const { Message, MessageComment } = await getTenantModels(subgrid);
+        const message = await Message.findById(messageId);
+        if (!message || message.subgridId !== String(subgridId) || message.status !== 'active') {
+            return res.status(404).json({ message: 'Message not found' });
+        }
+
+        // Apply content moderation
+        const filterResult = await filterContent(body, subgridId);
+        if (!filterResult.allowed) {
+            return res.status(400).json({
+                message: filterResult.message,
+                code: 'CONTENT_BLOCKED',
+                matchedWords: filterResult.matches,
+            });
+        }
+
+        const comment = await MessageComment.create({
+            subgridId: String(subgridId),
+            messageId: String(messageId),
+            authorId: String(userId),
+            body: filterResult.censoredContent || body.trim(),
+            flagged: filterResult.flagged || false,
+        });
+
+        const updatedMessage = await Message.findByIdAndUpdate(
+            messageId,
+            { $inc: { commentCount: 1 } },
+            { new: true }
+        );
+
+        websocketService.sendToRoom('subgrid', subgridId, 'message_comment_created', {
+            subgridId,
+            messageId,
+            comment,
+            commentCount: updatedMessage.commentCount,
+            timestamp: new Date().toISOString(),
+        });
+
+        return res.status(201).json({
+            success: true,
+            data: comment,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to create comment', error: error.message });
     }
 };

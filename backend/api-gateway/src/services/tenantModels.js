@@ -60,6 +60,19 @@ const defineModels = (connection) => {
             type: [Schema.Types.Mixed],
             default: [],
         },
+        // Like/Reshare/Comment counts for social interactions
+        likeCount: {
+            type: Number,
+            default: 0,
+        },
+        reshareCount: {
+            type: Number,
+            default: 0,
+        },
+        commentCount: {
+            type: Number,
+            default: 0,
+        },
         status: {
             type: String,
             enum: ['active', 'removed'],
@@ -244,6 +257,93 @@ const defineModels = (connection) => {
     });
     reshareSchema.index({ subgridId: 1, postId: 1, userId: 1 }, { unique: true });
     const Reshare = connection.models.Reshare || connection.model('Reshare', reshareSchema);
+
+    // MessageLike model for message likes
+    const messageLikeSchema = new Schema({
+        subgridId: {
+            type: String,
+            required: true,
+            index: true,
+        },
+        messageId: {
+            type: String,
+            required: true,
+            index: true,
+        },
+        userId: {
+            type: String,
+            required: true,
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now,
+        },
+    });
+    messageLikeSchema.index({ subgridId: 1, messageId: 1, userId: 1 }, { unique: true });
+    const MessageLike = connection.models.MessageLike || connection.model('MessageLike', messageLikeSchema);
+
+    // MessageReshare model for message reshares
+    const messageReshareSchema = new Schema({
+        subgridId: {
+            type: String,
+            required: true,
+            index: true,
+        },
+        messageId: {
+            type: String,
+            required: true,
+            index: true,
+        },
+        userId: {
+            type: String,
+            required: true,
+        },
+        comment: {
+            type: String,
+            default: '',
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now,
+        },
+    });
+    messageReshareSchema.index({ subgridId: 1, messageId: 1, userId: 1 }, { unique: true });
+    const MessageReshare = connection.models.MessageReshare || connection.model('MessageReshare', messageReshareSchema);
+
+    // MessageComment model for message comments/replies
+    const MessageComment = connection.models.MessageComment || connection.model('MessageComment', new Schema({
+        subgridId: {
+            type: String,
+            required: true,
+            index: true,
+        },
+        messageId: {
+            type: String,
+            required: true,
+            index: true,
+        },
+        authorId: {
+            type: String,
+            required: true,
+        },
+        body: {
+            type: String,
+            required: true,
+        },
+        status: {
+            type: String,
+            enum: ['active', 'removed'],
+            default: 'active',
+        },
+        flagged: {
+            type: Boolean,
+            default: false,
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now,
+        },
+    }));
 
     const DirectMessage = connection.models.DirectMessage || connection.model('DirectMessage', new Schema({
         subgridId: {
@@ -471,6 +571,9 @@ const defineModels = (connection) => {
         Reaction,
         Like,
         Reshare,
+        MessageLike,
+        MessageReshare,
+        MessageComment,
         DirectMessage,
         ModerationFlag,
         AuditLog,
