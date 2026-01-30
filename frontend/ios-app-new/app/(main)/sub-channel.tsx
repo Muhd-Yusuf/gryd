@@ -1088,12 +1088,13 @@ const SubChannelScreen = () => {
                                         })}
                                     </View>
                                 )}
-                                <View style={styles.feedReactions}>
-                                    <View style={styles.reactionItem}>
-                                        <MessageCircle size={14} color={colors.textMuted} />
-                                        <Text style={styles.reactionText}>{commentsCount}</Text>
-                                    </View>
-                                    {isPost && (
+                                {/* Only show reactions for posts, not messages */}
+                                {isPost && (
+                                    <View style={styles.feedReactions}>
+                                        <View style={styles.reactionItem}>
+                                            <MessageCircle size={14} color={colors.textMuted} />
+                                            <Text style={styles.reactionText}>{commentsCount}</Text>
+                                        </View>
                                         <TouchableOpacity
                                             style={styles.reactionItem}
                                             onPress={() => handleLikePost(item._id, userLiked)}
@@ -1108,14 +1109,6 @@ const SubChannelScreen = () => {
                                                 {likesCount}
                                             </Text>
                                         </TouchableOpacity>
-                                    )}
-                                    {!isPost && (
-                                        <View style={styles.reactionItem}>
-                                            <Heart size={14} color={colors.textMuted} />
-                                            <Text style={styles.reactionText}>{likesCount}</Text>
-                                        </View>
-                                    )}
-                                    {isPost && (
                                         <TouchableOpacity
                                             style={styles.reactionItem}
                                             onPress={() => handleResharePost(item._id, userReshared)}
@@ -1129,8 +1122,8 @@ const SubChannelScreen = () => {
                                                 {resharesCount}
                                             </Text>
                                         </TouchableOpacity>
-                                    )}
-                                </View>
+                                    </View>
+                                )}
                             </View>
                             );
                         })}

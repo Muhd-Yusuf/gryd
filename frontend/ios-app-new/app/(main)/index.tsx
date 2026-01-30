@@ -991,7 +991,7 @@ const TenantCommunityScreen = () => {
         }
     };
 
-    // Like handler for posts
+    // Like handler for posts (NOT messages - messages don't have like functionality)
     const handleLikePost = async (postId: string, isLiked: boolean) => {
         console.log('[Like] handleLikePost called:', { postId, isLiked, activeSubgridId, likeLoading });
         if (!activeSubgridId) {
@@ -1338,10 +1338,11 @@ const TenantCommunityScreen = () => {
                                     <Text style={styles.emptyText}>No channel updates yet.</Text>
                                 )}
                                 {feedItems.map((item: any) => {
+                                    // Posts have likeCount/reshareCount/commentCount fields, messages don't
+                                    const isPost = item.likeCount !== undefined || item.reshareCount !== undefined || item.commentCount !== undefined;
                                     const likeCount = item.likeCount ?? 0;
                                     const commentCount = item.commentCount ?? 0;
                                     const reshareCount = item.reshareCount ?? 0;
-                                    const isPost = !!item.authorId;
                                     return (
                                         <View key={item._id} style={styles.feedCard}>
                                             <View style={styles.feedHeader}>
@@ -1437,42 +1438,45 @@ const TenantCommunityScreen = () => {
                                                     })}
                                                 </View>
                                             )}
-                                            <View style={styles.feedReactions}>
-                                                <TouchableOpacity
-                                                    style={styles.reactionItem}
-                                                    onPress={() => handleCommentPress(item._id)}
-                                                >
-                                                    <MessageCircle size={14} color={colors.textMuted} />
-                                                    <Text style={styles.reactionText}>{commentCount}</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.reactionItem}
-                                                    onPress={() => handleLikePost(item._id, item.userLiked)}
-                                                    disabled={likeLoading === item._id}
-                                                >
-                                                    <Heart
-                                                        size={14}
-                                                        color={item.userLiked ? '#EF4444' : colors.textMuted}
-                                                        fill={item.userLiked ? '#EF4444' : 'transparent'}
-                                                    />
-                                                    <Text style={[styles.reactionText, item.userLiked && styles.reactionTextActive]}>
-                                                        {likeCount}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.reactionItem}
-                                                    onPress={() => handleResharePost(item._id, item.userReshared)}
-                                                    disabled={reshareLoading === item._id}
-                                                >
-                                                    <Repeat2
-                                                        size={14}
-                                                        color={item.userReshared ? '#22C55E' : colors.textMuted}
-                                                    />
-                                                    <Text style={[styles.reactionText, item.userReshared && styles.reactionTextReshared]}>
-                                                        {reshareCount}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            </View>
+                                            {/* Only show reactions for posts, not messages */}
+                                            {isPost && (
+                                                <View style={styles.feedReactions}>
+                                                    <TouchableOpacity
+                                                        style={styles.reactionItem}
+                                                        onPress={() => handleCommentPress(item._id)}
+                                                    >
+                                                        <MessageCircle size={14} color={colors.textMuted} />
+                                                        <Text style={styles.reactionText}>{commentCount}</Text>
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity
+                                                        style={styles.reactionItem}
+                                                        onPress={() => handleLikePost(item._id, item.userLiked)}
+                                                        disabled={likeLoading === item._id}
+                                                    >
+                                                        <Heart
+                                                            size={14}
+                                                            color={item.userLiked ? '#EF4444' : colors.textMuted}
+                                                            fill={item.userLiked ? '#EF4444' : 'transparent'}
+                                                        />
+                                                        <Text style={[styles.reactionText, item.userLiked && styles.reactionTextActive]}>
+                                                            {likeCount}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity
+                                                        style={styles.reactionItem}
+                                                        onPress={() => handleResharePost(item._id, item.userReshared)}
+                                                        disabled={reshareLoading === item._id}
+                                                    >
+                                                        <Repeat2
+                                                            size={14}
+                                                            color={item.userReshared ? '#22C55E' : colors.textMuted}
+                                                        />
+                                                        <Text style={[styles.reactionText, item.userReshared && styles.reactionTextReshared]}>
+                                                            {reshareCount}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            )}
                                         </View>
                                     );
                                 })}
