@@ -45,7 +45,12 @@ router.post('/login-otp-request', loginOtpRequest);
 router.post('/login-otp-verify', loginOtpVerify);
 
 // Stakeholder invite & signup
-router.post('/invite-stakeholder', attachUserContext, inviteStakeholder);
+router.post('/invite-stakeholder', (req, res, next) => {
+    console.log('[AUTH ROUTE] /invite-stakeholder hit at', new Date().toISOString());
+    console.log('[AUTH ROUTE] Headers:', JSON.stringify(req.headers));
+    console.log('[AUTH ROUTE] Body:', JSON.stringify(req.body));
+    next();
+}, attachUserContext, inviteStakeholder);
 router.get('/validate-stakeholder-invite/:token', validateStakeholderInvite);
 router.post('/signup-stakeholder', signupStakeholder);
 
