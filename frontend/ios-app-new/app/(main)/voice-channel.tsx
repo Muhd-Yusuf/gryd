@@ -34,13 +34,33 @@ interface ParticipantDetails {
     company?: string | null;
 }
 
-// Stakeholder badge colors
-const STAKEHOLDER_BADGE_COLORS: Record<string, string> = {
+// Badge colors for stakeholders and roles
+const BADGE_COLORS: Record<string, string> = {
+    // Stakeholder badges
     stakeholder: '#3B82F6',
     vendor: '#8B5CF6',
     partner: '#10B981',
     sponsor: '#F59E0B',
     investor: '#EC4899',
+    // Role badges
+    subgrid_admin: '#DC2626', // Red for CU Admin
+    moderator: '#F97316', // Orange for moderator
+};
+
+// Helper to get badge display info
+const getBadgeInfo = (memberRole?: string, stakeholderBadge?: string | null): { label: string; color: string } | null => {
+    // Admin roles take priority
+    if (memberRole === 'subgrid_admin') {
+        return { label: 'CU Admin', color: BADGE_COLORS.subgrid_admin };
+    }
+    if (memberRole === 'moderator') {
+        return { label: 'Moderator', color: BADGE_COLORS.moderator };
+    }
+    // Then stakeholder badge
+    if (stakeholderBadge && BADGE_COLORS[stakeholderBadge]) {
+        return { label: stakeholderBadge.charAt(0).toUpperCase() + stakeholderBadge.slice(1), color: BADGE_COLORS[stakeholderBadge] };
+    }
+    return null;
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -360,7 +380,8 @@ const VoiceChannelScreen = () => {
                         let remoteDisplayName = participant?.displayName;
                         let remoteUsername = participant?.username || null;
                         let remoteAvatarUrl = participant?.avatarUrl || null;
-                        let remoteBadge = participant?.stakeholderBadge || null;
+                        let remoteMemberRole = participant?.memberRole || null;
+                        let remoteStakeholderBadge = participant?.stakeholderBadge || null;
                         let remoteCompany = participant?.company || null;
 
                         // Strategy 2: For DM calls, find the "other" participant (not current user)
@@ -370,7 +391,8 @@ const VoiceChannelScreen = () => {
                                 remoteDisplayName = otherParticipant.displayName;
                                 remoteUsername = otherParticipant.username;
                                 remoteAvatarUrl = otherParticipant.avatarUrl;
-                                remoteBadge = otherParticipant.stakeholderBadge || null;
+                                remoteMemberRole = otherParticipant.memberRole || null;
+                                remoteStakeholderBadge = otherParticipant.stakeholderBadge || null;
                                 remoteCompany = otherParticipant.company || null;
                                 console.log('[VoiceChannel] Using other participant fallback:', remoteDisplayName);
                             }
@@ -399,7 +421,8 @@ const VoiceChannelScreen = () => {
                                 remoteDisplayName = [firstName, lastName].filter(Boolean).join(' ').trim() || member.email || member.user?.email;
                                 remoteUsername = member.username || member.user?.username || null;
                                 remoteAvatarUrl = member.avatarUrl || member.user?.avatarUrl || null;
-                                remoteBadge = member.stakeholderBadge || member.user?.stakeholderBadge || null;
+                                remoteMemberRole = member.role || member.user?.role || null;
+                                remoteStakeholderBadge = member.stakeholderBadge || member.user?.stakeholderBadge || null;
                                 remoteCompany = member.company || member.user?.company || null;
                                 console.log('[VoiceChannel] Using subgrid member fallback:', remoteDisplayName);
                             }
@@ -411,6 +434,9 @@ const VoiceChannelScreen = () => {
                             console.log('[VoiceChannel] Using UID fallback for agoraUid:', agoraUid, 'participantMap keys:', Array.from(participantMap.keys()));
                         }
 
+                        // Get badge info (prioritizes admin roles over stakeholder badges)
+                        const badgeInfo = getBadgeInfo(remoteMemberRole || undefined, remoteStakeholderBadge);
+
                         return (
                             <View key={agoraUid} style={styles.participantRow}>
                                 <UserAvatar
@@ -421,10 +447,10 @@ const VoiceChannelScreen = () => {
                                 <View style={styles.participantInfo}>
                                     <View style={styles.participantNameRow}>
                                         <Text style={styles.participantName}>{remoteDisplayName}</Text>
-                                        {remoteBadge && (
-                                            <View style={[styles.participantBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[remoteBadge] || '#3B82F6' }]}>
+                                        {badgeInfo && (
+                                            <View style={[styles.participantBadge, { backgroundColor: badgeInfo.color }]}>
                                                 <Text style={styles.participantBadgeText}>
-                                                    {remoteBadge.charAt(0).toUpperCase() + remoteBadge.slice(1)}
+                                                    {badgeInfo.label}
                                                 </Text>
                                             </View>
                                         )}
