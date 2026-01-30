@@ -78,6 +78,43 @@ const VoiceChannelScreen = () => {
     // Store subgrid members for voice channel calls (no callId)
     const [subgridMembers, setSubgridMembers] = useState<any[]>([]);
 
+    // Use web hook for web platform, native hook for mobile
+    // IMPORTANT: Must be called before any useEffect that depends on callState
+    const webHook = useAgoraCallWeb({
+        channelName: agoraChannelName,
+        token,
+        uid,
+        appId,
+        callId,
+        autoJoin: isWeb && !!token && !!appId && !!agoraChannelName,
+        onCallEnded: () => {
+            router.back();
+        },
+        onError: (err) => {
+            console.error('[VoiceChannel] Web Error:', err);
+        },
+    });
+
+    const nativeHook = useAgoraCall({
+        onCallEnded: () => {
+            router.back();
+        },
+        onError: (err) => {
+            console.error('[VoiceChannel] Native Error:', err);
+        },
+    });
+
+    // Select the appropriate hook based on platform
+    const {
+        callState,
+        isMuted,
+        remoteUsers,
+        callDuration,
+        error,
+        hangup,
+        toggleMute,
+    } = isWeb ? webHook : nativeHook;
+
     // Fetch current user details
     useEffect(() => {
         let isActive = true;
@@ -250,42 +287,6 @@ const VoiceChannelScreen = () => {
             });
         };
     }, [callState, channelId, subgridId, uid]);
-
-    // Use web hook for web platform, native hook for mobile
-    const webHook = useAgoraCallWeb({
-        channelName: agoraChannelName,
-        token,
-        uid,
-        appId,
-        callId,
-        autoJoin: isWeb && !!token && !!appId && !!agoraChannelName,
-        onCallEnded: () => {
-            router.back();
-        },
-        onError: (err) => {
-            console.error('[VoiceChannel] Web Error:', err);
-        },
-    });
-
-    const nativeHook = useAgoraCall({
-        onCallEnded: () => {
-            router.back();
-        },
-        onError: (err) => {
-            console.error('[VoiceChannel] Native Error:', err);
-        },
-    });
-
-    // Select the appropriate hook based on platform
-    const {
-        callState,
-        isMuted,
-        remoteUsers,
-        callDuration,
-        error,
-        hangup,
-        toggleMute,
-    } = isWeb ? webHook : nativeHook;
 
     const formatDuration = (seconds: number): string => {
         const mins = Math.floor(seconds / 60);
