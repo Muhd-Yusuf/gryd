@@ -173,6 +173,7 @@ const TenantCommunityScreen = () => {
     const showCenterPanel = !isMobile;
     const showRightPanel = !isCompact;
     const userId = getUserId();
+    const hasLoadedOnce = useRef(false);
     const [initialLoading, setInitialLoading] = useState(true);
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
@@ -272,6 +273,7 @@ const TenantCommunityScreen = () => {
                 if (!activeSubgridId && list.length > 0) {
                     setActiveSubgridId(list[0]._id);
                 }
+                hasLoadedOnce.current = true;
             } catch (err: any) {
                 console.error('Failed to load subgrids:', err.message);
             } finally {
@@ -285,10 +287,13 @@ const TenantCommunityScreen = () => {
     useEffect(() => {
         const loadSubgridData = async () => {
             if (!activeSubgridId) {
-                setChannels([]);
-                setPosts([]);
-                setMembers([]);
-                setMemberCount(0);
+                // Only clear data if we haven't loaded once (prevents flash during refresh)
+                if (!hasLoadedOnce.current) {
+                    setChannels([]);
+                    setPosts([]);
+                    setMembers([]);
+                    setMemberCount(0);
+                }
                 return;
             }
             try {
@@ -301,28 +306,19 @@ const TenantCommunityScreen = () => {
                 const [channelsRes, postsRes, membersRes, friendsRes] = results;
                 if (channelsRes.status === 'fulfilled') {
                     setChannels(channelsRes.value?.data || []);
-                } else {
-                    setChannels([]);
                 }
+                // Don't clear on failure - keep existing data
                 if (postsRes.status === 'fulfilled') {
                     setPosts(postsRes.value?.data || []);
-                } else {
-                    setPosts([]);
                 }
                 if (membersRes.status === 'fulfilled') {
                     const list = membersRes.value?.data || [];
                     setMembers(list);
                     setMemberCount(list.length);
-                } else {
-                    setMembers([]);
-                    setMemberCount(0);
                 }
                 if (friendsRes.status === 'fulfilled') {
                     setFriends(friendsRes.value?.data?.friends || []);
                     setFriendUsers(friendsRes.value?.data?.users || {});
-                } else {
-                    setFriends([]);
-                    setFriendUsers({});
                 }
             } catch (err: any) {
                 console.error('Failed to load community data:', err.message);
@@ -1069,8 +1065,8 @@ const TenantCommunityScreen = () => {
         }
     };
 
-    // Show empty state when no tenants/subgrids
-    if (!tenantId && !error) {
+    // Show empty state when no tenants/subgrids - only on first load
+    if (!tenantId && !error && !hasLoadedOnce.current) {
         return (
             <SafeAreaView style={styles.safe}>
                 <View style={styles.emptyState}>
@@ -1089,7 +1085,8 @@ const TenantCommunityScreen = () => {
         );
     }
 
-    if (initialLoading) {
+    // Only show loading screen on true first load, not on refresh
+    if (initialLoading && !hasLoadedOnce.current) {
         return (
             <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
                 <Image
@@ -1101,7 +1098,8 @@ const TenantCommunityScreen = () => {
         );
     }
 
-    if (subgrids.length === 0 && tenantId && !error) {
+    // Only show empty state on first load, not during refresh
+    if (subgrids.length === 0 && tenantId && !error && !hasLoadedOnce.current) {
         return (
             <SafeAreaView style={styles.safe}>
                 <View style={styles.emptyState}>

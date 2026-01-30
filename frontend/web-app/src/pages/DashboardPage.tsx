@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
     TrendingUp,
@@ -66,6 +66,7 @@ const DashboardPage = () => {
     const [recentTasks, setRecentTasks] = useState<Task[]>([]);
     const [recentCampaigns, setRecentCampaigns] = useState<Campaign[]>([]);
     const [loading, setLoading] = useState(true);
+    const hasLoadedOnce = useRef(false);
     const [error, setError] = useState('');
 
     const stats = useMemo(
@@ -130,6 +131,7 @@ const DashboardPage = () => {
                 setRecentLeads(leads.slice(0, 5));
                 setRecentTasks(tasks.slice(0, 5));
                 setRecentCampaigns(campaigns.slice(0, 5));
+                hasLoadedOnce.current = true;
             } catch (err: any) {
                 setError(err.message || 'Failed to load dashboard metrics.');
             } finally {
@@ -261,7 +263,8 @@ const DashboardPage = () => {
                         </div>
                     </header>
 
-                    {(error || loading) && (
+                    {/* Only show loading on first load, show errors always */}
+                    {(error || (loading && !hasLoadedOnce.current)) && (
                         <p className={`text-sm mb-4 ${error ? 'text-red-500' : 'text-gray-500'}`}>
                             {error || 'Loading dashboard...'}
                         </p>
