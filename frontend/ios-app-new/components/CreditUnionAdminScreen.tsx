@@ -2095,12 +2095,10 @@ const CreditUnionAdminScreen = () => {
                                         }}
                                     >
                                         <MaterialIcons name="tag" size={16} color={isActive ? colors.text : colors.textMuted} />
-                                        <View style={{ flex: 1, marginRight: 8 }}>
-                                            <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={{ paddingRight: 16 }}>
-                                                <Text style={[styles.channelName, isActive && styles.channelNameActive, { flex: 0 }]} numberOfLines={1}>
-                                                    {channel.name || 'untitled'}
-                                                </Text>
-                                            </ScrollView>
+                                        <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
+                                            <Text style={[styles.channelName, isActive && styles.channelNameActive]} numberOfLines={1} ellipsizeMode="tail">
+                                                {channel.name || 'untitled'}
+                                            </Text>
                                         </View>
                                         {isActive && (
                                             <View style={styles.channelActions}>
@@ -2191,10 +2189,10 @@ const CreditUnionAdminScreen = () => {
                                     }}
                                 >
                                     <MaterialIcons name="headphones" size={16} color={colors.textMuted} />
-                                    <View style={{ flex: 1, marginRight: 8 }}>
-                                        <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={{ paddingRight: 16 }}>
-                                            <Text style={[styles.channelName, { flex: 0 }]} numberOfLines={1}>{channel.name || 'untitled'}</Text>
-                                        </ScrollView>
+                                    <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
+                                        <Text style={styles.channelName} numberOfLines={1} ellipsizeMode="tail">
+                                            {channel.name || 'untitled'}
+                                        </Text>
                                     </View>
                                     <View style={styles.channelActions}>
                                         <View style={styles.channelMenuWrap}>
@@ -5778,6 +5776,22 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 32,
             height: 32,
             borderRadius: 16,
+        },
+        channelMenuDropdown: {
+            position: 'absolute',
+            top: 24,
+            right: 0,
+            backgroundColor: 'white',
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 8,
+            zIndex: 1000,
+            minWidth: 160,
         },
         memberOnline: {
             position: 'absolute',

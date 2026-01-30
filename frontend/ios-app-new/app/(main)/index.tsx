@@ -173,6 +173,7 @@ const TenantCommunityScreen = () => {
     const showCenterPanel = !isMobile;
     const showRightPanel = !isCompact;
     const userId = getUserId();
+    const [initialLoading, setInitialLoading] = useState(true);
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [activeSubgridId, setActiveSubgridId] = useState('');
@@ -259,7 +260,11 @@ const TenantCommunityScreen = () => {
 
     useEffect(() => {
         const loadSubgrids = async () => {
-            if (!tenantId) return;
+            if (!tenantId) {
+                // If we don't have a tenant ID yet, we might still be resolving it.
+                // However, if we fail to resolve, an error should be set.
+                return;
+            }
             try {
                 const response = await communityGet(`/tenants/${tenantId}/subgrids`);
                 const list = response?.data || [];
@@ -269,6 +274,8 @@ const TenantCommunityScreen = () => {
                 }
             } catch (err: any) {
                 console.error('Failed to load subgrids:', err.message);
+            } finally {
+                setInitialLoading(false);
             }
         };
 
@@ -1003,10 +1010,10 @@ const TenantCommunityScreen = () => {
                 prev.map((p) =>
                     p._id === postId
                         ? {
-                              ...p,
-                              userLiked: !isLiked,
-                              likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1),
-                          }
+                            ...p,
+                            userLiked: !isLiked,
+                            likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1),
+                        }
                         : p
                 )
             );
@@ -1032,10 +1039,10 @@ const TenantCommunityScreen = () => {
                 prev.map((p) =>
                     p._id === postId
                         ? {
-                              ...p,
-                              userReshared: !isReshared,
-                              reshareCount: (p.reshareCount || 0) + (isReshared ? -1 : 1),
-                          }
+                            ...p,
+                            userReshared: !isReshared,
+                            reshareCount: (p.reshareCount || 0) + (isReshared ? -1 : 1),
+                        }
                         : p
                 )
             );
@@ -1078,6 +1085,18 @@ const TenantCommunityScreen = () => {
                         <Text style={styles.emptyButtonText}>Go Back</Text>
                     </TouchableOpacity>
                 </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (initialLoading) {
+        return (
+            <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
+                <Image
+                    source={require('../../assets/images/icon.png')}
+                    style={{ width: 80, height: 80, borderRadius: 20, marginBottom: 20 }}
+                />
+                <Text style={{ fontSize: 16, color: colors.textMuted }}>Loading community...</Text>
             </SafeAreaView>
         );
     }
@@ -1299,137 +1318,137 @@ const TenantCommunityScreen = () => {
                                     const reshareCount = item.reshareCount ?? 0;
                                     const isPost = !!item.authorId;
                                     return (
-                                    <View key={item._id} style={styles.feedCard}>
-                                        <View style={styles.feedHeader}>
-                                            <UserAvatar
-                                                uri={getAvatarUrl(item.authorId || item.senderId)}
-                                                name={getDisplayName(item.authorId || item.senderId)}
-                                                style={styles.avatar}
-                                            />
-                                            <View style={styles.feedHeaderInfo}>
-                                                <View style={styles.authorRow}>
-                                                    <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
-                                                    {isMemberAdmin(item.authorId || item.senderId) && (
-                                                        <View style={styles.verifiedBadge}>
-                                                            <MaterialIcons name="verified" size={14} color="#3B82F6" />
-                                                        </View>
-                                                    )}
-                                                    {getMemberDisplayUsername(item.authorId || item.senderId) && (
-                                                        <Text style={styles.feedUsername}>@{getMemberDisplayUsername(item.authorId || item.senderId)}</Text>
-                                                    )}
-                                                    {getCompany(item.authorId || item.senderId) && (
-                                                        <Text style={styles.feedCompany}>from {getCompany(item.authorId || item.senderId)}</Text>
-                                                    )}
-                                                    {getStakeholderBadge(item.authorId || item.senderId) && (
-                                                        <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getStakeholderBadge(item.authorId || item.senderId)!] }]}>
-                                                            <Text style={styles.stakeholderBadgeText}>
-                                                                {formatStakeholderBadgeLabel(getStakeholderBadge(item.authorId || item.senderId)!)}
-                                                            </Text>
-                                                        </View>
-                                                    )}
+                                        <View key={item._id} style={styles.feedCard}>
+                                            <View style={styles.feedHeader}>
+                                                <UserAvatar
+                                                    uri={getAvatarUrl(item.authorId || item.senderId)}
+                                                    name={getDisplayName(item.authorId || item.senderId)}
+                                                    style={styles.avatar}
+                                                />
+                                                <View style={styles.feedHeaderInfo}>
+                                                    <View style={styles.authorRow}>
+                                                        <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
+                                                        {isMemberAdmin(item.authorId || item.senderId) && (
+                                                            <View style={styles.verifiedBadge}>
+                                                                <MaterialIcons name="verified" size={14} color="#3B82F6" />
+                                                            </View>
+                                                        )}
+                                                        {getMemberDisplayUsername(item.authorId || item.senderId) && (
+                                                            <Text style={styles.feedUsername}>@{getMemberDisplayUsername(item.authorId || item.senderId)}</Text>
+                                                        )}
+                                                        {getCompany(item.authorId || item.senderId) && (
+                                                            <Text style={styles.feedCompany}>from {getCompany(item.authorId || item.senderId)}</Text>
+                                                        )}
+                                                        {getStakeholderBadge(item.authorId || item.senderId) && (
+                                                            <View style={[styles.stakeholderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getStakeholderBadge(item.authorId || item.senderId)!] }]}>
+                                                                <Text style={styles.stakeholderBadgeText}>
+                                                                    {formatStakeholderBadgeLabel(getStakeholderBadge(item.authorId || item.senderId)!)}
+                                                                </Text>
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                    <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
                                                 </View>
-                                                <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
+                                                <View style={styles.feedHeaderActions}>
+                                                    <TouchableOpacity
+                                                        style={styles.feedMenuButton}
+                                                        onPress={(e) => handleOpenFeedMenu(e, item, isPost)}
+                                                    >
+                                                        <MoreHorizontal size={16} color={colors.textMuted} />
+                                                    </TouchableOpacity>
+                                                </View>
                                             </View>
-                                            <View style={styles.feedHeaderActions}>
+                                            {!!item.body && (
+                                                <Text style={styles.feedText} numberOfLines={4}>
+                                                    {item.body}
+                                                    {item.body.length > 200 && <Text style={styles.moreText}> More</Text>}
+                                                </Text>
+                                            )}
+                                            {normalizeAttachments(item.attachments).length > 0 && (
+                                                <View style={styles.attachmentStack}>
+                                                    {normalizeAttachments(item.attachments).map((attachment, idx) => {
+                                                        if (attachment.type === 'audio' || attachment.type === 'voice') {
+                                                            return (
+                                                                <VoiceMessagePlayer
+                                                                    key={`${item._id}-audio-${idx}`}
+                                                                    source={attachment.value}
+                                                                    durationMs={attachment.durationMs}
+                                                                    colors={colors}
+                                                                    compact
+                                                                />
+                                                            );
+                                                        }
+                                                        if (attachment.type === 'image') {
+                                                            const imageUrl = attachment.uri || attachment.value;
+                                                            return (
+                                                                <Image
+                                                                    key={`${item._id}-img-${idx}`}
+                                                                    source={{ uri: imageUrl }}
+                                                                    style={styles.feedImage}
+                                                                    resizeMode="cover"
+                                                                />
+                                                            );
+                                                        }
+                                                        if (attachment.type === 'emoji' || attachment.type === 'sticker') {
+                                                            return (
+                                                                <Image
+                                                                    key={`${item._id}-emoji-${idx}`}
+                                                                    source={{ uri: attachment.uri }}
+                                                                    style={styles.feedImage}
+                                                                />
+                                                            );
+                                                        }
+                                                        if (attachment.type === 'file') {
+                                                            return (
+                                                                <View key={`${item._id}-file-${idx}`} style={styles.fileBubble}>
+                                                                    <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                                                    <Text style={styles.fileText} numberOfLines={1}>
+                                                                        {attachment.label || 'File'}
+                                                                    </Text>
+                                                                </View>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })}
+                                                </View>
+                                            )}
+                                            <View style={styles.feedReactions}>
                                                 <TouchableOpacity
-                                                    style={styles.feedMenuButton}
-                                                    onPress={(e) => handleOpenFeedMenu(e, item, isPost)}
+                                                    style={styles.reactionItem}
+                                                    onPress={() => handleCommentPress(item._id)}
                                                 >
-                                                    <MoreHorizontal size={16} color={colors.textMuted} />
+                                                    <MessageCircle size={14} color={colors.textMuted} />
+                                                    <Text style={styles.reactionText}>{commentCount}</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.reactionItem}
+                                                    onPress={() => handleLikePost(item._id, item.userLiked)}
+                                                    disabled={likeLoading === item._id}
+                                                >
+                                                    <Heart
+                                                        size={14}
+                                                        color={item.userLiked ? '#EF4444' : colors.textMuted}
+                                                        fill={item.userLiked ? '#EF4444' : 'transparent'}
+                                                    />
+                                                    <Text style={[styles.reactionText, item.userLiked && styles.reactionTextActive]}>
+                                                        {likeCount}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.reactionItem}
+                                                    onPress={() => handleResharePost(item._id, item.userReshared)}
+                                                    disabled={reshareLoading === item._id}
+                                                >
+                                                    <Repeat2
+                                                        size={14}
+                                                        color={item.userReshared ? '#22C55E' : colors.textMuted}
+                                                    />
+                                                    <Text style={[styles.reactionText, item.userReshared && styles.reactionTextReshared]}>
+                                                        {reshareCount}
+                                                    </Text>
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
-                                        {!!item.body && (
-                                            <Text style={styles.feedText} numberOfLines={4}>
-                                                {item.body}
-                                                {item.body.length > 200 && <Text style={styles.moreText}> More</Text>}
-                                            </Text>
-                                        )}
-                                        {normalizeAttachments(item.attachments).length > 0 && (
-                                            <View style={styles.attachmentStack}>
-                                                {normalizeAttachments(item.attachments).map((attachment, idx) => {
-                                                    if (attachment.type === 'audio' || attachment.type === 'voice') {
-                                                        return (
-                                                            <VoiceMessagePlayer
-                                                                key={`${item._id}-audio-${idx}`}
-                                                                source={attachment.value}
-                                                                durationMs={attachment.durationMs}
-                                                                colors={colors}
-                                                                compact
-                                                            />
-                                                        );
-                                                    }
-                                                    if (attachment.type === 'image') {
-                                                        const imageUrl = attachment.uri || attachment.value;
-                                                        return (
-                                                            <Image
-                                                                key={`${item._id}-img-${idx}`}
-                                                                source={{ uri: imageUrl }}
-                                                                style={styles.feedImage}
-                                                                resizeMode="cover"
-                                                            />
-                                                        );
-                                                    }
-                                                    if (attachment.type === 'emoji' || attachment.type === 'sticker') {
-                                                        return (
-                                                            <Image
-                                                                key={`${item._id}-emoji-${idx}`}
-                                                                source={{ uri: attachment.uri }}
-                                                                style={styles.feedImage}
-                                                            />
-                                                        );
-                                                    }
-                                                    if (attachment.type === 'file') {
-                                                        return (
-                                                            <View key={`${item._id}-file-${idx}`} style={styles.fileBubble}>
-                                                                <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
-                                                                <Text style={styles.fileText} numberOfLines={1}>
-                                                                    {attachment.label || 'File'}
-                                                                </Text>
-                                                            </View>
-                                                        );
-                                                    }
-                                                    return null;
-                                                })}
-                                            </View>
-                                        )}
-                                        <View style={styles.feedReactions}>
-                                            <TouchableOpacity
-                                                style={styles.reactionItem}
-                                                onPress={() => handleCommentPress(item._id)}
-                                            >
-                                                <MessageCircle size={14} color={colors.textMuted} />
-                                                <Text style={styles.reactionText}>{commentCount}</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={styles.reactionItem}
-                                                onPress={() => handleLikePost(item._id, item.userLiked)}
-                                                disabled={likeLoading === item._id}
-                                            >
-                                                <Heart
-                                                    size={14}
-                                                    color={item.userLiked ? '#EF4444' : colors.textMuted}
-                                                    fill={item.userLiked ? '#EF4444' : 'transparent'}
-                                                />
-                                                <Text style={[styles.reactionText, item.userLiked && styles.reactionTextActive]}>
-                                                    {likeCount}
-                                                </Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={styles.reactionItem}
-                                                onPress={() => handleResharePost(item._id, item.userReshared)}
-                                                disabled={reshareLoading === item._id}
-                                            >
-                                                <Repeat2
-                                                    size={14}
-                                                    color={item.userReshared ? '#22C55E' : colors.textMuted}
-                                                />
-                                                <Text style={[styles.reactionText, item.userReshared && styles.reactionTextReshared]}>
-                                                    {reshareCount}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
                                     );
                                 })}
                             </ScrollView>
@@ -1517,16 +1536,16 @@ const TenantCommunityScreen = () => {
                                     <Search size={14} color={colors.textMuted} />
                                     <Text style={styles.dmSearchText}>Search</Text>
                                 </View>
-                            <TouchableOpacity
-                                style={styles.addFriendsBtn}
-                                onPress={() => router.push({
-                                    pathname: '/(main)/direct-messages',
-                                    params: { subgridId: activeSubgridId },
-                                })}
-                            >
-                                <Text style={styles.addFriendsText}>Add Friends</Text>
-                                <UserPlus size={14} color={colors.text} />
-                            </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.addFriendsBtn}
+                                    onPress={() => router.push({
+                                        pathname: '/(main)/direct-messages',
+                                        params: { subgridId: activeSubgridId },
+                                    })}
+                                >
+                                    <Text style={styles.addFriendsText}>Add Friends</Text>
+                                    <UserPlus size={14} color={colors.text} />
+                                </TouchableOpacity>
                             </View>
 
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarRow}>
