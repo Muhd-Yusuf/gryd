@@ -2079,12 +2079,21 @@ exports.createComment = async (req, res) => {
         const { subgridId, postId } = req.params;
         const { body } = req.body;
 
+        console.log('[createComment] Attempting to create comment:', { subgridId, postId });
+
         if (!body) {
             return res.status(400).json({ message: 'body is required' });
         }
 
+        // Validate postId is a valid ObjectId
+        if (!mongoose.Types.ObjectId.isValid(postId)) {
+            console.log('[createComment] Invalid postId format:', postId);
+            return res.status(400).json({ message: 'Invalid post ID format' });
+        }
+
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
+            console.log('[createComment] Subgrid not found:', subgridId);
             return res.status(404).json({ message: 'Subgrid not found' });
         }
         if (!subgrid.settings?.commentsEnabled) {
@@ -2098,7 +2107,13 @@ exports.createComment = async (req, res) => {
 
         const { Post, Comment } = await getTenantModels(subgrid);
         const post = await Post.findOne({ _id: postId, subgridId: String(subgridId), status: 'active' });
+        console.log('[createComment] Post lookup result:', {
+            found: !!post,
+            postId,
+            subgridId: String(subgridId),
+        });
         if (!post) {
+            console.log('[createComment] Post not found');
             return res.status(404).json({ message: 'Post not found' });
         }
 
@@ -2342,13 +2357,17 @@ exports.likePost = async (req, res) => {
     try {
         const { subgridId, postId } = req.params;
 
+        console.log('[likePost] Attempting to like post:', { subgridId, postId });
+
         // Validate postId is a valid ObjectId
         if (!mongoose.Types.ObjectId.isValid(postId)) {
+            console.log('[likePost] Invalid postId format:', postId);
             return res.status(400).json({ message: 'Invalid post ID format' });
         }
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
+            console.log('[likePost] Subgrid not found:', subgridId);
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
@@ -2360,7 +2379,15 @@ exports.likePost = async (req, res) => {
         const { Post, Like } = await getTenantModels(subgrid);
         // Use findById for more reliable ObjectId matching, then verify subgridId and status
         const post = await Post.findById(postId);
+        console.log('[likePost] Post lookup result:', {
+            found: !!post,
+            postSubgridId: post?.subgridId,
+            paramSubgridId: String(subgridId),
+            postStatus: post?.status,
+            subgridMatch: post ? post.subgridId === String(subgridId) : false,
+        });
         if (!post || post.subgridId !== String(subgridId) || post.status !== 'active') {
+            console.log('[likePost] Post not found or validation failed');
             return res.status(404).json({ message: 'Post not found' });
         }
 
@@ -2478,13 +2505,17 @@ exports.resharePost = async (req, res) => {
         const { subgridId, postId } = req.params;
         const { comment } = req.body;
 
+        console.log('[resharePost] Attempting to reshare post:', { subgridId, postId });
+
         // Validate postId is a valid ObjectId
         if (!mongoose.Types.ObjectId.isValid(postId)) {
+            console.log('[resharePost] Invalid postId format:', postId);
             return res.status(400).json({ message: 'Invalid post ID format' });
         }
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
+            console.log('[resharePost] Subgrid not found:', subgridId);
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
@@ -2496,7 +2527,15 @@ exports.resharePost = async (req, res) => {
         const { Post, Reshare } = await getTenantModels(subgrid);
         // Use findById for more reliable ObjectId matching, then verify subgridId and status
         const post = await Post.findById(postId);
+        console.log('[resharePost] Post lookup result:', {
+            found: !!post,
+            postSubgridId: post?.subgridId,
+            paramSubgridId: String(subgridId),
+            postStatus: post?.status,
+            subgridMatch: post ? post.subgridId === String(subgridId) : false,
+        });
         if (!post || post.subgridId !== String(subgridId) || post.status !== 'active') {
+            console.log('[resharePost] Post not found or validation failed');
             return res.status(404).json({ message: 'Post not found' });
         }
 
