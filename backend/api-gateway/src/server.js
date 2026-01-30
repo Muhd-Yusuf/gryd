@@ -131,6 +131,11 @@ server.listen(PORT, () => {
     logger.info('Server', 'Started', { port: PORT });
     logger.info('WebSocket', 'Ready', { url: `ws://localhost:${PORT}` });
 
+    // Log PUBLIC_APP_URL for debugging email invite URLs
+    console.log('========================================');
+    console.log('[STARTUP] PUBLIC_APP_URL:', process.env.PUBLIC_APP_URL || '(NOT SET - will default to localhost:8081)');
+    console.log('========================================');
+
     // Schedule file cleanup for orphaned files (runs daily)
     scheduleCleanup();
 });
