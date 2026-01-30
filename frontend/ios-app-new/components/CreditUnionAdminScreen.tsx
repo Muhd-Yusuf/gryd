@@ -601,7 +601,8 @@ const CreditUnionAdminScreen = () => {
     // Filter stakeholders only
     const filteredStakeholders = useMemo(() => {
         const stakeholders = members.filter((member) => {
-            const role = member.userRole || member.user?.role;
+            // Check SubgridMembership role first, then fall back to user role
+            const role = member.role || member.userRole || member.user?.role;
             return role === 'stakeholder';
         });
         const query = stakeholdersSearch.trim().toLowerCase();
