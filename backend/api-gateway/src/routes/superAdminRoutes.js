@@ -58,5 +58,6 @@ router.post('/users/invite', inviteUser);
 // Team Members (admin and super_admin users who help manage the platform)
 router.get('/team', getTeamMembers);
 router.post('/team/invite', inviteTeamMember);
+router.post('/team/:userId/delete', require('../controllers/superAdminController').deleteTeamMember);
 
 module.exports = router;

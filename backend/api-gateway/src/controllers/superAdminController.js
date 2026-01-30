@@ -997,7 +997,53 @@ exports.inviteUser = async (req, res) => {
             message: 'User created successfully',
         });
     } catch (error) {
-        console.error('[superAdmin.inviteUser] Error:', error.message);
         return res.status(500).json({ message: 'Failed to invite user', error: error.message });
+    }
+};
+
+/**
+ * Delete a team member
+ * POST /api/super-admin/team/:userId/delete
+ */
+exports.deleteTeamMember = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        if (!mongoose.isValidObjectId(userId)) {
+            return res.status(400).json({ message: 'Invalid user id' });
+        }
+
+        // Check if user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Verify user is actually a team member (admin or super_admin)
+        if (!['admin', 'super_admin'].includes(user.role)) {
+            return res.status(400).json({ message: 'User is not a team member' });
+        }
+
+        // Prevent deleting yourself
+        if (req.user && String(req.user._id) === String(userId)) {
+            return res.status(400).json({ message: 'You cannot delete your own account' });
+        }
+
+        // Delete the user
+        await User.findByIdAndDelete(userId);
+
+        // Also clean up any associated memberships if they exist (though unlikely for system admins)
+        await Promise.all([
+            SubgridMembership.deleteMany({ userId }),
+            TenantMembership.deleteMany({ userId }),
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Team member deleted successfully',
+        });
+    } catch (error) {
+        console.error('[superAdmin.deleteTeamMember] Error:', error.message);
+        return res.status(500).json({ message: 'Failed to delete team member', error: error.message });
     }
 };

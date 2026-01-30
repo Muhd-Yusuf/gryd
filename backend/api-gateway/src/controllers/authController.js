@@ -392,7 +392,7 @@ exports.loginWithRole = async (req, res) => {
         let redirectTo = '/(main)';
 
         if (user.role === 'super_admin') {
-            redirectTo = '/super-admin';
+            redirectTo = '/admin';
         } else if (user.role === 'admin') {
             // Check if user is a CU admin (subgrid_admin)
             subgridMembership = await SubgridMembership.findOne({
@@ -401,6 +401,9 @@ exports.loginWithRole = async (req, res) => {
             }).populate('subgridId');
 
             if (subgridMembership) {
+                redirectTo = '/community/admin';
+            } else {
+                // System admin (Team Member)
                 redirectTo = '/admin';
             }
         } else if (user.role === 'stakeholder') {
@@ -498,7 +501,7 @@ exports.signupSuperAdmin = async (req, res) => {
                 role: user.role,
             },
             token,
-            redirectTo: '/super-admin',
+            redirectTo: '/admin',
             message: 'Super admin account created successfully',
         });
     } catch (error) {
@@ -1296,11 +1299,11 @@ exports.completeSetup = async (req, res) => {
                 },
                 subgrid: subgrid
                     ? {
-                          _id: subgrid._id,
-                          name: subgrid.name,
-                          clientName: subgrid.clientName,
-                          inviteCode: subgrid.inviteCode,
-                      }
+                        _id: subgrid._id,
+                        name: subgrid.name,
+                        clientName: subgrid.clientName,
+                        inviteCode: subgrid.inviteCode,
+                    }
                     : null,
             },
             token,

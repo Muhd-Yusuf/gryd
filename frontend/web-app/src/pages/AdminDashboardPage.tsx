@@ -12,9 +12,120 @@ import {
     Shield,
     Users,
     X,
+    Trash2,
 } from 'lucide-react';
-import { apiFetch } from '../lib/api';
+import { apiFetch, apiPost } from '../lib/api';
 import { SyphorLogo } from '../components/Sidebar';
+
+type TeamMember = {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: string;
+    createdAt: string;
+};
+
+const TeamView = () => {
+    const [members, setMembers] = useState<TeamMember[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+
+    const loadTeam = async () => {
+        setLoading(true);
+        try {
+            const response = await apiFetch('/super-admin/team');
+            if (response?.data?.users) {
+                setMembers(response.data.users);
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to load team members');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadTeam();
+    }, []);
+
+    const handleDelete = async (userId: string) => {
+        if (!window.confirm('Are you sure you want to delete this team member?')) return;
+
+        setDeleteLoading(userId);
+        try {
+            await apiPost(`/super-admin/team/${userId}/delete`, {});
+            setMembers(prev => prev.filter(m => m._id !== userId));
+        } catch (err: any) {
+            alert(err.message || 'Failed to delete member');
+        } finally {
+            setDeleteLoading(null);
+        }
+    };
+
+    if (loading && members.length === 0) return <div className="p-8 text-center text-gray-500">Loading team...</div>;
+    if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">Team Management</h2>
+                {/* Add Member button could go here if requested later */}
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                            <th className="px-6 py-4 font-medium text-gray-500">Name</th>
+                            <th className="px-6 py-4 font-medium text-gray-500">Email</th>
+                            <th className="px-6 py-4 font-medium text-gray-500">Role</th>
+                            <th className="px-6 py-4 font-medium text-gray-500">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {members.map((member) => (
+                            <tr key={member._id} className="hover:bg-gray-50/50">
+                                <td className="px-6 py-4 font-medium text-gray-900">
+                                    {member.firstName} {member.lastName}
+                                </td>
+                                <td className="px-6 py-4 text-gray-500">{member.email}</td>
+                                <td className="px-6 py-4">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize
+                                        ${member.role === 'super_admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                                        {member.role === 'super_admin' ? 'Full Access Admin' : 'Admin Role'}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4">
+                                    <button
+                                        onClick={() => handleDelete(member._id)}
+                                        disabled={deleteLoading === member._id}
+                                        className="text-red-500 hover:text-red-700 disabled:opacity-50 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Delete Member"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                        {members.length === 0 && (
+                            <tr>
+                                <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                                    No team members found.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <div className="text-xs text-gray-500 px-2">
+                * Admin Role: Can view customers and manage.<br />
+                * Full Access Admin: Can do anything.
+            </div>
+        </div>
+    );
+};
 
 type DashboardData = {
     kpis: {
@@ -190,6 +301,7 @@ const AdminDashboardPage = () => {
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [activeView, setActiveView] = useState('Overview');
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     useEffect(() => {
@@ -264,6 +376,7 @@ const AdminDashboardPage = () => {
                     <nav className="space-y-2 text-sm">
                         {[
                             { label: 'Overview', icon: LayoutDashboard },
+                            { label: 'Team', icon: Users },
                             { label: 'Users', icon: Users },
                             { label: 'Billing & Finance', icon: DollarSign },
                             { label: 'System Health', icon: Activity },
@@ -271,16 +384,17 @@ const AdminDashboardPage = () => {
                             { label: 'Community', icon: Shield },
                             { label: 'Settings', icon: Settings },
                         ].map((item) => (
-                            <div
+                            <button
                                 key={item.label}
-                                className={`flex items-center gap-3 px-3 py-2 rounded-xl ${item.label === 'Overview'
+                                onClick={() => setActiveView(item.label)}
+                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${activeView === item.label
                                     ? 'bg-white text-black'
                                     : 'text-gray-300 hover:bg-white/10'
                                     }`}
                             >
                                 <item.icon size={16} />
                                 <span>{item.label}</span>
-                            </div>
+                            </button>
                         ))}
                     </nav>
                     <div className="mt-auto flex items-center gap-3 px-3 py-2 text-gray-400">
@@ -322,160 +436,172 @@ const AdminDashboardPage = () => {
                     </header>
 
                     <main className="flex-1 p-4 lg:p-6 space-y-6">
-                        {(loading || error) && (
-                            <div className={`text-sm ${error ? 'text-red-500' : 'text-gray-500'}`}>
-                                {error || 'Loading admin dashboard...'}
-                            </div>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                            {kpiCards.map((card) => (
-                                <div key={card.label} className="bg-white border border-gray-200 rounded-2xl p-4">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                                            {card.label}
-                                        </span>
-                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${card.color}`}>
-                                            <card.icon size={16} className={card.iconColor} />
-                                        </div>
+                        {activeView === 'Overview' && (
+                            <>
+                                {(loading || error) && (
+                                    <div className={`text-sm ${error ? 'text-red-500' : 'text-gray-500'}`}>
+                                        {error || 'Loading admin dashboard...'}
                                     </div>
-                                    <div className="flex items-end justify-between">
-                                        <div className="text-2xl font-bold text-gray-900">
-                                            {formatNumber(card.value)}
-                                            {card.suffix ? <span className="text-sm ml-1">{card.suffix}</span> : null}
-                                        </div>
-                                        <span
-                                            className={`text-xs font-semibold ${card.delta >= 0 ? 'text-emerald-600' : 'text-red-500'
-                                                }`}
-                                        >
-                                            {formatDelta(card.delta)}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                            <div className="bg-white border border-gray-200 rounded-2xl p-6 xl:col-span-2">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="font-semibold text-gray-900">User Growth & Revenue</h2>
-                                    <span className="text-xs text-gray-400">Last 7 days</span>
-                                </div>
-                                <LineChart
-                                    labels={data?.userGrowth.labels || []}
-                                    series={[data?.userGrowth.users || [], data?.userGrowth.revenue || []]}
-                                    colors={['#22C55E', '#7C3AED']}
-                                />
-                                <div className="mt-4 flex items-center gap-6 text-xs text-gray-500">
-                                    <span className="flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-[#22C55E]" />
-                                        Users
-                                    </span>
-                                    <span className="flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-[#7C3AED]" />
-                                        Revenue
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="font-semibold text-gray-900">AI Cost & Distribution</h2>
-                                    <span className="text-xs text-gray-400">Total {formatCurrency(data?.aiCost.total || 0)}</span>
-                                </div>
-                                <PieChart breakdown={data?.aiCost.breakdown || []} />
-                            </div>
-                        </div>
-
-                        <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="font-semibold text-gray-900">Lead Conversion Pipeline</h2>
-                                <span className="text-xs text-gray-400">All time</span>
-                            </div>
-                            <BarChart
-                                labels={(data?.leadPipeline.labels || []).map((label) => label.split(' ')[0])}
-                                values={data?.leadPipeline.values || []}
-                            />
-                        </div>
-
-                        <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="font-semibold text-gray-900">Microservices Health</h2>
-                                <span className="text-xs text-gray-400">Last 24 hours</span>
-                            </div>
-                            <div className="space-y-3 text-sm">
-                                <div className="grid grid-cols-4 text-xs text-gray-400 uppercase tracking-wider">
-                                    <span>Service</span>
-                                    <span>Requests</span>
-                                    <span>Response</span>
-                                    <span>Status</span>
-                                </div>
-                                {services.length === 0 && (
-                                    <div className="text-xs text-gray-400">No service data yet.</div>
                                 )}
-                                {services.map((service) => (
-                                    <div key={service.name} className="grid grid-cols-4 items-center">
-                                        <span className="text-gray-900 font-medium">{service.name}</span>
-                                        <span className="text-gray-500">{formatNumber(service.requests)}</span>
-                                        <span className="text-gray-500">{Math.round(service.avgResponseMs)}ms</span>
-                                        <span
-                                            className={`text-xs font-semibold px-2 py-1 rounded-full w-fit ${service.status === 'Healthy'
-                                                ? 'bg-emerald-100 text-emerald-600'
-                                                : service.status === 'Degraded'
-                                                    ? 'bg-amber-100 text-amber-600'
-                                                    : 'bg-gray-100 text-gray-500'
-                                                }`}
-                                        >
-                                            {service.status}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                            <div className="bg-white border border-gray-200 rounded-2xl p-6 xl:col-span-2">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="font-semibold text-gray-900">System Update (last 24 hours)</h2>
-                                    <span className="text-xs text-gray-400">Requests</span>
-                                </div>
-                                <LineChart
-                                    labels={data?.systemUpdates.labels || []}
-                                    series={[data?.systemUpdates.values || []]}
-                                    colors={['#16A34A']}
-                                />
-                            </div>
-
-                            <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="font-semibold text-gray-900">Recent Alerts</h2>
-                                    <span className="text-xs text-gray-400">System</span>
-                                </div>
-                                <div className="space-y-3 text-sm">
-                                    {alerts.length === 0 && (
-                                        <div className="text-xs text-gray-400">No alerts right now.</div>
-                                    )}
-                                    {alerts.map((alert) => (
-                                        <div key={alert.id} className="border border-gray-200 rounded-xl p-3">
-                                            <div className="flex items-center justify-between">
-                                                <span className="font-semibold text-gray-900">{alert.title}</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                    {kpiCards.map((card) => (
+                                        <div key={card.label} className="bg-white border border-gray-200 rounded-2xl p-4">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                                                    {card.label}
+                                                </span>
+                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${card.color}`}>
+                                                    <card.icon size={16} className={card.iconColor} />
+                                                </div>
+                                            </div>
+                                            <div className="flex items-end justify-between">
+                                                <div className="text-2xl font-bold text-gray-900">
+                                                    {formatNumber(card.value)}
+                                                    {card.suffix ? <span className="text-sm ml-1">{card.suffix}</span> : null}
+                                                </div>
                                                 <span
-                                                    className={`text-[10px] uppercase tracking-wider ${alert.severity === 'critical'
-                                                        ? 'text-red-500'
-                                                        : alert.severity === 'warning'
-                                                            ? 'text-amber-600'
-                                                            : 'text-gray-400'
+                                                    className={`text-xs font-semibold ${card.delta >= 0 ? 'text-emerald-600' : 'text-red-500'
                                                         }`}
                                                 >
-                                                    {alert.severity}
+                                                    {formatDelta(card.delta)}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-gray-500 mt-1">{alert.detail}</p>
                                         </div>
                                     ))}
                                 </div>
+
+                                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-6 xl:col-span-2">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h2 className="font-semibold text-gray-900">User Growth & Revenue</h2>
+                                            <span className="text-xs text-gray-400">Last 7 days</span>
+                                        </div>
+                                        <LineChart
+                                            labels={data?.userGrowth.labels || []}
+                                            series={[data?.userGrowth.users || [], data?.userGrowth.revenue || []]}
+                                            colors={['#22C55E', '#7C3AED']}
+                                        />
+                                        <div className="mt-4 flex items-center gap-6 text-xs text-gray-500">
+                                            <span className="flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-[#22C55E]" />
+                                                Users
+                                            </span>
+                                            <span className="flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-[#7C3AED]" />
+                                                Revenue
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h2 className="font-semibold text-gray-900">AI Cost & Distribution</h2>
+                                            <span className="text-xs text-gray-400">Total {formatCurrency(data?.aiCost.total || 0)}</span>
+                                        </div>
+                                        <PieChart breakdown={data?.aiCost.breakdown || []} />
+                                    </div>
+                                </div>
+
+                                <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h2 className="font-semibold text-gray-900">Lead Conversion Pipeline</h2>
+                                        <span className="text-xs text-gray-400">All time</span>
+                                    </div>
+                                    <BarChart
+                                        labels={(data?.leadPipeline.labels || []).map((label) => label.split(' ')[0])}
+                                        values={data?.leadPipeline.values || []}
+                                    />
+                                </div>
+
+                                <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h2 className="font-semibold text-gray-900">Microservices Health</h2>
+                                        <span className="text-xs text-gray-400">Last 24 hours</span>
+                                    </div>
+                                    <div className="space-y-3 text-sm">
+                                        <div className="grid grid-cols-4 text-xs text-gray-400 uppercase tracking-wider">
+                                            <span>Service</span>
+                                            <span>Requests</span>
+                                            <span>Response</span>
+                                            <span>Status</span>
+                                        </div>
+                                        {services.length === 0 && (
+                                            <div className="text-xs text-gray-400">No service data yet.</div>
+                                        )}
+                                        {services.map((service) => (
+                                            <div key={service.name} className="grid grid-cols-4 items-center">
+                                                <span className="text-gray-900 font-medium">{service.name}</span>
+                                                <span className="text-gray-500">{formatNumber(service.requests)}</span>
+                                                <span className="text-gray-500">{Math.round(service.avgResponseMs)}ms</span>
+                                                <span
+                                                    className={`text-xs font-semibold px-2 py-1 rounded-full w-fit ${service.status === 'Healthy'
+                                                        ? 'bg-emerald-100 text-emerald-600'
+                                                        : service.status === 'Degraded'
+                                                            ? 'bg-amber-100 text-amber-600'
+                                                            : 'bg-gray-100 text-gray-500'
+                                                        }`}
+                                                >
+                                                    {service.status}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-6 xl:col-span-2">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h2 className="font-semibold text-gray-900">System Update (last 24 hours)</h2>
+                                            <span className="text-xs text-gray-400">Requests</span>
+                                        </div>
+                                        <LineChart
+                                            labels={data?.systemUpdates.labels || []}
+                                            series={[data?.systemUpdates.values || []]}
+                                            colors={['#16A34A']}
+                                        />
+                                    </div>
+
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h2 className="font-semibold text-gray-900">Recent Alerts</h2>
+                                            <span className="text-xs text-gray-400">System</span>
+                                        </div>
+                                        <div className="space-y-3 text-sm">
+                                            {alerts.length === 0 && (
+                                                <div className="text-xs text-gray-400">No alerts right now.</div>
+                                            )}
+                                            {alerts.map((alert) => (
+                                                <div key={alert.id} className="border border-gray-200 rounded-xl p-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-semibold text-gray-900">{alert.title}</span>
+                                                        <span
+                                                            className={`text-[10px] uppercase tracking-wider ${alert.severity === 'critical'
+                                                                ? 'text-red-500'
+                                                                : alert.severity === 'warning'
+                                                                    ? 'text-amber-600'
+                                                                    : 'text-gray-400'
+                                                                }`}
+                                                        >
+                                                            {alert.severity}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 mt-1">{alert.detail}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {activeView === 'Team' && <TeamView />}
+
+                        {activeView !== 'Overview' && activeView !== 'Team' && (
+                            <div className="flex items-center justify-center h-64 text-gray-500">
+                                {activeView} view is under construction.
                             </div>
-                        </div>
+                        )}
                     </main>
                 </div>
             </div>

@@ -65,7 +65,7 @@ const DashboardPage = () => {
     const [recentPages, setRecentPages] = useState<LandingPage[]>([]);
     const [recentTasks, setRecentTasks] = useState<Task[]>([]);
     const [recentCampaigns, setRecentCampaigns] = useState<Campaign[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
     const stats = useMemo(
