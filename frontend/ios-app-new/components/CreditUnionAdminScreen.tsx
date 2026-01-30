@@ -2776,7 +2776,7 @@ const CreditUnionAdminScreen = () => {
                                 if (selectedSettingsChannel) openEditChannelModal(selectedSettingsChannel);
                             }}
                         >
-                            <MaterialIcons name="edit" size={18} color={colors.text} />
+                            <MaterialIcons name="edit" size={18} color="#9CA3AF" />
                             <Text style={styles.channelSettingsText}>Rename Channel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -2797,7 +2797,7 @@ const CreditUnionAdminScreen = () => {
                                 if (selectedSettingsChannel) openChannelPermissionModal(selectedSettingsChannel);
                             }}
                         >
-                            <MaterialIcons name="settings" size={18} color={colors.text} />
+                            <MaterialIcons name="settings" size={18} color="#9CA3AF" />
                             <Text style={styles.channelSettingsText}>Channel Permission</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -5847,7 +5847,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             alignItems: 'center',
         },
         channelSettingsModal: {
-            backgroundColor: 'white',
+            backgroundColor: '#1f2937',
             borderRadius: 12,
             padding: 8,
             minWidth: 220,
@@ -5861,11 +5861,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         channelSettingsTitle: {
             fontSize: 14,
             fontWeight: '600',
-            color: colors.text,
+            color: '#FFFFFF',
             paddingHorizontal: 12,
             paddingVertical: 10,
             borderBottomWidth: 1,
-            borderBottomColor: '#E5E7EB',
+            borderBottomColor: '#374151',
             marginBottom: 4,
         },
         channelSettingsItem: {
@@ -5878,17 +5878,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         channelSettingsText: {
             fontSize: 14,
-            color: colors.text,
+            color: '#E5E7EB',
         },
         channelSettingsCancel: {
             justifyContent: 'center',
             borderTopWidth: 1,
-            borderTopColor: '#E5E7EB',
+            borderTopColor: '#374151',
             marginTop: 4,
         },
         channelSettingsCancelText: {
             fontSize: 14,
-            color: colors.textMuted,
+            color: '#9CA3AF',
             textAlign: 'center',
         },
         memberOnline: {
