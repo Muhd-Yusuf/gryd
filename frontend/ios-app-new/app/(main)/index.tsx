@@ -156,6 +156,10 @@ const normalizeAttachments = (attachments?: Array<Attachment | string>) => {
                 };
             }
             const typed = item as Attachment & { uri?: string };
+            // Reshare attachments don't have uri/value - pass them through as-is
+            if (typed.type === 'reshare') {
+                return typed;
+            }
             const uri = typed.uri || (typed.type === 'emoji' ? twemojiUrl(typed.value) : typed.value);
             return { ...typed, uri };
         })
@@ -225,6 +229,12 @@ const TenantCommunityScreen = () => {
     const [uploading, setUploading] = useState(false);
     const [likeLoading, setLikeLoading] = useState<string | null>(null);
     const [reshareLoading, setReshareLoading] = useState<string | null>(null);
+    const [commentModalOpen, setCommentModalOpen] = useState(false);
+    const [commentTarget, setCommentTarget] = useState<{ id: string; isPost: boolean } | null>(null);
+    const [comments, setComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [commentLoading, setCommentLoading] = useState(false);
+    const [commentsLoading, setCommentsLoading] = useState(false);
     const recordingInterval = useRef<NodeJS.Timeout | null>(null);
     const mediaRecorderRef = useRef<any | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -1090,22 +1100,71 @@ const TenantCommunityScreen = () => {
         }
     };
 
-    // Comment handler - navigate to post detail/comments
-    const handleCommentPress = (itemId: string) => {
-        console.log('[Comment] handleCommentPress called:', { itemId, activeSubgridId, activeChannelId });
-        // Navigate to post detail or sub-channel with comment focus
-        if (activeSubgridId && activeChannelId) {
-            router.push({
-                pathname: '/(main)/sub-channel',
-                params: {
-                    subgridId: activeSubgridId,
-                    channelId: activeChannelId,
-                    channelName: activeChannel?.name || '',
-                    focusPostId: itemId,
-                },
-            });
-        } else {
-            console.log('[Comment] Early return: missing activeSubgridId or activeChannelId');
+    // Comment handler - open modal and fetch comments
+    const handleCommentPress = async (itemId: string, isPost: boolean) => {
+        console.log('[Comment] handleCommentPress called:', { itemId, isPost, activeSubgridId });
+        if (!activeSubgridId) {
+            console.log('[Comment] Early return: missing activeSubgridId');
+            return;
+        }
+
+        setCommentTarget({ id: itemId, isPost });
+        setCommentModalOpen(true);
+        setCommentsLoading(true);
+        setComments([]);
+
+        try {
+            const endpoint = isPost
+                ? `/api/community/subgrids/${activeSubgridId}/posts/${itemId}/comments`
+                : `/api/community/subgrids/${activeSubgridId}/messages/${itemId}/comments`;
+
+            const res = await api.get(endpoint);
+            console.log('[Comment] Fetched comments:', res.data);
+            setComments(res.data.comments || []);
+        } catch (err: any) {
+            console.error('[Comment] Error fetching comments:', err);
+            setError('Failed to load comments');
+        } finally {
+            setCommentsLoading(false);
+        }
+    };
+
+    // Submit a new comment
+    const handleSubmitComment = async () => {
+        if (!commentTarget || !commentText.trim() || !activeSubgridId) return;
+
+        setCommentLoading(true);
+        try {
+            const endpoint = commentTarget.isPost
+                ? `/api/community/subgrids/${activeSubgridId}/posts/${commentTarget.id}/comments`
+                : `/api/community/subgrids/${activeSubgridId}/messages/${commentTarget.id}/comments`;
+
+            const res = await api.post(endpoint, { body: commentText.trim() });
+            console.log('[Comment] Created comment:', res.data);
+
+            // Add the new comment to the list
+            setComments(prev => [...prev, res.data.comment || res.data]);
+            setCommentText('');
+
+            // Update local state for comment count
+            if (commentTarget.isPost) {
+                setPosts(prev => prev.map(p =>
+                    p._id === commentTarget.id
+                        ? { ...p, commentCount: (p.commentCount || 0) + 1 }
+                        : p
+                ));
+            } else {
+                setMessages(prev => prev.map(m =>
+                    m._id === commentTarget.id
+                        ? { ...m, commentCount: (m.commentCount || 0) + 1 }
+                        : m
+                ));
+            }
+        } catch (err: any) {
+            console.error('[Comment] Error creating comment:', err);
+            setError('Failed to post comment');
+        } finally {
+            setCommentLoading(false);
         }
     };
 
@@ -1451,6 +1510,65 @@ const TenantCommunityScreen = () => {
                                                                 </View>
                                                             );
                                                         }
+                                                        // Handle reshare attachments - show original message content
+                                                        if (attachment.type === 'reshare') {
+                                                            const reshareData = attachment as any;
+                                                            return (
+                                                                <View key={`${item._id}-reshare-${idx}`} style={styles.reshareCard}>
+                                                                    <View style={styles.reshareHeader}>
+                                                                        <Repeat2 size={14} color={colors.textMuted} />
+                                                                        <Text style={styles.reshareLabel}>Reshared</Text>
+                                                                    </View>
+                                                                    <View style={styles.reshareContent}>
+                                                                        <View style={styles.reshareAuthorRow}>
+                                                                            <UserAvatar
+                                                                                uri={getAvatarUrl(reshareData.originalAuthorId)}
+                                                                                name={getDisplayName(reshareData.originalAuthorId)}
+                                                                                style={styles.reshareAvatar}
+                                                                            />
+                                                                            <Text style={styles.reshareAuthorName}>
+                                                                                {getDisplayName(reshareData.originalAuthorId)}
+                                                                            </Text>
+                                                                            <Text style={styles.reshareTime}>
+                                                                                {formatMessageDate(reshareData.originalCreatedAt)}
+                                                                            </Text>
+                                                                        </View>
+                                                                        {!!reshareData.originalBody && (
+                                                                            <Text style={styles.reshareBody} numberOfLines={3}>
+                                                                                {reshareData.originalBody}
+                                                                            </Text>
+                                                                        )}
+                                                                        {/* Render original attachments (images, etc.) */}
+                                                                        {reshareData.originalAttachments?.length > 0 && (
+                                                                            <View style={styles.reshareAttachments}>
+                                                                                {reshareData.originalAttachments.map((origAtt: any, origIdx: number) => {
+                                                                                    const origUrl = origAtt?.value || origAtt?.uri || origAtt?.url || (typeof origAtt === 'string' ? origAtt : null);
+                                                                                    const origType = origAtt?.type || '';
+                                                                                    const origMime = origAtt?.mimeType || '';
+                                                                                    if (!origUrl) return null;
+
+                                                                                    const isOrigImage = origType === 'image' || origType === 'sticker' || origType === 'emoji' ||
+                                                                                        origMime?.startsWith('image/') ||
+                                                                                        /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?|$)/i.test(origUrl);
+
+                                                                                    if (isOrigImage) {
+                                                                                        return (
+                                                                                            <Image
+                                                                                                key={`reshare-att-${origIdx}`}
+                                                                                                source={{ uri: origUrl }}
+                                                                                                style={styles.reshareImage}
+                                                                                                resizeMode="cover"
+                                                                                            />
+                                                                                        );
+                                                                                    }
+                                                                                    return null;
+                                                                                })}
+                                                                            </View>
+                                                                        )}
+                                                                    </View>
+                                                                </View>
+                                                            );
+                                                        }
                                                         return null;
                                                     })}
                                                 </View>
@@ -1459,7 +1577,7 @@ const TenantCommunityScreen = () => {
                                             <View style={styles.feedReactions}>
                                                 <TouchableOpacity
                                                     style={styles.reactionItem}
-                                                    onPress={() => handleCommentPress(item._id)}
+                                                    onPress={() => handleCommentPress(item._id, isPost)}
                                                 >
                                                     <MessageCircle size={14} color={colors.textMuted} />
                                                     <Text style={styles.reactionText}>{commentCount}</Text>
@@ -1756,6 +1874,74 @@ const TenantCommunityScreen = () => {
                                 disabled={deleteSubmitting}
                             >
                                 <Text style={styles.reportSubmitText}>{deleteSubmitting ? 'Deleting...' : 'Delete'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Comment Modal */}
+            <Modal visible={commentModalOpen} transparent animationType="slide" onRequestClose={() => setCommentModalOpen(false)}>
+                <View style={styles.commentModalOverlay}>
+                    <TouchableOpacity style={styles.commentBackdrop} activeOpacity={1} onPress={() => setCommentModalOpen(false)} />
+                    <View style={styles.commentModalContent}>
+                        <View style={styles.commentModalHeader}>
+                            <Text style={styles.commentModalTitle}>Comments</Text>
+                            <TouchableOpacity onPress={() => setCommentModalOpen(false)}>
+                                <MaterialIcons name="close" size={24} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.commentList} contentContainerStyle={styles.commentListContent}>
+                            {commentsLoading ? (
+                                <View style={styles.commentLoading}>
+                                    <Text style={styles.commentLoadingText}>Loading comments...</Text>
+                                </View>
+                            ) : comments.length === 0 ? (
+                                <View style={styles.commentEmpty}>
+                                    <MessageCircle size={32} color={colors.textMuted} />
+                                    <Text style={styles.commentEmptyText}>No comments yet</Text>
+                                    <Text style={styles.commentEmptySubtext}>Be the first to comment!</Text>
+                                </View>
+                            ) : (
+                                comments.map((comment, idx) => (
+                                    <View key={comment._id || idx} style={styles.commentItem}>
+                                        <UserAvatar
+                                            uri={getAvatarUrl(comment.authorId)}
+                                            name={getDisplayName(comment.authorId)}
+                                            style={styles.commentAvatar}
+                                        />
+                                        <View style={styles.commentBody}>
+                                            <View style={styles.commentAuthorRow}>
+                                                <Text style={styles.commentAuthor}>{getDisplayName(comment.authorId)}</Text>
+                                                <Text style={styles.commentTime}>{formatTime(comment.createdAt)}</Text>
+                                            </View>
+                                            <Text style={styles.commentText}>{comment.body}</Text>
+                                        </View>
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+
+                        <View style={styles.commentInputContainer}>
+                            <TextInput
+                                style={styles.commentInput}
+                                placeholder="Write a comment..."
+                                placeholderTextColor={colors.textMuted}
+                                value={commentText}
+                                onChangeText={setCommentText}
+                                multiline
+                            />
+                            <TouchableOpacity
+                                style={[styles.commentSendBtn, (!commentText.trim() || commentLoading) && styles.commentSendBtnDisabled]}
+                                onPress={handleSubmitComment}
+                                disabled={!commentText.trim() || commentLoading}
+                            >
+                                {commentLoading ? (
+                                    <Text style={styles.commentSendText}>...</Text>
+                                ) : (
+                                    <Send size={18} color="#fff" />
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -2295,6 +2481,61 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.text,
             flex: 1,
         },
+        reshareCard: {
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 12,
+            padding: 12,
+            marginTop: 8,
+            borderLeftWidth: 3,
+            borderLeftColor: colors.primary,
+        },
+        reshareHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 8,
+        },
+        reshareContent: {
+            gap: 8,
+        },
+        reshareAuthorRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        reshareAvatar: {
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            backgroundColor: colors.primary,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        reshareAuthorName: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        reshareTime: {
+            fontSize: 11,
+            color: colors.textSecondary,
+        },
+        reshareBody: {
+            fontSize: 14,
+            color: colors.text,
+            lineHeight: 20,
+        },
+        reshareAttachments: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginTop: 4,
+        },
+        reshareImage: {
+            width: 120,
+            height: 120,
+            borderRadius: 8,
+        },
         messageComposer: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -2555,6 +2796,129 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         emojiText: {
             fontSize: 24,
+        },
+        commentModalOverlay: {
+            flex: 1,
+            justifyContent: 'flex-end',
+        },
+        commentBackdrop: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+        },
+        commentModalContent: {
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            maxHeight: '80%',
+            minHeight: 400,
+        },
+        commentModalHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+        },
+        commentModalTitle: {
+            fontSize: 18,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        commentList: {
+            flex: 1,
+        },
+        commentListContent: {
+            padding: 16,
+            gap: 16,
+        },
+        commentLoading: {
+            padding: 40,
+            alignItems: 'center',
+        },
+        commentLoadingText: {
+            color: colors.textMuted,
+            fontSize: 14,
+        },
+        commentEmpty: {
+            padding: 40,
+            alignItems: 'center',
+            gap: 8,
+        },
+        commentEmptyText: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        commentEmptySubtext: {
+            fontSize: 14,
+            color: colors.textMuted,
+        },
+        commentItem: {
+            flexDirection: 'row',
+            gap: 12,
+        },
+        commentAvatar: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+        },
+        commentBody: {
+            flex: 1,
+            gap: 4,
+        },
+        commentAuthorRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        commentAuthor: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        commentTime: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        commentText: {
+            fontSize: 14,
+            color: colors.text,
+            lineHeight: 20,
+        },
+        commentInputContainer: {
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            gap: 12,
+            padding: 16,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
+        commentInput: {
+            flex: 1,
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 20,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            fontSize: 14,
+            color: colors.text,
+            maxHeight: 100,
+            ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
+        },
+        commentSendBtn: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.primary,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        commentSendBtnDisabled: {
+            opacity: 0.5,
+        },
+        commentSendText: {
+            color: '#fff',
+            fontWeight: '600',
         },
         rightPanel: {
             width: 300,

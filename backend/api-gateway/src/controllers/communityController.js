@@ -4228,8 +4228,8 @@ exports.reshareMessage = async (req, res) => {
         }
 
         const { Message, MessageReshare } = await getTenantModels(subgrid);
-        const message = await Message.findById(messageId);
-        if (!message || message.subgridId !== String(subgridId) || message.status !== 'active') {
+        const originalMessage = await Message.findById(messageId);
+        if (!originalMessage || originalMessage.subgridId !== String(subgridId) || originalMessage.status !== 'active') {
             return res.status(404).json({ message: 'Message not found' });
         }
 
@@ -4243,6 +4243,7 @@ exports.reshareMessage = async (req, res) => {
             return res.status(400).json({ message: 'Already reshared this message' });
         }
 
+        // Create the reshare record
         const reshare = await MessageReshare.create({
             subgridId: String(subgridId),
             messageId: String(messageId),
@@ -4250,18 +4251,40 @@ exports.reshareMessage = async (req, res) => {
             comment: comment || '',
         });
 
-        const updatedMessage = await Message.findByIdAndUpdate(
+        // Increment reshare count on original message
+        const updatedOriginal = await Message.findByIdAndUpdate(
             messageId,
             { $inc: { reshareCount: 1 } },
             { new: true }
         );
 
+        // Create a new message that represents the reshare (appears in the channel feed)
+        const resharedMessage = await Message.create({
+            subgridId: String(subgridId),
+            channelId: originalMessage.channelId,
+            authorId: String(userId),
+            body: comment || '',
+            kind: 'reshare',
+            attachments: [{
+                type: 'reshare',
+                originalMessageId: String(messageId),
+                originalAuthorId: originalMessage.authorId,
+                originalBody: originalMessage.body,
+                originalAttachments: originalMessage.attachments || [],
+                originalCreatedAt: originalMessage.createdAt,
+            }],
+        });
+
+        // Emit WebSocket event for the new reshared message
+        websocketService.emitNewMessage('channel', originalMessage.channelId, resharedMessage);
+
         websocketService.sendToRoom('subgrid', subgridId, 'message_reshared', {
             subgridId,
             messageId,
             userId,
-            reshareCount: updatedMessage.reshareCount,
+            reshareCount: updatedOriginal.reshareCount,
             reshare,
+            resharedMessage,
             timestamp: new Date().toISOString(),
         });
 
@@ -4269,8 +4292,9 @@ exports.reshareMessage = async (req, res) => {
             success: true,
             data: {
                 messageId,
-                reshareCount: updatedMessage.reshareCount,
+                reshareCount: updatedOriginal.reshareCount,
                 reshare,
+                resharedMessage,
             },
         });
     } catch (error) {
