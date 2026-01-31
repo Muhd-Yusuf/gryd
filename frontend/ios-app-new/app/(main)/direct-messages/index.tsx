@@ -181,6 +181,7 @@ const DirectMessagesScreen = () => {
     const [blockedIds, setBlockedIds] = useState<string[]>([]);
     const [blockedUsers, setBlockedUsers] = useState<Record<string, UserProfile>>({});
     const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
+    const [lastMessages, setLastMessages] = useState<Record<string, Message | null>>({});
     const [search, setSearch] = useState('');
     const [memberSearch, setMemberSearch] = useState('');
     const [addFriendOpen, setAddFriendOpen] = useState(false);
@@ -321,6 +322,27 @@ const DirectMessagesScreen = () => {
         }
     };
 
+    // Fetch last message for each friend to show in conversation list
+    const fetchLastMessages = async (activeSubgridId: string, friendIds: string[]) => {
+        if (!friendIds.length) return;
+
+        const lastMsgs: Record<string, Message | null> = {};
+
+        // Fetch last message for each friend in parallel (limit to avoid too many requests)
+        const fetchPromises = friendIds.slice(0, 20).map(async (peerId) => {
+            try {
+                const response = await communityGet(`/subgrids/${activeSubgridId}/direct-messages?peerId=${peerId}&limit=1`);
+                const msgs = response?.data || [];
+                lastMsgs[peerId] = msgs.length > 0 ? msgs[0] : null;
+            } catch {
+                lastMsgs[peerId] = null;
+            }
+        });
+
+        await Promise.all(fetchPromises);
+        setLastMessages(lastMsgs);
+    };
+
     useEffect(() => {
         const loadMembers = async () => {
             if (!subgridId) return;
@@ -342,6 +364,13 @@ const DirectMessagesScreen = () => {
         }
         loadMembers();
     }, [subgridId]);
+
+    // Fetch last messages when friends list changes
+    useEffect(() => {
+        if (subgridId && friends.length > 0) {
+            fetchLastMessages(subgridId, friends);
+        }
+    }, [subgridId, friends]);
 
     useEffect(() => {
         const loadMessages = async () => {
@@ -552,14 +581,23 @@ const DirectMessagesScreen = () => {
             }
 
             // Send message with attachments
-            await communityPost(`/subgrids/${subgridId}/direct-messages`, {
+            const sendResult = await communityPost(`/subgrids/${subgridId}/direct-messages`, {
                 recipientId: activePeerId,
                 body: body || '', // Ensure body is at least empty string
                 kind: 'text',
                 attachments: uploadedAttachments,
             });
             const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`);
-            setMessages(response?.data || []);
+            const newMessages = response?.data || [];
+            setMessages(newMessages);
+
+            // Update last message for this conversation
+            if (newMessages.length > 0) {
+                setLastMessages(prev => ({
+                    ...prev,
+                    [activePeerId]: newMessages[0]
+                }));
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to send message.');
         }
@@ -972,9 +1010,17 @@ const DirectMessagesScreen = () => {
                                             </View>
                                             <View style={styles.dmInfo}>
                                                 <Text style={styles.dmName}>{buildName(peerId, friendUsers[peerId])}</Text>
-                                                <Text style={styles.dmMeta} numberOfLines={1}>You: Hello</Text>
+                                                <Text style={styles.dmMeta} numberOfLines={1}>
+                                                    {lastMessages[peerId]
+                                                        ? `${lastMessages[peerId]?.senderId === userId ? 'You: ' : ''}${lastMessages[peerId]?.body || 'Attachment'}`
+                                                        : 'Start a conversation'}
+                                                </Text>
                                             </View>
-                                            <Text style={styles.dmTime}>2d</Text>
+                                            <Text style={styles.dmTime}>
+                                                {lastMessages[peerId]?.createdAt
+                                                    ? formatRelativeTime(lastMessages[peerId]!.createdAt!)
+                                                    : ''}
+                                            </Text>
                                         </TouchableOpacity>
                                     );
                                 })}
