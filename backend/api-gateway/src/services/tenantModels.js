@@ -53,7 +53,7 @@ const defineModels = (connection) => {
         },
         kind: {
             type: String,
-            enum: ['text', 'emoji', 'sticker', 'audio'],
+            enum: ['text', 'emoji', 'sticker', 'audio', 'reshare'],
             default: 'text',
         },
         attachments: {
