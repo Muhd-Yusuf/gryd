@@ -536,9 +536,15 @@ const defineModels = (connection) => {
             type: String,
             default: '',
         },
+        eventType: {
+            type: String,
+            enum: ['event', 'announcement'],
+            default: 'event',
+        },
         startDate: {
             type: Date,
-            required: true,
+            required: false,
+            default: null,
         },
         endDate: {
             type: Date,

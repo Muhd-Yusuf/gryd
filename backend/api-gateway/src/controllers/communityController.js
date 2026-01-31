@@ -1630,7 +1630,7 @@ exports.listEvents = async (req, res) => {
 exports.createEvent = async (req, res) => {
     try {
         const { subgridId } = req.params;
-        const { title, description, startDate, endDate, location } = req.body;
+        const { title, description, startDate, endDate, location, eventType } = req.body;
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
@@ -1640,7 +1640,8 @@ exports.createEvent = async (req, res) => {
         if (!title) {
             return res.status(400).json({ message: 'Event title is required' });
         }
-        if (!startDate) {
+        // startDate is required for events but optional for announcements
+        if (eventType !== 'announcement' && !startDate) {
             return res.status(400).json({ message: 'Event start date is required' });
         }
 
@@ -1649,7 +1650,8 @@ exports.createEvent = async (req, res) => {
             subgridId: String(subgridId),
             title,
             description: description || '',
-            startDate: new Date(startDate),
+            eventType: eventType || 'event',
+            startDate: startDate ? new Date(startDate) : null,
             endDate: endDate ? new Date(endDate) : null,
             location: location || '',
             createdBy: req.user.id,

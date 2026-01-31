@@ -51,8 +51,13 @@ type Event = {
     _id: string;
     title?: string;
     description?: string;
+    eventType?: 'event' | 'announcement';
     startDate?: string;
     endDate?: string;
+    location?: string;
+    createdBy?: string;
+    status?: 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
+    createdAt?: string;
 };
 
 type Subgrid = {
@@ -329,6 +334,9 @@ const CreditUnionAdminScreen = () => {
     const [newEventTitle, setNewEventTitle] = useState('');
     const [newEventDescription, setNewEventDescription] = useState('');
     const [newEventDate, setNewEventDate] = useState('');
+    const [newEventType, setNewEventType] = useState<'event' | 'announcement'>('event');
+    const [newEventLocation, setNewEventLocation] = useState('');
+    const [showEventsView, setShowEventsView] = useState(false);
     const [serverName, setServerName] = useState('');
     const [serverDescription, setServerDescription] = useState('');
     const [serverLogoUrl, setServerLogoUrl] = useState('');
@@ -1235,21 +1243,54 @@ const CreditUnionAdminScreen = () => {
 
     const handleCreateEvent = async () => {
         if (!newEventTitle.trim() || !activeSubgridId) return;
+        // For events, date is required; for announcements, date is optional
+        if (newEventType === 'event' && !newEventDate.trim()) return;
         try {
-            await communityPost(`/subgrids/${activeSubgridId}/events`, {
+            const eventData: any = {
                 title: newEventTitle.trim(),
                 description: newEventDescription.trim(),
-                startDate: newEventDate || new Date().toISOString(),
-            });
+                eventType: newEventType,
+                location: newEventLocation.trim(),
+            };
+            // Only include startDate if provided (required for events, optional for announcements)
+            if (newEventDate.trim()) {
+                eventData.startDate = newEventDate;
+            }
+            await communityPost(`/subgrids/${activeSubgridId}/events`, eventData);
             const response = await communityGet(`/subgrids/${activeSubgridId}/events`);
             setEvents(response?.data || []);
             setCreateEventModalOpen(false);
             setNewEventTitle('');
             setNewEventDescription('');
             setNewEventDate('');
+            setNewEventType('event');
+            setNewEventLocation('');
         } catch (err: any) {
             setError(err.message || 'Failed to create event.');
         }
+    };
+
+    const handleDeleteEvent = async (eventId: string) => {
+        if (!activeSubgridId) return;
+        try {
+            await communityDelete(`/subgrids/${activeSubgridId}/events/${eventId}`);
+            setEvents(prev => prev.filter(e => e._id !== eventId));
+        } catch (err: any) {
+            setError(err.message || 'Failed to delete event.');
+        }
+    };
+
+    const formatEventDate = (dateStr?: string) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+        });
     };
 
     const handleUpdateServer = async () => {
@@ -2161,9 +2202,18 @@ const CreditUnionAdminScreen = () => {
 
                     <ScrollView style={styles.channelList} showsVerticalScrollIndicator={false}>
                         {/* Events */}
-                        <TouchableOpacity style={styles.eventsButton}>
-                            <MaterialIcons name="event" size={16} color={colors.textMuted} />
-                            <Text style={styles.eventsText}>Events</Text>
+                        <TouchableOpacity
+                            style={[styles.eventsButton, showEventsView && styles.eventsButtonActive]}
+                            onPress={() => setShowEventsView(!showEventsView)}
+                        >
+                            <MaterialIcons name="event" size={16} color={showEventsView ? colors.text : colors.textMuted} />
+                            <Text style={[styles.eventsText, showEventsView && styles.eventsTextActive]}>Events</Text>
+                            <TouchableOpacity
+                                style={{ marginLeft: 'auto' }}
+                                onPress={(e) => { e.stopPropagation(); setCreateEventModalOpen(true); }}
+                            >
+                                <MaterialIcons name="add" size={16} color={colors.textMuted} />
+                            </TouchableOpacity>
                         </TouchableOpacity>
 
                         {/* Text Channels */}
@@ -2357,6 +2407,106 @@ const CreditUnionAdminScreen = () => {
                         if (serverMenuOpen) setServerMenuOpen(false);
                     }}
                 >
+                    {showEventsView ? (
+                        /* Events View */
+                        <>
+                            <View style={styles.contentHeader}>
+                                <View style={styles.contentHeaderLeft}>
+                                    <MaterialIcons name="event" size={18} color={colors.textMuted} />
+                                    <Text style={styles.contentTitle}>Events & Announcements</Text>
+                                </View>
+                                <View style={styles.contentHeaderRight}>
+                                    <TouchableOpacity
+                                        style={styles.createEventHeaderBtn}
+                                        onPress={() => setCreateEventModalOpen(true)}
+                                    >
+                                        <MaterialIcons name="add" size={16} color="#FFFFFF" />
+                                        <Text style={styles.createEventHeaderBtnText}>Create Event</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                            <ScrollView
+                                style={styles.feedContainer}
+                                contentContainerStyle={styles.eventsListContent}
+                                showsVerticalScrollIndicator={false}
+                            >
+                                {events.length === 0 ? (
+                                    <View style={styles.welcomeCard}>
+                                        <View style={styles.welcomeIcon}>
+                                            <MaterialIcons name="event" size={32} color={colors.textMuted} />
+                                        </View>
+                                        <Text style={styles.welcomeTitle}>No Events Yet</Text>
+                                        <Text style={styles.welcomeSubtitle}>Create your first event or announcement to keep members informed.</Text>
+                                        <TouchableOpacity
+                                            style={styles.editChannelBtn}
+                                            onPress={() => setCreateEventModalOpen(true)}
+                                        >
+                                            <MaterialIcons name="add" size={14} color={colors.text} />
+                                            <Text style={styles.editChannelText}>Create Event</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    events.map((event) => (
+                                        <View key={event._id} style={styles.eventCard}>
+                                            <View style={styles.eventCardHeader}>
+                                                <View style={[
+                                                    styles.eventTypeBadge,
+                                                    event.eventType === 'announcement' ? styles.eventTypeBadgeAnnouncement : styles.eventTypeBadgeEvent
+                                                ]}>
+                                                    <MaterialIcons
+                                                        name={event.eventType === 'announcement' ? 'campaign' : 'event'}
+                                                        size={12}
+                                                        color="#FFFFFF"
+                                                    />
+                                                    <Text style={styles.eventTypeBadgeText}>
+                                                        {event.eventType === 'announcement' ? 'Announcement' : 'Event'}
+                                                    </Text>
+                                                </View>
+                                                <TouchableOpacity
+                                                    style={styles.eventDeleteBtn}
+                                                    onPress={() => handleDeleteEvent(event._id)}
+                                                >
+                                                    <MaterialIcons name="delete" size={16} color={colors.dangerText} />
+                                                </TouchableOpacity>
+                                            </View>
+                                            <Text style={styles.eventTitle}>{event.title}</Text>
+                                            {event.description && (
+                                                <Text style={styles.eventDescription}>{event.description}</Text>
+                                            )}
+                                            <View style={styles.eventMeta}>
+                                                {event.startDate && (
+                                                    <View style={styles.eventMetaItem}>
+                                                        <MaterialIcons name="schedule" size={14} color={colors.textMuted} />
+                                                        <Text style={styles.eventMetaText}>{formatEventDate(event.startDate)}</Text>
+                                                    </View>
+                                                )}
+                                                {event.location && (
+                                                    <View style={styles.eventMetaItem}>
+                                                        <MaterialIcons name="location-on" size={14} color={colors.textMuted} />
+                                                        <Text style={styles.eventMetaText}>{event.location}</Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                            {event.status && event.status !== 'scheduled' && (
+                                                <View style={[
+                                                    styles.eventStatusBadge,
+                                                    event.status === 'completed' && styles.eventStatusCompleted,
+                                                    event.status === 'cancelled' && styles.eventStatusCancelled,
+                                                    event.status === 'ongoing' && styles.eventStatusOngoing,
+                                                ]}>
+                                                    <Text style={styles.eventStatusText}>
+                                                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    ))
+                                )}
+                            </ScrollView>
+                        </>
+                    ) : (
+                        /* Channel View */
+                        <>
                     {/* Channel Header */}
                     <View style={styles.contentHeader}>
                         <View style={styles.contentHeaderLeft}>
@@ -2741,6 +2891,8 @@ const CreditUnionAdminScreen = () => {
                                     </View>
                                 </View>
                             )}
+                        </>
+                    )}
                         </>
                     )}
                 </Pressable>
@@ -3177,14 +3329,32 @@ const CreditUnionAdminScreen = () => {
                         <TouchableOpacity style={styles.modalClose} onPress={() => setCreateEventModalOpen(false)}>
                             <MaterialIcons name="close" size={20} color={colors.textMuted} />
                         </TouchableOpacity>
-                        <Text style={styles.modalTitle}>Create Event</Text>
+                        <Text style={styles.modalTitle}>{newEventType === 'announcement' ? 'Create Announcement' : 'Create Event'}</Text>
 
-                        <Text style={styles.modalLabel}>EVENT TITLE</Text>
+                        <Text style={styles.modalLabel}>TYPE</Text>
+                        <View style={styles.eventTypeSelector}>
+                            <TouchableOpacity
+                                style={[styles.eventTypeOption, newEventType === 'event' && styles.eventTypeOptionActive]}
+                                onPress={() => setNewEventType('event')}
+                            >
+                                <MaterialIcons name="event" size={18} color={newEventType === 'event' ? '#FFFFFF' : colors.textMuted} />
+                                <Text style={[styles.eventTypeOptionText, newEventType === 'event' && styles.eventTypeOptionTextActive]}>Event</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.eventTypeOption, newEventType === 'announcement' && styles.eventTypeOptionActive]}
+                                onPress={() => setNewEventType('announcement')}
+                            >
+                                <MaterialIcons name="campaign" size={18} color={newEventType === 'announcement' ? '#FFFFFF' : colors.textMuted} />
+                                <Text style={[styles.eventTypeOptionText, newEventType === 'announcement' && styles.eventTypeOptionTextActive]}>Announcement</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.modalLabel}>{newEventType === 'announcement' ? 'ANNOUNCEMENT TITLE' : 'EVENT TITLE'}</Text>
                         <View style={styles.inputRow}>
-                            <MaterialIcons name="event" size={18} color={colors.textMuted} />
+                            <MaterialIcons name={newEventType === 'announcement' ? 'campaign' : 'event'} size={18} color={colors.textMuted} />
                             <TextInput
                                 style={styles.modalInput}
-                                placeholder="Event Title"
+                                placeholder={newEventType === 'announcement' ? 'Announcement Title' : 'Event Title'}
                                 placeholderTextColor={colors.textSubtle}
                                 value={newEventTitle}
                                 onChangeText={setNewEventTitle}
@@ -3194,7 +3364,7 @@ const CreditUnionAdminScreen = () => {
                         <Text style={styles.modalLabel}>DESCRIPTION</Text>
                         <TextInput
                             style={styles.textArea}
-                            placeholder="Event description..."
+                            placeholder={newEventType === 'announcement' ? 'Announcement details...' : 'Event description...'}
                             placeholderTextColor={colors.textSubtle}
                             value={newEventDescription}
                             onChangeText={setNewEventDescription}
@@ -3202,24 +3372,40 @@ const CreditUnionAdminScreen = () => {
                             numberOfLines={3}
                         />
 
-                        <Text style={styles.modalLabel}>DATE</Text>
+                        <Text style={styles.modalLabel}>{newEventType === 'announcement' ? 'DATE (Optional)' : 'DATE'}</Text>
                         <View style={styles.inputRow}>
-                            <MaterialIcons name="event" size={18} color={colors.textMuted} />
+                            <MaterialIcons name="schedule" size={18} color={colors.textMuted} />
                             <TextInput
                                 style={styles.modalInput}
-                                placeholder="YYYY-MM-DD"
+                                placeholder={newEventType === 'announcement' ? 'YYYY-MM-DD HH:MM (optional)' : 'YYYY-MM-DD HH:MM'}
                                 placeholderTextColor={colors.textSubtle}
                                 value={newEventDate}
                                 onChangeText={setNewEventDate}
                             />
                         </View>
 
+                        {newEventType === 'event' && (
+                            <>
+                                <Text style={styles.modalLabel}>LOCATION (Optional)</Text>
+                                <View style={styles.inputRow}>
+                                    <MaterialIcons name="location-on" size={18} color={colors.textMuted} />
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        placeholder="Event location..."
+                                        placeholderTextColor={colors.textSubtle}
+                                        value={newEventLocation}
+                                        onChangeText={setNewEventLocation}
+                                    />
+                                </View>
+                            </>
+                        )}
+
                         <View style={styles.modalActions}>
                             <TouchableOpacity style={styles.cancelBtn} onPress={() => setCreateEventModalOpen(false)}>
                                 <Text style={styles.cancelBtnText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.createBtn} onPress={handleCreateEvent}>
-                                <Text style={styles.createBtnText}>Create Event</Text>
+                                <Text style={styles.createBtnText}>{newEventType === 'announcement' ? 'Create Announcement' : 'Create Event'}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -5385,10 +5571,147 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 8,
             padding: 8,
             marginBottom: 8,
+            borderRadius: 6,
+        },
+        eventsButtonActive: {
+            backgroundColor: colors.surfaceMuted,
         },
         eventsText: {
             fontSize: 14,
             color: colors.textMuted,
+            flex: 1,
+        },
+        eventsTextActive: {
+            color: colors.text,
+            fontWeight: '600',
+        },
+        eventsListContent: {
+            padding: 16,
+            gap: 16,
+        },
+        eventCard: {
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        eventCardHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 12,
+        },
+        eventTypeBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 12,
+        },
+        eventTypeBadgeEvent: {
+            backgroundColor: '#3B82F6',
+        },
+        eventTypeBadgeAnnouncement: {
+            backgroundColor: '#F59E0B',
+        },
+        eventTypeBadgeText: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        eventDeleteBtn: {
+            padding: 4,
+        },
+        eventTitle: {
+            fontSize: 18,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 8,
+        },
+        eventDescription: {
+            fontSize: 14,
+            color: colors.textMuted,
+            lineHeight: 20,
+            marginBottom: 12,
+        },
+        eventMeta: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 16,
+        },
+        eventMetaItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+        },
+        eventMetaText: {
+            fontSize: 13,
+            color: colors.textMuted,
+        },
+        eventStatusBadge: {
+            alignSelf: 'flex-start',
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 4,
+            marginTop: 12,
+        },
+        eventStatusCompleted: {
+            backgroundColor: '#22C55E20',
+        },
+        eventStatusCancelled: {
+            backgroundColor: '#EF444420',
+        },
+        eventStatusOngoing: {
+            backgroundColor: '#3B82F620',
+        },
+        eventStatusText: {
+            fontSize: 12,
+            fontWeight: '500',
+            color: colors.text,
+        },
+        createEventHeaderBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            backgroundColor: colors.primary,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 6,
+        },
+        createEventHeaderBtnText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        eventTypeSelector: {
+            flexDirection: 'row',
+            gap: 8,
+            marginBottom: 16,
+        },
+        eventTypeOption: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            paddingVertical: 10,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        eventTypeOptionActive: {
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
+        },
+        eventTypeOptionText: {
+            fontSize: 14,
+            color: colors.textMuted,
+        },
+        eventTypeOptionTextActive: {
+            color: '#FFFFFF',
+            fontWeight: '600',
         },
         channelGroup: {
             marginBottom: 16,

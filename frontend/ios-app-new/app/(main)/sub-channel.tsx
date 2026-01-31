@@ -72,6 +72,19 @@ type Member = {
     company?: string;
 };
 
+type Event = {
+    _id: string;
+    title?: string;
+    description?: string;
+    eventType?: 'event' | 'announcement';
+    startDate?: string;
+    endDate?: string;
+    location?: string;
+    createdBy?: string;
+    status?: 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
+    createdAt?: string;
+};
+
 const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
     stakeholder: '#3B82F6',
     vendor: '#8B5CF6',
@@ -147,10 +160,13 @@ const SubChannelScreen = () => {
     const initialSubgridId = normalizeParam(params.subgridId);
     const initialChannelId = normalizeParam(params.channelId);
     const initialChannelName = normalizeParam(params.channelName);
+    const initialShowEvents = normalizeParam(params.showEvents) === 'true';
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [channels, setChannels] = useState<Channel[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
+    const [events, setEvents] = useState<Event[]>([]);
+    const [showEventsView, setShowEventsView] = useState(initialShowEvents);
     const [subgridId, setSubgridId] = useState(initialSubgridId);
     const [channelId, setChannelId] = useState(initialChannelId);
     const [channelName, setChannelName] = useState(initialChannelName);
@@ -261,6 +277,20 @@ const SubChannelScreen = () => {
         };
 
         loadMembers();
+    }, [subgridId]);
+
+    useEffect(() => {
+        const loadEvents = async () => {
+            if (!subgridId) return;
+            try {
+                const response = await communityGet(`/subgrids/${subgridId}/events`);
+                setEvents(response?.data || []);
+            } catch (err: any) {
+                setEvents([]);
+            }
+        };
+
+        loadEvents();
     }, [subgridId]);
 
     useEffect(() => {
@@ -1070,8 +1100,17 @@ const SubChannelScreen = () => {
                         <TouchableOpacity style={styles.iconButton} onPress={handleBack}>
                             <ArrowLeft size={18} color={colors.text} />
                         </TouchableOpacity>
-                        <Text style={styles.title}># {channelName || 'general'}</Text>
+                        <Text style={styles.title}>{showEventsView ? 'Events' : `# ${channelName || 'general'}`}</Text>
                         <View style={styles.headerActions}>
+                            <TouchableOpacity
+                                style={[styles.iconButton, showEventsView && styles.iconButtonActive]}
+                                onPress={() => setShowEventsView(!showEventsView)}
+                            >
+                                <MaterialIcons name="event" size={16} color={showEventsView ? colors.primary : colors.textMuted} />
+                                {events.length > 0 && !showEventsView && (
+                                    <View style={styles.eventDot} />
+                                )}
+                            </TouchableOpacity>
                             <TouchableOpacity style={styles.iconButton}>
                                 <Search size={16} color={colors.textMuted} />
                             </TouchableOpacity>
@@ -1081,6 +1120,82 @@ const SubChannelScreen = () => {
                     {!!error && <Text style={styles.errorText}>{error}</Text>}
                     {loading && <Text style={styles.helperText}>Loading channel...</Text>}
 
+                    {showEventsView ? (
+                        /* Events View */
+                        <ScrollView
+                            contentContainerStyle={styles.eventsListContent}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            {events.length === 0 ? (
+                                <View style={styles.emptyEventsContainer}>
+                                    <MaterialIcons name="event" size={48} color={colors.textMuted} />
+                                    <Text style={styles.emptyEventsTitle}>No Events Yet</Text>
+                                    <Text style={styles.emptyEventsSubtitle}>
+                                        Check back later for upcoming events and announcements.
+                                    </Text>
+                                </View>
+                            ) : (
+                                events.map((event) => (
+                                    <View key={event._id} style={styles.mobileEventCard}>
+                                        <View style={styles.mobileEventCardHeader}>
+                                            <View style={[
+                                                styles.mobileEventTypeBadge,
+                                                event.eventType === 'announcement' ? styles.mobileEventTypeBadgeAnnouncement : styles.mobileEventTypeBadgeEvent
+                                            ]}>
+                                                <MaterialIcons
+                                                    name={event.eventType === 'announcement' ? 'campaign' : 'event'}
+                                                    size={12}
+                                                    color="#FFFFFF"
+                                                />
+                                                <Text style={styles.mobileEventTypeBadgeText}>
+                                                    {event.eventType === 'announcement' ? 'Announcement' : 'Event'}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <Text style={styles.mobileEventTitle}>{event.title}</Text>
+                                        {event.description && (
+                                            <Text style={styles.mobileEventDescription}>{event.description}</Text>
+                                        )}
+                                        <View style={styles.mobileEventMeta}>
+                                            {event.startDate && (
+                                                <View style={styles.mobileEventMetaItem}>
+                                                    <MaterialIcons name="schedule" size={14} color={colors.textMuted} />
+                                                    <Text style={styles.mobileEventMetaText}>
+                                                        {new Date(event.startDate).toLocaleDateString('en-US', {
+                                                            weekday: 'short',
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            hour: 'numeric',
+                                                            minute: '2-digit',
+                                                        })}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            {event.location && (
+                                                <View style={styles.mobileEventMetaItem}>
+                                                    <MaterialIcons name="location-on" size={14} color={colors.textMuted} />
+                                                    <Text style={styles.mobileEventMetaText}>{event.location}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                        {event.status && event.status !== 'scheduled' && (
+                                            <View style={[
+                                                styles.mobileEventStatusBadge,
+                                                event.status === 'completed' && styles.mobileEventStatusCompleted,
+                                                event.status === 'cancelled' && styles.mobileEventStatusCancelled,
+                                                event.status === 'ongoing' && styles.mobileEventStatusOngoing,
+                                            ]}>
+                                                <Text style={styles.mobileEventStatusText}>
+                                                    {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+                    ) : (
+                        /* Channel View */
                     <ScrollView
                         ref={feedScrollRef}
                         contentContainerStyle={styles.feedList}
@@ -1283,6 +1398,7 @@ const SubChannelScreen = () => {
                             );
                         })}
                     </ScrollView>
+                    )}
 
                     {!!recordingError && <Text style={styles.errorText}>{recordingError}</Text>}
 
@@ -1310,53 +1426,55 @@ const SubChannelScreen = () => {
                         </View>
                     )}
 
-                    {/* Recording UI - WhatsApp Style */}
-                    {recording ? (
-                        <View style={styles.recordingContainer}>
-                            <TouchableOpacity style={styles.recordingCancelButton} onPress={handleCancelRecording}>
-                                <X size={20} color={colors.dangerText} />
-                            </TouchableOpacity>
-                            <View style={styles.recordingInfo}>
-                                <View style={styles.recordingDotAnimated} />
-                                <Text style={styles.recordingTimer}>{formatRecordingTime(recordingDuration)}</Text>
-                                <View style={styles.recordingWaveform}>
-                                    {[12, 18, 10, 22, 14, 20, 8, 24, 16, 12, 20, 14].map((height, i) => (
-                                        <View
-                                            key={i}
-                                            style={[
-                                                styles.waveformBar,
-                                                { height, backgroundColor: colors.primary }
-                                            ]}
-                                        />
-                                    ))}
+                    {/* Recording UI & Composer - Hidden when viewing events (read-only) */}
+                    {!showEventsView && (
+                        recording ? (
+                            <View style={styles.recordingContainer}>
+                                <TouchableOpacity style={styles.recordingCancelButton} onPress={handleCancelRecording}>
+                                    <X size={20} color={colors.dangerText} />
+                                </TouchableOpacity>
+                                <View style={styles.recordingInfo}>
+                                    <View style={styles.recordingDotAnimated} />
+                                    <Text style={styles.recordingTimer}>{formatRecordingTime(recordingDuration)}</Text>
+                                    <View style={styles.recordingWaveform}>
+                                        {[12, 18, 10, 22, 14, 20, 8, 24, 16, 12, 20, 14].map((height, i) => (
+                                            <View
+                                                key={i}
+                                                style={[
+                                                    styles.waveformBar,
+                                                    { height, backgroundColor: colors.primary }
+                                                ]}
+                                            />
+                                        ))}
+                                    </View>
                                 </View>
+                                <TouchableOpacity style={styles.recordingSendButton} onPress={handleStopRecording}>
+                                    <Send size={18} color="#FFF" />
+                                </TouchableOpacity>
                             </View>
-                            <TouchableOpacity style={styles.recordingSendButton} onPress={handleStopRecording}>
-                                <Send size={18} color="#FFF" />
-                            </TouchableOpacity>
-                        </View>
-                    ) : (
-                        <View style={styles.composer}>
-                            <TouchableOpacity style={styles.composerIcon} onPress={() => setEmojiOpen(true)}>
-                                <Smile size={18} color={colors.textMuted} />
-                            </TouchableOpacity>
-                            <TextInput
-                                value={draft}
-                                onChangeText={setDraft}
-                                placeholder="Type message"
-                                placeholderTextColor={colors.textSubtle}
-                                style={styles.composerInput}
-                            />
-                            <TouchableOpacity style={styles.composerIcon} onPress={handleAttachPress}>
-                                <Paperclip size={18} color={colors.textMuted} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.composerIcon} onPress={handleStartRecording}>
-                                <Mic size={18} color={colors.textMuted} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                                <Send size={16} color={colors.primaryText} />
-                            </TouchableOpacity>
-                        </View>
+                        ) : (
+                            <View style={styles.composer}>
+                                <TouchableOpacity style={styles.composerIcon} onPress={() => setEmojiOpen(true)}>
+                                    <Smile size={18} color={colors.textMuted} />
+                                </TouchableOpacity>
+                                <TextInput
+                                    value={draft}
+                                    onChangeText={setDraft}
+                                    placeholder="Type message"
+                                    placeholderTextColor={colors.textSubtle}
+                                    style={styles.composerInput}
+                                />
+                                <TouchableOpacity style={styles.composerIcon} onPress={handleAttachPress}>
+                                    <Paperclip size={18} color={colors.textMuted} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.composerIcon} onPress={handleStartRecording}>
+                                    <Mic size={18} color={colors.textMuted} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+                                    <Send size={16} color={colors.primaryText} />
+                                </TouchableOpacity>
+                            </View>
+                        )
                     )}
                 </View>
             </View>
@@ -1666,6 +1784,114 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: colors.surfaceMuted,
+            position: 'relative',
+        },
+        iconButtonActive: {
+            backgroundColor: colors.primary + '20',
+        },
+        eventDot: {
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: colors.primary,
+        },
+        eventsListContent: {
+            padding: 8,
+            gap: 12,
+        },
+        emptyEventsContainer: {
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 48,
+            gap: 12,
+        },
+        emptyEventsTitle: {
+            fontSize: 18,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        emptyEventsSubtitle: {
+            fontSize: 14,
+            color: colors.textMuted,
+            textAlign: 'center',
+        },
+        mobileEventCard: {
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 12,
+            padding: 14,
+        },
+        mobileEventCardHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 10,
+        },
+        mobileEventTypeBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 10,
+        },
+        mobileEventTypeBadgeEvent: {
+            backgroundColor: '#3B82F6',
+        },
+        mobileEventTypeBadgeAnnouncement: {
+            backgroundColor: '#F59E0B',
+        },
+        mobileEventTypeBadgeText: {
+            fontSize: 10,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        mobileEventTitle: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 6,
+        },
+        mobileEventDescription: {
+            fontSize: 13,
+            color: colors.textMuted,
+            lineHeight: 18,
+            marginBottom: 10,
+        },
+        mobileEventMeta: {
+            gap: 8,
+        },
+        mobileEventMetaItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        mobileEventMetaText: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        mobileEventStatusBadge: {
+            alignSelf: 'flex-start',
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 4,
+            marginTop: 10,
+        },
+        mobileEventStatusCompleted: {
+            backgroundColor: '#22C55E20',
+        },
+        mobileEventStatusCancelled: {
+            backgroundColor: '#EF444420',
+        },
+        mobileEventStatusOngoing: {
+            backgroundColor: '#3B82F620',
+        },
+        mobileEventStatusText: {
+            fontSize: 11,
+            fontWeight: '500',
+            color: colors.text,
         },
         helperText: {
             fontSize: 11,

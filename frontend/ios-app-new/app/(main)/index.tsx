@@ -94,6 +94,19 @@ type Member = {
     company?: string;
 };
 
+type Event = {
+    _id: string;
+    title?: string;
+    description?: string;
+    eventType?: 'event' | 'announcement';
+    startDate?: string;
+    endDate?: string;
+    location?: string;
+    createdBy?: string;
+    status?: 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
+    createdAt?: string;
+};
+
 const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
     stakeholder: '#3B82F6',
     vendor: '#8B5CF6',
@@ -188,6 +201,8 @@ const TenantCommunityScreen = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [channelDraft, setChannelDraft] = useState('');
     const [members, setMembers] = useState<Member[]>([]);
+    const [events, setEvents] = useState<Event[]>([]);
+    const [showEventsView, setShowEventsView] = useState(false);
     const [friends, setFriends] = useState<string[]>([]);
     const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>({});
     const [directMessagePeers, setDirectMessagePeers] = useState<string[]>([]);
@@ -312,8 +327,9 @@ const TenantCommunityScreen = () => {
                     communityGet(`/subgrids/${activeSubgridId}/posts`),
                     communityGet(`/subgrids/${activeSubgridId}/members`),
                     communityGet(`/subgrids/${activeSubgridId}/friends`),
+                    communityGet(`/subgrids/${activeSubgridId}/events`),
                 ]);
-                const [channelsRes, postsRes, membersRes, friendsRes] = results;
+                const [channelsRes, postsRes, membersRes, friendsRes, eventsRes] = results;
                 if (channelsRes.status === 'fulfilled') {
                     setChannels(channelsRes.value?.data || []);
                 }
@@ -329,6 +345,9 @@ const TenantCommunityScreen = () => {
                 if (friendsRes.status === 'fulfilled') {
                     setFriends(friendsRes.value?.data?.friends || []);
                     setFriendUsers(friendsRes.value?.data?.users || {});
+                }
+                if (eventsRes.status === 'fulfilled') {
+                    setEvents(eventsRes.value?.data || []);
                 }
             } catch (err: any) {
                 console.error('Failed to load community data:', err.message);
@@ -1310,6 +1329,37 @@ const TenantCommunityScreen = () => {
                             {!!error && <Text style={styles.errorText}>{error}</Text>}
 
                             <ScrollView contentContainerStyle={styles.channelList}>
+                                {/* Events Button */}
+                                <TouchableOpacity
+                                    style={[styles.eventsButton, showEventsView && styles.eventsButtonActive]}
+                                    onPress={() => {
+                                        if (isMobile) {
+                                            // On mobile, navigate to sub-channel with showEvents flag
+                                            router.push({
+                                                pathname: '/(main)/sub-channel',
+                                                params: {
+                                                    subgridId: activeSubgridId,
+                                                    channelId: channels[0]?._id || '',
+                                                    channelName: channels[0]?.name || 'general',
+                                                    showEvents: 'true',
+                                                },
+                                            });
+                                        } else {
+                                            setShowEventsView(!showEventsView);
+                                        }
+                                    }}
+                                >
+                                    <MaterialIcons name="event" size={16} color={showEventsView ? colors.text : colors.textMuted} />
+                                    <Text style={[styles.eventsButtonText, showEventsView && styles.eventsButtonTextActive]}>
+                                        Events
+                                    </Text>
+                                    {events.length > 0 && (
+                                        <View style={styles.eventsBadge}>
+                                            <Text style={styles.eventsBadgeText}>{events.length}</Text>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+
                                 {/* Text Channels */}
                                 <View style={styles.groupBlock}>
                                     <TouchableOpacity
@@ -1391,6 +1441,95 @@ const TenantCommunityScreen = () => {
 
                     {showCenterPanel && (
                         <View style={[styles.centerPanel, isCompact && styles.panelCompact]}>
+                            {showEventsView ? (
+                                /* Events View */
+                                <>
+                                    <View style={styles.centerHeader}>
+                                        <View style={styles.eventsHeaderLeft}>
+                                            <MaterialIcons name="event" size={18} color={colors.textMuted} />
+                                            <Text style={styles.centerTitle}>Events & Announcements</Text>
+                                        </View>
+                                    </View>
+
+                                    <ScrollView
+                                        contentContainerStyle={styles.eventsListContent}
+                                        showsVerticalScrollIndicator={false}
+                                    >
+                                        {events.length === 0 ? (
+                                            <View style={styles.channelWelcome}>
+                                                <View style={styles.channelWelcomeIcon}>
+                                                    <MaterialIcons name="event" size={32} color={colors.textMuted} />
+                                                </View>
+                                                <Text style={styles.channelWelcomeTitle}>No Events Yet</Text>
+                                                <Text style={styles.channelWelcomeSubtitle}>
+                                                    Check back later for upcoming events and announcements.
+                                                </Text>
+                                            </View>
+                                        ) : (
+                                            events.map((event) => (
+                                                <View key={event._id} style={styles.eventCard}>
+                                                    <View style={styles.eventCardHeader}>
+                                                        <View style={[
+                                                            styles.eventTypeBadge,
+                                                            event.eventType === 'announcement' ? styles.eventTypeBadgeAnnouncement : styles.eventTypeBadgeEvent
+                                                        ]}>
+                                                            <MaterialIcons
+                                                                name={event.eventType === 'announcement' ? 'campaign' : 'event'}
+                                                                size={12}
+                                                                color="#FFFFFF"
+                                                            />
+                                                            <Text style={styles.eventTypeBadgeText}>
+                                                                {event.eventType === 'announcement' ? 'Announcement' : 'Event'}
+                                                            </Text>
+                                                        </View>
+                                                    </View>
+                                                    <Text style={styles.eventTitle}>{event.title}</Text>
+                                                    {event.description && (
+                                                        <Text style={styles.eventDescription}>{event.description}</Text>
+                                                    )}
+                                                    <View style={styles.eventMeta}>
+                                                        {event.startDate && (
+                                                            <View style={styles.eventMetaItem}>
+                                                                <MaterialIcons name="schedule" size={14} color={colors.textMuted} />
+                                                                <Text style={styles.eventMetaText}>
+                                                                    {new Date(event.startDate).toLocaleDateString('en-US', {
+                                                                        weekday: 'short',
+                                                                        month: 'short',
+                                                                        day: 'numeric',
+                                                                        year: 'numeric',
+                                                                        hour: 'numeric',
+                                                                        minute: '2-digit',
+                                                                    })}
+                                                                </Text>
+                                                            </View>
+                                                        )}
+                                                        {event.location && (
+                                                            <View style={styles.eventMetaItem}>
+                                                                <MaterialIcons name="location-on" size={14} color={colors.textMuted} />
+                                                                <Text style={styles.eventMetaText}>{event.location}</Text>
+                                                            </View>
+                                                        )}
+                                                    </View>
+                                                    {event.status && event.status !== 'scheduled' && (
+                                                        <View style={[
+                                                            styles.eventStatusBadge,
+                                                            event.status === 'completed' && styles.eventStatusCompleted,
+                                                            event.status === 'cancelled' && styles.eventStatusCancelled,
+                                                            event.status === 'ongoing' && styles.eventStatusOngoing,
+                                                        ]}>
+                                                            <Text style={styles.eventStatusText}>
+                                                                {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            ))
+                                        )}
+                                    </ScrollView>
+                                </>
+                            ) : (
+                                /* Channel View */
+                                <>
                             <View style={styles.centerHeader}>
                                 <Text style={styles.centerTitle}># {activeChannel?.name || 'general'}</Text>
                                 <Search size={16} color={colors.textMuted} />
@@ -1692,6 +1831,8 @@ const TenantCommunityScreen = () => {
                                         </View>
                                     </View>
                                 </View>
+                            )}
+                                </>
                             )}
                         </View>
                     )}
@@ -2188,6 +2329,128 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         channelList: {
             gap: 16,
             paddingBottom: 24,
+        },
+        eventsButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 8,
+            borderRadius: 6,
+            marginBottom: 8,
+        },
+        eventsButtonActive: {
+            backgroundColor: colors.surfaceMuted,
+        },
+        eventsButtonText: {
+            fontSize: 14,
+            color: colors.textMuted,
+            flex: 1,
+        },
+        eventsButtonTextActive: {
+            color: colors.text,
+            fontWeight: '600',
+        },
+        eventsBadge: {
+            backgroundColor: colors.primary,
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 10,
+            minWidth: 20,
+            alignItems: 'center',
+        },
+        eventsBadgeText: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        eventsHeaderLeft: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        eventsListContent: {
+            padding: 16,
+            gap: 16,
+        },
+        eventCard: {
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        eventCardHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 12,
+        },
+        eventTypeBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 12,
+        },
+        eventTypeBadgeEvent: {
+            backgroundColor: '#3B82F6',
+        },
+        eventTypeBadgeAnnouncement: {
+            backgroundColor: '#F59E0B',
+        },
+        eventTypeBadgeText: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        eventTitle: {
+            fontSize: 18,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 8,
+        },
+        eventDescription: {
+            fontSize: 14,
+            color: colors.textMuted,
+            lineHeight: 20,
+            marginBottom: 12,
+        },
+        eventMeta: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 16,
+        },
+        eventMetaItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+        },
+        eventMetaText: {
+            fontSize: 13,
+            color: colors.textMuted,
+        },
+        eventStatusBadge: {
+            alignSelf: 'flex-start',
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 4,
+            marginTop: 12,
+        },
+        eventStatusCompleted: {
+            backgroundColor: '#22C55E20',
+        },
+        eventStatusCancelled: {
+            backgroundColor: '#EF444420',
+        },
+        eventStatusOngoing: {
+            backgroundColor: '#3B82F620',
+        },
+        eventStatusText: {
+            fontSize: 12,
+            fontWeight: '500',
+            color: colors.text,
         },
         groupBlock: {
             gap: 8,
