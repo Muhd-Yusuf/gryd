@@ -126,6 +126,10 @@ const normalizeAttachments = (attachments?: Array<Attachment | string>) => {
                 };
             }
             const typed = item as Attachment & { uri?: string };
+            // Preserve reshare attachments as-is (they don't have URLs)
+            if (typed.type === 'reshare') {
+                return typed;
+            }
             const uri = typed.uri || (typed.type === 'emoji' ? twemojiUrl(typed.value) : typed.value);
             return { ...typed, uri };
         })
@@ -1183,6 +1187,57 @@ const SubChannelScreen = () => {
                                                     </View>
                                                 );
                                             }
+                                            // Render reshare card for reshared messages
+                                            if (attachment.type === 'reshare') {
+                                                const reshareAtt = attachment as any;
+                                                const originalAuthorId = reshareAtt.originalAuthorId;
+                                                const originalBody = reshareAtt.originalBody;
+                                                const originalAttachments = reshareAtt.originalAttachments || [];
+                                                const originalCreatedAt = reshareAtt.originalCreatedAt;
+                                                return (
+                                                    <View key={`${item._id}-reshare-${idx}`} style={styles.reshareCard}>
+                                                        <View style={styles.reshareHeader}>
+                                                            <Repeat2 size={14} color={colors.textMuted} />
+                                                            <Text style={styles.reshareHeaderText}>Reshared</Text>
+                                                        </View>
+                                                        <View style={styles.reshareContent}>
+                                                            <View style={styles.reshareAuthorRow}>
+                                                                <UserAvatar
+                                                                    uri={getAvatarUrl(originalAuthorId)}
+                                                                    name={getDisplayName(originalAuthorId)}
+                                                                    style={styles.reshareAvatar}
+                                                                />
+                                                                <Text style={styles.reshareAuthorName}>{getDisplayName(originalAuthorId)}</Text>
+                                                                {originalCreatedAt && (
+                                                                    <Text style={styles.reshareTime}>{formatTime(originalCreatedAt)}</Text>
+                                                                )}
+                                                            </View>
+                                                            {!!originalBody && (
+                                                                <Text style={styles.reshareBody}>{originalBody}</Text>
+                                                            )}
+                                                            {originalAttachments.length > 0 && (
+                                                                <View style={styles.reshareAttachments}>
+                                                                    {originalAttachments.map((origAtt: any, origIdx: number) => {
+                                                                        const origUrl = origAtt?.url || origAtt?.uri || origAtt?.value;
+                                                                        const origType = origAtt?.type || (origUrl?.match(/\.(jpg|jpeg|png|gif|webp)/i) ? 'image' : 'file');
+                                                                        if (origType === 'image' && origUrl) {
+                                                                            return (
+                                                                                <Image
+                                                                                    key={`reshare-img-${origIdx}`}
+                                                                                    source={{ uri: origUrl }}
+                                                                                    style={styles.reshareImage}
+                                                                                    resizeMode="cover"
+                                                                                />
+                                                                            );
+                                                                        }
+                                                                        return null;
+                                                                    })}
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                    </View>
+                                                );
+                                            }
                                             return null;
                                         })}
                                     </View>
@@ -1906,6 +1961,63 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         commentSendText: {
             color: '#fff',
             fontWeight: '600',
+        },
+        reshareCard: {
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 12,
+            padding: 12,
+            marginTop: 8,
+            borderLeftWidth: 3,
+            borderLeftColor: colors.primary,
+        },
+        reshareHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 8,
+        },
+        reshareHeaderText: {
+            fontSize: 12,
+            color: colors.textMuted,
+            fontWeight: '500',
+        },
+        reshareContent: {
+            gap: 8,
+        },
+        reshareAuthorRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        reshareAvatar: {
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+        },
+        reshareAuthorName: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        reshareTime: {
+            fontSize: 11,
+            color: colors.textMuted,
+        },
+        reshareBody: {
+            fontSize: 14,
+            color: colors.text,
+            lineHeight: 20,
+        },
+        reshareAttachments: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginTop: 4,
+        },
+        reshareImage: {
+            width: 120,
+            height: 120,
+            borderRadius: 8,
         },
         attachmentStack: {
             gap: 10,
