@@ -877,8 +877,11 @@ const TenantCommunityScreen = () => {
     };
 
     // Sort ascending (oldest first) so newest messages appear at the bottom like WhatsApp
+    // Mark items with _isPost flag so we can determine the correct API endpoint
     const feedItems = useMemo(() => {
-        const merged = [...messages, ...posts];
+        const markedMessages = messages.map(m => ({ ...m, _isPost: false }));
+        const markedPosts = posts.map(p => ({ ...p, _isPost: true }));
+        const merged = [...markedMessages, ...markedPosts];
         return merged.sort((a, b) => {
             const aTime = new Date(a.createdAt || 0).getTime();
             const bTime = new Date(b.createdAt || 0).getTime();
@@ -1352,8 +1355,8 @@ const TenantCommunityScreen = () => {
                                     <Text style={styles.emptyText}>No channel updates yet.</Text>
                                 )}
                                 {feedItems.map((item: any) => {
-                                    // Messages have 'kind' field (text, emoji, sticker, audio), posts don't
-                                    const isPost = !item.kind;
+                                    // Use _isPost flag set during feedItems creation for reliable detection
+                                    const isPost = item._isPost === true;
                                     const likeCount = item.likeCount ?? 0;
                                     const commentCount = item.commentCount ?? 0;
                                     const reshareCount = item.reshareCount ?? 0;
