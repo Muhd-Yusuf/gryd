@@ -200,6 +200,11 @@ const getMemberDisplayUsername = (member?: Member): string => {
     return member.username || member.user?.username || '';
 };
 
+const getMemberDisplayName = (member?: Member): string => {
+    if (!member) return 'Unknown User';
+    return getMemberName(member);
+};
+
 const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', 'Other'];
 
 const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {

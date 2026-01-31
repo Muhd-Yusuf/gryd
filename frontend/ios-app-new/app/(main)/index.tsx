@@ -1115,12 +1115,12 @@ const TenantCommunityScreen = () => {
 
         try {
             const endpoint = isPost
-                ? `/api/community/subgrids/${activeSubgridId}/posts/${itemId}/comments`
-                : `/api/community/subgrids/${activeSubgridId}/messages/${itemId}/comments`;
+                ? `/subgrids/${activeSubgridId}/posts/${itemId}/comments`
+                : `/subgrids/${activeSubgridId}/messages/${itemId}/comments`;
 
-            const res = await api.get(endpoint);
-            console.log('[Comment] Fetched comments:', res.data);
-            setComments(res.data.comments || []);
+            const res = await communityGet(endpoint);
+            console.log('[Comment] Fetched comments:', res);
+            setComments(res.comments || []);
         } catch (err: any) {
             console.error('[Comment] Error fetching comments:', err);
             setError('Failed to load comments');
@@ -1136,14 +1136,14 @@ const TenantCommunityScreen = () => {
         setCommentLoading(true);
         try {
             const endpoint = commentTarget.isPost
-                ? `/api/community/subgrids/${activeSubgridId}/posts/${commentTarget.id}/comments`
-                : `/api/community/subgrids/${activeSubgridId}/messages/${commentTarget.id}/comments`;
+                ? `/subgrids/${activeSubgridId}/posts/${commentTarget.id}/comments`
+                : `/subgrids/${activeSubgridId}/messages/${commentTarget.id}/comments`;
 
-            const res = await api.post(endpoint, { body: commentText.trim() });
-            console.log('[Comment] Created comment:', res.data);
+            const res = await communityPost(endpoint, { body: commentText.trim() });
+            console.log('[Comment] Created comment:', res);
 
             // Add the new comment to the list
-            setComments(prev => [...prev, res.data.comment || res.data]);
+            setComments(prev => [...prev, res.comment || res]);
             setCommentText('');
 
             // Update local state for comment count

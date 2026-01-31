@@ -172,6 +172,12 @@ const SubChannelScreen = () => {
     const [userRole, setUserRole] = useState<string | null>(null);
     const [likeLoading, setLikeLoading] = useState<string | null>(null);
     const [reshareLoading, setReshareLoading] = useState<string | null>(null);
+    const [commentModalOpen, setCommentModalOpen] = useState(false);
+    const [commentTarget, setCommentTarget] = useState<{ id: string; isPost: boolean } | null>(null);
+    const [comments, setComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [commentLoading, setCommentLoading] = useState(false);
+    const [commentsLoading, setCommentsLoading] = useState(false);
     const currentUserId = getUserId();
     const mediaRecorderRef = useRef<any | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -977,6 +983,74 @@ const SubChannelScreen = () => {
         }
     };
 
+    // Comment handler - open modal and fetch comments
+    const handleCommentPress = async (itemId: string, isPost: boolean) => {
+        console.log('[SubChannel Comment] handleCommentPress called:', { itemId, isPost, subgridId });
+        if (!subgridId) {
+            console.log('[SubChannel Comment] Early return: missing subgridId');
+            return;
+        }
+
+        setCommentTarget({ id: itemId, isPost });
+        setCommentModalOpen(true);
+        setCommentsLoading(true);
+        setComments([]);
+
+        try {
+            const endpoint = isPost
+                ? `/subgrids/${subgridId}/posts/${itemId}/comments`
+                : `/subgrids/${subgridId}/messages/${itemId}/comments`;
+
+            const res = await communityGet(endpoint);
+            console.log('[SubChannel Comment] Fetched comments:', res);
+            setComments(res.comments || []);
+        } catch (err: any) {
+            console.error('[SubChannel Comment] Error fetching comments:', err);
+            setError('Failed to load comments');
+        } finally {
+            setCommentsLoading(false);
+        }
+    };
+
+    // Submit a new comment
+    const handleSubmitComment = async () => {
+        if (!commentTarget || !commentText.trim() || !subgridId) return;
+
+        setCommentLoading(true);
+        try {
+            const endpoint = commentTarget.isPost
+                ? `/subgrids/${subgridId}/posts/${commentTarget.id}/comments`
+                : `/subgrids/${subgridId}/messages/${commentTarget.id}/comments`;
+
+            const res = await communityPost(endpoint, { body: commentText.trim() });
+            console.log('[SubChannel Comment] Created comment:', res);
+
+            // Add the new comment to the list
+            setComments(prev => [...prev, res.comment || res]);
+            setCommentText('');
+
+            // Update local state for comment count
+            if (commentTarget.isPost) {
+                setPosts(prev => prev.map(p =>
+                    p._id === commentTarget.id
+                        ? { ...p, commentCount: (p.commentCount || 0) + 1 }
+                        : p
+                ));
+            } else {
+                setMessages(prev => prev.map(m =>
+                    m._id === commentTarget.id
+                        ? { ...m, commentCount: (m.commentCount || 0) + 1 }
+                        : m
+                ));
+            }
+        } catch (err: any) {
+            console.error('[SubChannel Comment] Error creating comment:', err);
+            setError('Failed to post comment');
+        } finally {
+            setCommentLoading(false);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.safe}>
             <View pointerEvents="none" style={styles.gridBackground} />
@@ -1109,10 +1183,13 @@ const SubChannelScreen = () => {
                                 )}
                                 {/* Show reactions for all feed items (posts and messages) */}
                                 <View style={styles.feedReactions}>
-                                    <View style={styles.reactionItem}>
+                                    <TouchableOpacity
+                                        style={styles.reactionItem}
+                                        onPress={() => handleCommentPress(item._id, isPost)}
+                                    >
                                         <MessageCircle size={14} color={colors.textMuted} />
                                         <Text style={styles.reactionText}>{commentsCount}</Text>
-                                    </View>
+                                    </TouchableOpacity>
                                     <TouchableOpacity
                                         style={styles.reactionItem}
                                         onPress={() => handleLikeItem(item._id, userLiked, isPost)}
@@ -1270,6 +1347,74 @@ const SubChannelScreen = () => {
                                 disabled={reportSubmitting}
                             >
                                 <Text style={styles.reportSubmitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Comment Modal */}
+            <Modal visible={commentModalOpen} transparent animationType="slide" onRequestClose={() => setCommentModalOpen(false)}>
+                <View style={styles.commentModalOverlay}>
+                    <TouchableOpacity style={styles.commentBackdrop} activeOpacity={1} onPress={() => setCommentModalOpen(false)} />
+                    <View style={styles.commentModalContent}>
+                        <View style={styles.commentModalHeader}>
+                            <Text style={styles.commentModalTitle}>Comments</Text>
+                            <TouchableOpacity onPress={() => setCommentModalOpen(false)}>
+                                <X size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.commentList} contentContainerStyle={styles.commentListContent}>
+                            {commentsLoading ? (
+                                <View style={styles.commentLoading}>
+                                    <Text style={styles.commentLoadingText}>Loading comments...</Text>
+                                </View>
+                            ) : comments.length === 0 ? (
+                                <View style={styles.commentEmpty}>
+                                    <MessageCircle size={32} color={colors.textMuted} />
+                                    <Text style={styles.commentEmptyText}>No comments yet</Text>
+                                    <Text style={styles.commentEmptySubtext}>Be the first to comment!</Text>
+                                </View>
+                            ) : (
+                                comments.map((comment, idx) => (
+                                    <View key={comment._id || idx} style={styles.commentItem}>
+                                        <UserAvatar
+                                            uri={getAvatarUrl(comment.authorId)}
+                                            name={getDisplayName(comment.authorId)}
+                                            style={styles.commentAvatar}
+                                        />
+                                        <View style={styles.commentBody}>
+                                            <View style={styles.commentAuthorRow}>
+                                                <Text style={styles.commentAuthor}>{getDisplayName(comment.authorId)}</Text>
+                                                <Text style={styles.commentTime}>{formatMessageDate(comment.createdAt)}</Text>
+                                            </View>
+                                            <Text style={styles.commentText}>{comment.body}</Text>
+                                        </View>
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+
+                        <View style={styles.commentInputContainer}>
+                            <TextInput
+                                style={styles.commentInput}
+                                placeholder="Write a comment..."
+                                placeholderTextColor={colors.textMuted}
+                                value={commentText}
+                                onChangeText={setCommentText}
+                                multiline
+                            />
+                            <TouchableOpacity
+                                style={[styles.commentSendBtn, (!commentText.trim() || commentLoading) && styles.commentSendBtnDisabled]}
+                                onPress={handleSubmitComment}
+                                disabled={!commentText.trim() || commentLoading}
+                            >
+                                {commentLoading ? (
+                                    <Text style={styles.commentSendText}>...</Text>
+                                ) : (
+                                    <Send size={18} color="#fff" />
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1632,6 +1777,129 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         reactionTextReshared: {
             color: '#22C55E',
+        },
+        commentModalOverlay: {
+            flex: 1,
+            justifyContent: 'flex-end',
+        },
+        commentBackdrop: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+        },
+        commentModalContent: {
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            maxHeight: '80%',
+            minHeight: 400,
+        },
+        commentModalHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+        },
+        commentModalTitle: {
+            fontSize: 18,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        commentList: {
+            flex: 1,
+        },
+        commentListContent: {
+            padding: 16,
+            gap: 16,
+        },
+        commentLoading: {
+            padding: 40,
+            alignItems: 'center',
+        },
+        commentLoadingText: {
+            color: colors.textMuted,
+            fontSize: 14,
+        },
+        commentEmpty: {
+            padding: 40,
+            alignItems: 'center',
+            gap: 8,
+        },
+        commentEmptyText: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        commentEmptySubtext: {
+            fontSize: 14,
+            color: colors.textMuted,
+        },
+        commentItem: {
+            flexDirection: 'row',
+            gap: 12,
+        },
+        commentAvatar: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+        },
+        commentBody: {
+            flex: 1,
+            gap: 4,
+        },
+        commentAuthorRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        commentAuthor: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        commentTime: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        commentText: {
+            fontSize: 14,
+            color: colors.text,
+            lineHeight: 20,
+        },
+        commentInputContainer: {
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            gap: 12,
+            padding: 16,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
+        commentInput: {
+            flex: 1,
+            backgroundColor: colors.surfaceMuted,
+            borderRadius: 20,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            fontSize: 14,
+            color: colors.text,
+            maxHeight: 100,
+            ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
+        },
+        commentSendBtn: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.primary,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        commentSendBtnDisabled: {
+            opacity: 0.5,
+        },
+        commentSendText: {
+            color: '#fff',
+            fontWeight: '600',
         },
         attachmentStack: {
             gap: 10,
