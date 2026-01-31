@@ -4524,6 +4524,21 @@ const CreditUnionAdminScreen = () => {
                                             <View style={styles.commentBody}>
                                                 <View style={styles.commentAuthorRow}>
                                                     <Text style={styles.commentAuthor}>{getMemberDisplayName(commentMember)}</Text>
+                                                    {isMemberAdmin(commentMember) && (
+                                                        <View style={styles.verifiedBadgeSmall}>
+                                                            <MaterialIcons name="verified" size={12} color="#3B82F6" />
+                                                        </View>
+                                                    )}
+                                                    {getMemberDisplayUsername(commentMember) && (
+                                                        <Text style={styles.commentUsername}>@{getMemberDisplayUsername(commentMember)}</Text>
+                                                    )}
+                                                    {getMemberBadge(commentMember) && (
+                                                        <View style={[styles.commentBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getMemberBadge(commentMember)!] }]}>
+                                                            <Text style={styles.commentBadgeText}>
+                                                                {getMemberBadge(commentMember)}
+                                                            </Text>
+                                                        </View>
+                                                    )}
                                                     <Text style={styles.commentTime}>{formatDate(comment.createdAt)}</Text>
                                                 </View>
                                                 <Text style={styles.commentText}>{comment.body}</Text>
@@ -6125,9 +6140,28 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontWeight: '600',
             color: colors.text,
         },
+        commentUsername: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        commentBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+        },
+        commentBadgeText: {
+            fontSize: 10,
+            fontWeight: '600',
+            color: '#FFFFFF',
+            textTransform: 'capitalize',
+        },
+        verifiedBadgeSmall: {
+            marginLeft: -4,
+        },
         commentTime: {
             fontSize: 12,
             color: colors.textMuted,
+            marginLeft: 'auto',
         },
         commentText: {
             fontSize: 14,

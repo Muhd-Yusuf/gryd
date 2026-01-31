@@ -1448,6 +1448,21 @@ const SubChannelScreen = () => {
                                         <View style={styles.commentBody}>
                                             <View style={styles.commentAuthorRow}>
                                                 <Text style={styles.commentAuthor}>{getDisplayName(comment.authorId)}</Text>
+                                                {isMemberAdmin(comment.authorId) && (
+                                                    <View style={styles.verifiedBadge}>
+                                                        <MaterialIcons name="verified" size={12} color="#3B82F6" />
+                                                    </View>
+                                                )}
+                                                {getMemberDisplayUsername(comment.authorId) && (
+                                                    <Text style={styles.commentUsername}>@{getMemberDisplayUsername(comment.authorId)}</Text>
+                                                )}
+                                                {getStakeholderBadge(comment.authorId) && (
+                                                    <View style={[styles.commentBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getStakeholderBadge(comment.authorId)!] }]}>
+                                                        <Text style={styles.commentBadgeText}>
+                                                            {formatStakeholderBadgeLabel(getStakeholderBadge(comment.authorId)!)}
+                                                        </Text>
+                                                    </View>
+                                                )}
                                                 <Text style={styles.commentTime}>{formatMessageDate(comment.createdAt)}</Text>
                                             </View>
                                             <Text style={styles.commentText}>{comment.body}</Text>
@@ -1922,6 +1937,21 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         commentTime: {
             fontSize: 12,
             color: colors.textMuted,
+            marginLeft: 'auto',
+        },
+        commentUsername: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        commentBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+        },
+        commentBadgeText: {
+            fontSize: 10,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         commentText: {
             fontSize: 14,
