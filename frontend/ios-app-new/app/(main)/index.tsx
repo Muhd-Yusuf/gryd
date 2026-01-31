@@ -427,12 +427,17 @@ const TenantCommunityScreen = () => {
         return { textChannels, voiceChannels };
     }, [filteredChannels]);
 
-    // Create a lookup map for member profiles by userId
+    // Create a lookup map for member profiles by userId and _id
     const memberMap = useMemo(() => {
         const map: Record<string, Member> = {};
-        members.forEach((member) => {
+        members.forEach((member: any) => {
+            // Map by userId (primary key for user lookup)
             if (member.userId) {
                 map[member.userId] = member;
+            }
+            // Also map by _id in case authorId references the membership record
+            if (member._id) {
+                map[member._id] = member;
             }
         });
         return map;
@@ -1120,7 +1125,8 @@ const TenantCommunityScreen = () => {
 
             const res = await communityGet(endpoint);
             console.log('[Comment] Fetched comments:', res);
-            setComments(res.comments || []);
+            // Backend returns { success: true, data: comments } structure
+            setComments(res.data || res.comments || []);
         } catch (err: any) {
             console.error('[Comment] Error fetching comments:', err);
             setError('Failed to load comments');

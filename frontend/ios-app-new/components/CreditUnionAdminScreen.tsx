@@ -1823,13 +1823,25 @@ const CreditUnionAdminScreen = () => {
 
             const res = await communityGet(endpoint);
             console.log('[Comment] Fetched comments:', res);
-            setComments(res.comments || []);
+            // Backend returns { success: true, data: comments } structure
+            setComments(res.data || res.comments || []);
         } catch (err: any) {
             console.error('[Comment] Error fetching comments:', err);
             setError('Failed to load comments');
         } finally {
             setCommentsLoading(false);
         }
+    };
+
+    // Helper to find a member by authorId (checking both userId and _id)
+    const findMemberByAuthorId = (authorId: string) => {
+        if (!authorId) return undefined;
+        return members.find(m =>
+            m.userId === authorId ||
+            m._id === authorId ||
+            String(m.userId) === String(authorId) ||
+            String(m._id) === String(authorId)
+        );
     };
 
     // Submit a new comment
@@ -4500,22 +4512,25 @@ const CreditUnionAdminScreen = () => {
                                     <Text style={styles.commentEmptySubtext}>Be the first to comment!</Text>
                                 </View>
                             ) : (
-                                comments.map((comment, idx) => (
-                                    <View key={comment._id || idx} style={styles.commentItem}>
-                                        <UserAvatar
-                                            uri={getMemberAvatarUrl(members.find(m => m._id === comment.authorId))}
-                                            name={getMemberDisplayName(members.find(m => m._id === comment.authorId))}
-                                            style={styles.commentAvatar}
-                                        />
-                                        <View style={styles.commentBody}>
-                                            <View style={styles.commentAuthorRow}>
-                                                <Text style={styles.commentAuthor}>{getMemberDisplayName(members.find(m => m._id === comment.authorId))}</Text>
-                                                <Text style={styles.commentTime}>{formatDate(comment.createdAt)}</Text>
+                                comments.map((comment, idx) => {
+                                    const commentMember = findMemberByAuthorId(comment.authorId);
+                                    return (
+                                        <View key={comment._id || idx} style={styles.commentItem}>
+                                            <UserAvatar
+                                                uri={getMemberAvatarUrl(commentMember)}
+                                                name={getMemberDisplayName(commentMember)}
+                                                style={styles.commentAvatar}
+                                            />
+                                            <View style={styles.commentBody}>
+                                                <View style={styles.commentAuthorRow}>
+                                                    <Text style={styles.commentAuthor}>{getMemberDisplayName(commentMember)}</Text>
+                                                    <Text style={styles.commentTime}>{formatDate(comment.createdAt)}</Text>
+                                                </View>
+                                                <Text style={styles.commentText}>{comment.body}</Text>
                                             </View>
-                                            <Text style={styles.commentText}>{comment.body}</Text>
                                         </View>
-                                    </View>
-                                ))
+                                    );
+                                })
                             )}
                         </ScrollView>
 
