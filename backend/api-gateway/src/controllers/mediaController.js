@@ -785,6 +785,9 @@ const joinVoiceChannel = async (req, res) => {
             const SubgridMembership = require('../models/SubgridMembership');
             const membership = await SubgridMembership.findOne({ subgridId, userId });
             isAdmin = membership?.role === 'subgrid_admin' || membership?.role === 'moderator';
+            console.log(`[VoiceChannel] User ${userId} membership check: subgridId=${subgridId}, role=${membership?.role}, isAdmin=${isAdmin}`);
+        } else {
+            console.log(`[VoiceChannel] No subgridId provided for user ${userId}, cannot determine admin status`);
         }
 
         // Determine role: host, speaker (admin), or listener
@@ -794,7 +797,24 @@ const joinVoiceChannel = async (req, res) => {
         // 3. If host exists and user is admin -> become speaker
         // 4. Otherwise -> listener
         let role = 'listener';
-        const hasHost = channelState.hostId !== null;
+
+        // Check if host actually exists in participants (may have left without cleanup)
+        let hostStillInChannel = false;
+        if (channelState.hostId) {
+            for (const [, participant] of channelMap.entries()) {
+                if (participant.userId === channelState.hostId) {
+                    hostStillInChannel = true;
+                    break;
+                }
+            }
+            // If host left but wasn't cleaned up, reset hostId
+            if (!hostStillInChannel) {
+                console.log(`[VoiceChannel] Previous host ${channelState.hostId} no longer in channel, resetting`);
+                channelState.hostId = null;
+            }
+        }
+
+        const hasHost = channelState.hostId !== null && hostStillInChannel;
 
         if (!hasHost && isAdmin) {
             // Admin joins when no host - they become host
