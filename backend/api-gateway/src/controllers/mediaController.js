@@ -787,15 +787,32 @@ const joinVoiceChannel = async (req, res) => {
             isAdmin = membership?.role === 'subgrid_admin' || membership?.role === 'moderator';
         }
 
-        // Determine role: host (first), speaker (admin), or listener
+        // Determine role: host, speaker (admin), or listener
+        // Priority:
+        // 1. If no host exists and user is admin -> become host
+        // 2. If no host exists and first participant -> become host
+        // 3. If host exists and user is admin -> become speaker
+        // 4. Otherwise -> listener
         let role = 'listener';
-        if (isFirstParticipant) {
+        const hasHost = channelState.hostId !== null;
+
+        if (!hasHost && isAdmin) {
+            // Admin joins when no host - they become host
             role = 'host';
             channelState.hostId = userId;
             channelState.speakers.add(userId);
+            console.log(`[VoiceChannel] Admin ${userId} became host (no existing host)`);
+        } else if (!hasHost && isFirstParticipant) {
+            // First non-admin participant becomes host if no host
+            role = 'host';
+            channelState.hostId = userId;
+            channelState.speakers.add(userId);
+            console.log(`[VoiceChannel] First participant ${userId} became host`);
         } else if (isAdmin) {
+            // Admin joins when host exists - they become speaker
             role = 'speaker';
             channelState.speakers.add(userId);
+            console.log(`[VoiceChannel] Admin ${userId} became speaker (host exists: ${channelState.hostId})`);
         }
 
         // Add participant with extended data
