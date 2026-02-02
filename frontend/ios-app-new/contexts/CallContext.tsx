@@ -52,6 +52,11 @@ export const useCallContext = () => {
     return context;
 };
 
+// Safe version that returns null instead of throwing - use for optional call features
+export const useCallContextSafe = () => {
+    return useContext(CallContext);
+};
+
 interface CallProviderProps {
     children: React.ReactNode;
 }

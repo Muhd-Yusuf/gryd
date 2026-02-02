@@ -1,218 +1,217 @@
 /**
- * Incoming Call Overlay
- * Shows a full-screen overlay when there's an incoming call
+ * Global Incoming Call Overlay
+ * Shows incoming call notification regardless of which screen the user is on
  */
 
-import React, { useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-    StyleSheet,
     View,
     Text,
+    StyleSheet,
     TouchableOpacity,
+    Animated,
     Modal,
-    Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useCallContextSafe } from '../contexts/CallContext';
 import { useTheme } from '../lib/theme';
-import { useCallContext } from '../contexts/CallContext';
 import UserAvatar from './UserAvatar';
 
-export const IncomingCallOverlay: React.FC = () => {
+const IncomingCallOverlay: React.FC = () => {
+    const callContext = useCallContextSafe();
     const { colors } = useTheme();
-    const { incomingCall, answerCall, declineCall } = useCallContext();
-    const styles = useMemo(() => createStyles(colors), [colors]);
+    const pulseAnim = useRef(new Animated.Value(1)).current;
 
-    // Refs to store audio resources for cleanup
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const oscillatorRef = useRef<OscillatorNode | null>(null);
-    const ringIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    // Extract values safely
+    const incomingCall = callContext?.incomingCall || null;
+    const answerCall = callContext?.answerCall || (() => {});
+    const declineCall = callContext?.declineCall || (() => {});
 
-    // Function to stop ringtone
-    const stopRingtone = useCallback(() => {
-        if (ringIntervalRef.current) {
-            clearInterval(ringIntervalRef.current);
-            ringIntervalRef.current = null;
-        }
-        if (oscillatorRef.current) {
-            try {
-                oscillatorRef.current.stop();
-            } catch (e) {
-                // Already stopped
-            }
-            oscillatorRef.current = null;
-        }
-        if (audioContextRef.current) {
-            try {
-                audioContextRef.current.close();
-            } catch (e) {
-                // Already closed
-            }
-            audioContextRef.current = null;
-        }
-    }, []);
-
-    // Wrap answerCall to stop ringtone first
-    const handleAnswer = useCallback(() => {
-        stopRingtone();
-        answerCall();
-    }, [stopRingtone, answerCall]);
-
-    // Wrap declineCall to stop ringtone first
-    const handleDecline = useCallback(() => {
-        stopRingtone();
-        declineCall();
-    }, [stopRingtone, declineCall]);
-
-    // Play ringtone effect (web only)
+    // Pulse animation for the call icon
     useEffect(() => {
-        if (!incomingCall) {
-            // Clean up if incomingCall becomes null
-            stopRingtone();
-            return;
+        if (incomingCall) {
+            const animation = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, {
+                        toValue: 1.2,
+                        duration: 500,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(pulseAnim, {
+                        toValue: 1,
+                        duration: 500,
+                        useNativeDriver: true,
+                    }),
+                ])
+            );
+            animation.start();
+            return () => animation.stop();
         }
+    }, [incomingCall, pulseAnim]);
 
-        // On web, play a ringtone
-        if (Platform.OS === 'web') {
-            try {
-                // Create a simple beep sound using Web Audio API
-                const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-
-                oscillator.frequency.value = 440;
-                gainNode.gain.value = 0.1;
-
-                oscillator.start();
-
-                // Store refs for cleanup
-                audioContextRef.current = audioContext;
-                oscillatorRef.current = oscillator;
-
-                // Ring pattern: beep for 1s, silence for 2s
-                ringIntervalRef.current = setInterval(() => {
-                    oscillator.frequency.value = oscillator.frequency.value === 440 ? 0 : 440;
-                }, 1000);
-
-                return () => {
-                    stopRingtone();
-                };
-            } catch (e) {
-                // Could not play ringtone
-            }
-        }
-    }, [incomingCall, stopRingtone]);
-
-    if (!incomingCall) {
+    // Don't render if no incoming call or context not available
+    if (!callContext || !incomingCall) {
         return null;
     }
 
     return (
-        <Modal visible={true} animationType="slide" transparent={false} statusBarTranslucent>
+        <Modal
+            visible={true}
+            transparent
+            animationType="slide"
+            statusBarTranslucent
+        >
             <View style={styles.container}>
-                <View style={styles.content}>
-                    <Text style={styles.label}>
-                        Incoming {incomingCall.callType === 'video' ? 'Video' : 'Voice'} Call
-                    </Text>
-                    <UserAvatar
-                        uri={incomingCall.callerAvatar}
-                        name={incomingCall.callerName}
-                        style={styles.avatar}
-                    />
-                    <Text style={styles.name}>{incomingCall.callerName}</Text>
-                </View>
-                <View style={styles.actions}>
-                    <TouchableOpacity style={styles.declineButton} onPress={handleDecline}>
-                        <View style={styles.declineButtonCircle}>
-                            <MaterialIcons name="call-end" size={32} color="#FFFFFF" />
-                        </View>
-                        <Text style={styles.buttonText}>Decline</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.answerButton} onPress={handleAnswer}>
-                        <View style={styles.answerButtonCircle}>
+                <View style={styles.backdrop} />
+                <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                    <View style={styles.header}>
+                        <Text style={[styles.callLabel, { color: colors.textMuted }]}>
+                            Incoming {incomingCall.callType === 'video' ? 'Video' : 'Voice'} Call
+                        </Text>
+                    </View>
+
+                    <View style={styles.callerInfo}>
+                        <UserAvatar
+                            uri={incomingCall.callerAvatar}
+                            name={incomingCall.callerName}
+                            style={styles.avatar}
+                        />
+                        <Text style={[styles.callerName, { color: colors.text }]}>
+                            {incomingCall.callerName}
+                        </Text>
+                        <Animated.View
+                            style={[
+                                styles.pulseIcon,
+                                { transform: [{ scale: pulseAnim }] },
+                            ]}
+                        >
                             <MaterialIcons
-                                name={incomingCall.callType === 'video' ? 'videocam' : 'call'}
-                                size={32}
-                                color="#FFFFFF"
+                                name={incomingCall.callType === 'video' ? 'videocam' : 'phone'}
+                                size={24}
+                                color="#22C55E"
                             />
+                        </Animated.View>
+                    </View>
+
+                    <View style={styles.actions}>
+                        <View style={styles.actionWrap}>
+                            <TouchableOpacity
+                                style={styles.declineBtn}
+                                onPress={declineCall}
+                            >
+                                <MaterialIcons name="call-end" size={28} color="#FFFFFF" />
+                            </TouchableOpacity>
+                            <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
+                                Decline
+                            </Text>
                         </View>
-                        <Text style={styles.buttonText}>Answer</Text>
-                    </TouchableOpacity>
+
+                        <View style={styles.actionWrap}>
+                            <TouchableOpacity
+                                style={styles.answerBtn}
+                                onPress={answerCall}
+                            >
+                                <MaterialIcons
+                                    name={incomingCall.callType === 'video' ? 'videocam' : 'call'}
+                                    size={28}
+                                    color="#FFFFFF"
+                                />
+                            </TouchableOpacity>
+                            <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
+                                Answer
+                            </Text>
+                        </View>
+                    </View>
                 </View>
             </View>
         </Modal>
     );
 };
 
-const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>['colors']) =>
-    StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: colors.appBg,
-            justifyContent: 'space-between',
-            paddingVertical: 80,
-            paddingHorizontal: 40,
-        },
-        content: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 24,
-        },
-        label: {
-            fontSize: 18,
-            color: colors.textMuted,
-            marginBottom: 20,
-        },
-        avatar: {
-            width: 160,
-            height: 160,
-            borderRadius: 80,
-            borderWidth: 4,
-            borderColor: colors.primary,
-        },
-        name: {
-            fontSize: 28,
-            fontWeight: '700',
-            color: colors.text,
-            marginTop: 16,
-        },
-        actions: {
-            flexDirection: 'row',
-            justifyContent: 'center',
-            gap: 60,
-        },
-        declineButton: {
-            alignItems: 'center',
-            gap: 8,
-        },
-        declineButtonCircle: {
-            width: 72,
-            height: 72,
-            borderRadius: 36,
-            backgroundColor: '#FF3B30',
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        answerButton: {
-            alignItems: 'center',
-            gap: 8,
-        },
-        answerButtonCircle: {
-            width: 72,
-            height: 72,
-            borderRadius: 36,
-            backgroundColor: '#34C759',
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        buttonText: {
-            fontSize: 14,
-            color: colors.textMuted,
-            marginTop: 4,
-        },
-    });
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    backdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    },
+    card: {
+        width: '90%',
+        maxWidth: 400,
+        borderRadius: 24,
+        padding: 32,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 20,
+    },
+    header: {
+        marginBottom: 24,
+    },
+    callLabel: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    callerInfo: {
+        alignItems: 'center',
+        marginBottom: 32,
+    },
+    avatar: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        marginBottom: 16,
+        borderWidth: 3,
+        borderColor: '#22C55E',
+    },
+    callerName: {
+        fontSize: 24,
+        fontWeight: '700',
+        marginBottom: 12,
+    },
+    pulseIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(34, 197, 94, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    actions: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 48,
+    },
+    actionWrap: {
+        alignItems: 'center',
+    },
+    declineBtn: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#EF4444',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    answerBtn: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#22C55E',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    actionLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+});
 
 export default IncomingCallOverlay;

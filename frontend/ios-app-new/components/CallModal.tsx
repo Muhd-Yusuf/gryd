@@ -4,6 +4,9 @@
  * Note: This file is for native platforms. Web uses CallModal.web.tsx
  */
 
+// Debug log to track which file is being loaded
+console.log('[CallModal] Loading NATIVE implementation (CallModal.tsx)');
+
 import React, { useEffect, useMemo } from 'react';
 import {
     StyleSheet,
@@ -14,10 +17,16 @@ import {
     Dimensions,
     Platform,
 } from 'react-native';
+
+// Log warning if native file is loaded on web
+if (Platform.OS === 'web') {
+    console.warn('[CallModal] WARNING: Web platform is loading native CallModal! This will crash due to react-native-agora import.');
+}
+
 import { MaterialIcons } from '@expo/vector-icons';
 import { RtcSurfaceView, VideoSourceType } from 'react-native-agora';
 import { useTheme } from '../lib/theme';
-import { CallState, CallType, IncomingCall, CallSession } from '../hooks/useAgoraCall';
+import { CallState, CallType, IncomingCall, CallSession } from '../hooks';
 import UserAvatar from './UserAvatar';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');

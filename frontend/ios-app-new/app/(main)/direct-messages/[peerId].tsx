@@ -34,11 +34,12 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import { useTheme } from '../../../lib/theme';
 import { Attachment, EMOJI_SET, STICKER_SET, formatDuration, twemojiUrl } from '../../../lib/chatMedia';
-import { useAgoraCall } from '../../../hooks/useAgoraCall';
+import { useAgoraCall } from '../../../hooks';
 import { useCallContext } from '../../../contexts/CallContext';
-import CallModal from '../../../components/CallModal';
+import { CallModalDefault as CallModal } from '../../../components';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
+import { MessageBubble, MessageComposer } from '../../../components/messaging';
 
 type Subgrid = {
     _id: string;
@@ -983,7 +984,6 @@ const DirectMessageChatScreen = () => {
                         </View>
 
                         {!!error && <Text style={styles.errorText}>{error}</Text>}
-                        {loading && <Text style={styles.loadingText}>Loading messages...</Text>}
 
                         {messageGroups.map((group, groupIndex) => (
                             <View key={`group-${groupIndex}`}>

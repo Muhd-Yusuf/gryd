@@ -5,6 +5,9 @@ import { View, ActivityIndicator, useColorScheme } from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemeProvider, useTheme } from '../lib/theme';
 import { initAuth } from '../lib/api';
+import { WebSocketProvider } from '../contexts/WebSocketContext';
+import { CallProvider } from '../contexts/CallContext';
+import IncomingCallOverlay from '../components/IncomingCallOverlay';
 
 const RootStack = () => {
     const { colors, mode } = useTheme();
@@ -67,7 +70,12 @@ export default function RootLayout() {
 
     return (
         <ThemeProvider>
-            <RootStack />
+            <WebSocketProvider>
+                <CallProvider>
+                    <RootStack />
+                    <IncomingCallOverlay />
+                </CallProvider>
+            </WebSocketProvider>
         </ThemeProvider>
     );
 }

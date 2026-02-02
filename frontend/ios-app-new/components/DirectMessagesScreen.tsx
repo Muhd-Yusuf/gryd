@@ -33,10 +33,12 @@ import {
 import { Audio } from 'expo-av';
 import { Attachment, twemojiUrl } from '../lib/chatMedia';
 import UserAvatar from './UserAvatar';
-import { useAgoraCall } from '../hooks/useAgoraCall';
+import { useAgoraCall } from '../hooks';
 import { useCallContext } from '../contexts/CallContext';
+// Import CallModal directly - Metro will resolve to .web.tsx on web platform
 import CallModal from './CallModal';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
+import { MessageBubble, MessageComposer } from './messaging';
 
 // Incoming call notification type
 type IncomingCallNotification = {

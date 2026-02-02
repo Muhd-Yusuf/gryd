@@ -7,10 +7,19 @@
  * For full native call support:
  * - Use a development build (expo prebuild && expo run:ios/android)
  * - Or use EAS Build to create a custom development client
+ *
+ * NOTE: On web platform, useAgoraCall.web.ts should be loaded instead.
+ * If you see this console log on web, the bundler is not resolving correctly.
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
+
+// Debug log to track which file is being loaded
+console.log('[useAgoraCall] Loading NATIVE STUB file (useAgoraCall.ts) - Platform:', Platform.OS);
+if (Platform.OS === 'web') {
+    console.warn('[useAgoraCall] WARNING: Web platform is loading native stub! This should not happen. Check metro.config.js');
+}
 import {
     initiateDMCall,
     answerCall,

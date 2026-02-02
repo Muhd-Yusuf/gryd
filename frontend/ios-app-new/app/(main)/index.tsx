@@ -39,6 +39,7 @@ import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
+import { useWebSocketContext } from '../../contexts/WebSocketContext';
 
 type Channel = {
     _id: string;
@@ -191,6 +192,7 @@ const TenantCommunityScreen = () => {
     const showRightPanel = !isCompact;
     const userId = getUserId();
     const hasLoadedOnce = useRef(false);
+    const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
     const [initialLoading, setInitialLoading] = useState(true);
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
@@ -386,6 +388,48 @@ const TenantCommunityScreen = () => {
         loadMessages();
     }, [activeSubgridId, activeChannelId]);
 
+    // WebSocket: Join channel room and subscribe to new messages
+    useEffect(() => {
+        if (!activeChannelId || !isConnected) return;
+
+        // Join the channel room
+        joinRoom('channel', activeChannelId);
+
+        // Subscribe to new messages
+        const unsubscribeNewMessage = subscribe('new_message', (data) => {
+            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+                setMessages((prev) => {
+                    // Avoid duplicates
+                    if (prev.some(m => m._id === data.message._id)) return prev;
+                    return [...prev, data.message];
+                });
+            }
+        });
+
+        // Subscribe to message updates
+        const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
+            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+                setMessages((prev) => prev.map(m =>
+                    m._id === data.message._id ? data.message : m
+                ));
+            }
+        });
+
+        // Subscribe to message deletions
+        const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
+            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+                setMessages((prev) => prev.filter(m => m._id !== data.messageId));
+            }
+        });
+
+        return () => {
+            leaveRoom('channel', activeChannelId);
+            unsubscribeNewMessage();
+            unsubscribeMessageUpdated();
+            unsubscribeMessageDeleted();
+        };
+    }, [activeChannelId, isConnected, subscribe, joinRoom, leaveRoom]);
+
     useEffect(() => {
         const peers = friends.filter((friendId) => friendId && friendId !== userId);
         setDirectMessagePeers(peers);
@@ -415,6 +459,127 @@ const TenantCommunityScreen = () => {
 
         loadDmMessages();
     }, [activeSubgridId, activeDmId]);
+
+    // WebSocket: Subscribe to DM messages
+    useEffect(() => {
+        if (!activeDmId || !userId || !isConnected) return;
+
+        // Create DM room ID (consistent ordering)
+        const sortedIds = [userId, activeDmId].sort();
+        const dmRoomId = `${sortedIds[0]}_${sortedIds[1]}`;
+
+        // Join the DM room
+        joinRoom('dm', dmRoomId);
+
+        // Subscribe to new DM messages
+        const unsubscribeNewMessage = subscribe('new_message', (data) => {
+            if (data.roomType === 'dm' && data.roomId === dmRoomId) {
+                setDmMessages((prev) => {
+                    // Avoid duplicates
+                    if (prev.some(m => m._id === data.message._id)) return prev;
+                    return [...prev, data.message];
+                });
+            }
+        });
+
+        // Subscribe to DM message updates
+        const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
+            if (data.roomType === 'dm' && data.roomId === dmRoomId) {
+                setDmMessages((prev) => prev.map(m =>
+                    m._id === data.message._id ? data.message : m
+                ));
+            }
+        });
+
+        // Subscribe to DM message deletions
+        const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
+            if (data.roomType === 'dm' && data.roomId === dmRoomId) {
+                setDmMessages((prev) => prev.filter(m => m._id !== data.messageId));
+            }
+        });
+
+        return () => {
+            leaveRoom('dm', dmRoomId);
+            unsubscribeNewMessage();
+            unsubscribeMessageUpdated();
+            unsubscribeMessageDeleted();
+        };
+    }, [activeDmId, userId, isConnected, subscribe, joinRoom, leaveRoom]);
+
+    // WebSocket: Join subgrid room for channel/post/member updates
+    useEffect(() => {
+        if (!activeSubgridId || !isConnected) return;
+
+        // Join the subgrid room
+        joinRoom('subgrid', activeSubgridId);
+
+        // Subscribe to channel events
+        const unsubscribeChannelCreated = subscribe('channel_created', (data) => {
+            if (data.subgridId === activeSubgridId) {
+                setChannels((prev) => [...prev, data.channel]);
+            }
+        });
+
+        const unsubscribeChannelUpdated = subscribe('channel_updated', (data) => {
+            if (data.subgridId === activeSubgridId) {
+                setChannels((prev) => prev.map(c =>
+                    c._id === data.channel._id ? data.channel : c
+                ));
+            }
+        });
+
+        const unsubscribeChannelDeleted = subscribe('channel_deleted', (data) => {
+            if (data.subgridId === activeSubgridId) {
+                setChannels((prev) => prev.filter(c => c._id !== data.channelId));
+            }
+        });
+
+        // Subscribe to post events
+        const unsubscribePostCreated = subscribe('post_created', (data) => {
+            if (data.subgridId === activeSubgridId) {
+                setPosts((prev) => [data.post, ...prev]);
+            }
+        });
+
+        const unsubscribePostUpdated = subscribe('post_updated', (data) => {
+            if (data.subgridId === activeSubgridId) {
+                setPosts((prev) => prev.map(p =>
+                    p._id === data.post._id ? data.post : p
+                ));
+            }
+        });
+
+        const unsubscribePostDeleted = subscribe('post_deleted', (data) => {
+            if (data.subgridId === activeSubgridId) {
+                setPosts((prev) => prev.filter(p => p._id !== data.postId));
+            }
+        });
+
+        // Subscribe to member events
+        const unsubscribeMemberJoined = subscribe('member_joined', (data) => {
+            if (data.subgridId === activeSubgridId) {
+                setMembers((prev) => [...prev, data.member]);
+            }
+        });
+
+        const unsubscribeMemberLeft = subscribe('member_left', (data) => {
+            if (data.subgridId === activeSubgridId) {
+                setMembers((prev) => prev.filter(m => m.userId !== data.userId));
+            }
+        });
+
+        return () => {
+            leaveRoom('subgrid', activeSubgridId);
+            unsubscribeChannelCreated();
+            unsubscribeChannelUpdated();
+            unsubscribeChannelDeleted();
+            unsubscribePostCreated();
+            unsubscribePostUpdated();
+            unsubscribePostDeleted();
+            unsubscribeMemberJoined();
+            unsubscribeMemberLeft();
+        };
+    }, [activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom]);
 
     const activeSubgrid = useMemo(
         () => subgrids.find((item) => item._id === activeSubgridId) || null,
@@ -1885,7 +2050,10 @@ const TenantCommunityScreen = () => {
                                         <TouchableOpacity
                                             key={peerId}
                                             style={[styles.dmRow, isActive && styles.dmRowActive]}
-                                            onPress={() => setActiveDmId(peerId)}
+                                            onPress={() => router.push({
+                                                pathname: '/(main)/direct-messages',
+                                                params: { subgridId: activeSubgridId },
+                                            })}
                                         >
                                             <UserAvatar
                                                 uri={getAvatarUrl(peerId)}
@@ -2142,6 +2310,7 @@ const TenantCommunityScreen = () => {
                     </View>
                 </TouchableOpacity>
             </Modal>
+
         </SafeAreaView>
     );
 };

@@ -26,6 +26,7 @@ import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
+import { useWebSocketContext } from '../../contexts/WebSocketContext';
 
 type Channel = {
     _id: string;
@@ -161,6 +162,7 @@ const SubChannelScreen = () => {
     const initialChannelId = normalizeParam(params.channelId);
     const initialChannelName = normalizeParam(params.channelName);
     const initialShowEvents = normalizeParam(params.showEvents) === 'true';
+    const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [channels, setChannels] = useState<Channel[]>([]);
@@ -322,6 +324,108 @@ const SubChannelScreen = () => {
 
         loadFeed();
     }, [subgridId, channelId]);
+
+    // WebSocket: Join channel room and subscribe to new messages
+    useEffect(() => {
+        if (!channelId || !isConnected) return;
+
+        // Join the channel room
+        joinRoom('channel', channelId);
+
+        // Subscribe to new messages
+        const unsubscribeNewMessage = subscribe('new_message', (data) => {
+            if (data.roomType === 'channel' && data.roomId === channelId) {
+                setMessages((prev) => {
+                    // Avoid duplicates
+                    if (prev.some(m => m._id === data.message._id)) return prev;
+                    return [...prev, data.message];
+                });
+            }
+        });
+
+        // Subscribe to message updates
+        const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
+            if (data.roomType === 'channel' && data.roomId === channelId) {
+                setMessages((prev) => prev.map(m =>
+                    m._id === data.message._id ? data.message : m
+                ));
+            }
+        });
+
+        // Subscribe to message deletions
+        const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
+            if (data.roomType === 'channel' && data.roomId === channelId) {
+                setMessages((prev) => prev.filter(m => m._id !== data.messageId));
+            }
+        });
+
+        return () => {
+            leaveRoom('channel', channelId);
+            unsubscribeNewMessage();
+            unsubscribeMessageUpdated();
+            unsubscribeMessageDeleted();
+        };
+    }, [channelId, isConnected, subscribe, joinRoom, leaveRoom]);
+
+    // WebSocket: Join subgrid room for post updates
+    useEffect(() => {
+        if (!subgridId || !isConnected) return;
+
+        // Join the subgrid room
+        joinRoom('subgrid', subgridId);
+
+        // Subscribe to post events
+        const unsubscribePostCreated = subscribe('post_created', (data) => {
+            if (data.subgridId === subgridId) {
+                setPosts((prev) => [data.post, ...prev]);
+            }
+        });
+
+        const unsubscribePostUpdated = subscribe('post_updated', (data) => {
+            if (data.subgridId === subgridId) {
+                setPosts((prev) => prev.map(p =>
+                    p._id === data.post._id ? data.post : p
+                ));
+            }
+        });
+
+        const unsubscribePostDeleted = subscribe('post_deleted', (data) => {
+            if (data.subgridId === subgridId) {
+                setPosts((prev) => prev.filter(p => p._id !== data.postId));
+            }
+        });
+
+        // Subscribe to channel events
+        const unsubscribeChannelCreated = subscribe('channel_created', (data) => {
+            if (data.subgridId === subgridId) {
+                setChannels((prev) => [...prev, data.channel]);
+            }
+        });
+
+        const unsubscribeChannelUpdated = subscribe('channel_updated', (data) => {
+            if (data.subgridId === subgridId) {
+                setChannels((prev) => prev.map(c =>
+                    c._id === data.channel._id ? data.channel : c
+                ));
+            }
+        });
+
+        const unsubscribeChannelDeleted = subscribe('channel_deleted', (data) => {
+            if (data.subgridId === subgridId) {
+                setChannels((prev) => prev.filter(c => c._id !== data.channelId));
+            }
+        });
+
+        return () => {
+            leaveRoom('subgrid', subgridId);
+            unsubscribePostCreated();
+            unsubscribePostUpdated();
+            unsubscribePostDeleted();
+            unsubscribeChannelCreated();
+            unsubscribeChannelUpdated();
+            unsubscribeChannelDeleted();
+        };
+    }, [subgridId, isConnected, subscribe, joinRoom, leaveRoom]);
 
     // Fetch user role in subgrid
     useEffect(() => {

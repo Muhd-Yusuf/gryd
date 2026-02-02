@@ -24,10 +24,9 @@ const slugify = (value) => {
 const buildDbName = (id) => `tenant_${id.toString().slice(0, 8)}`;
 
 const bootstrapEnabled = () => {
-    if (process.env.ALLOW_BOOTSTRAP === 'true') {
-        return true;
-    }
-    return process.env.NODE_ENV !== 'production';
+    // Bootstrap is DISABLED by default - must explicitly enable with ALLOW_BOOTSTRAP=true
+    // This prevents auto-creation of "Syphor Demo Community" tenants
+    return process.env.ALLOW_BOOTSTRAP === 'true';
 };
 
 exports.bootstrap = async (req, res) => {
