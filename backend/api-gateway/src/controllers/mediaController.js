@@ -740,8 +740,12 @@ const subscribeToCallEvents = async (req, res) => {
 };
 
 // In-memory voice channel participant tracking
-// Format: { channelId: Map<agoraUid, { userId, agoraUid, joinedAt }> }
+// Format: { channelId: Map<agoraUid, { userId, agoraUid, joinedAt, role, isMuted, isHandRaised }> }
 const voiceChannelParticipants = new Map();
+
+// Voice channel state tracking (host, speakers list, wave requests)
+// Format: { channelId: { hostId, speakers: Set<userId>, waveRequests: Map<userId, timestamp> } }
+const voiceChannelState = new Map();
 
 /**
  * Join a voice channel (track participant)
@@ -761,13 +765,48 @@ const joinVoiceChannel = async (req, res) => {
             voiceChannelParticipants.set(channelId, new Map());
         }
 
-        // Add participant
+        // Initialize channel state if not exists
+        if (!voiceChannelState.has(channelId)) {
+            voiceChannelState.set(channelId, {
+                hostId: null,
+                speakers: new Set(),
+                waveRequests: new Map(),
+            });
+        }
+
+        // First participant becomes host/speaker, others are listeners
+        const channelState = voiceChannelState.get(channelId);
         const channelMap = voiceChannelParticipants.get(channelId);
+        const isFirstParticipant = channelMap.size === 0;
+
+        // Check if user is a subgrid admin (they auto-become speakers)
+        let isAdmin = false;
+        if (subgridId) {
+            const SubgridMembership = require('../models/SubgridMembership');
+            const membership = await SubgridMembership.findOne({ subgridId, userId });
+            isAdmin = membership?.role === 'subgrid_admin' || membership?.role === 'moderator';
+        }
+
+        // Determine role: host (first), speaker (admin), or listener
+        let role = 'listener';
+        if (isFirstParticipant) {
+            role = 'host';
+            channelState.hostId = userId;
+            channelState.speakers.add(userId);
+        } else if (isAdmin) {
+            role = 'speaker';
+            channelState.speakers.add(userId);
+        }
+
+        // Add participant with extended data
         channelMap.set(agoraUid, {
             userId,
             agoraUid,
             subgridId: subgridId || null,
             joinedAt: new Date(),
+            role,
+            isMuted: role === 'listener', // Listeners start muted
+            isHandRaised: false,
         });
 
         console.log(`[VoiceChannel] User ${userId} joined channel ${channelId} with agoraUid ${agoraUid}`);
@@ -796,6 +835,8 @@ const leaveVoiceChannel = async (req, res) => {
         }
 
         const channelMap = voiceChannelParticipants.get(channelId);
+        const channelState = voiceChannelState.get(channelId);
+
         if (channelMap) {
             // Remove by agoraUid if provided, otherwise by userId
             if (agoraUid) {
@@ -810,9 +851,26 @@ const leaveVoiceChannel = async (req, res) => {
                 }
             }
 
+            // Clean up channel state
+            if (channelState) {
+                channelState.speakers.delete(userId);
+                channelState.waveRequests.delete(userId);
+
+                // If host leaves, assign new host to first speaker or first participant
+                if (channelState.hostId === userId && channelMap.size > 0) {
+                    const firstParticipant = channelMap.values().next().value;
+                    if (firstParticipant) {
+                        channelState.hostId = firstParticipant.userId;
+                        channelState.speakers.add(firstParticipant.userId);
+                        firstParticipant.role = 'host';
+                    }
+                }
+            }
+
             // Clean up empty channels
             if (channelMap.size === 0) {
                 voiceChannelParticipants.delete(channelId);
+                voiceChannelState.delete(channelId);
             }
         }
 
@@ -866,17 +924,27 @@ const getVoiceChannelParticipants = async (req, res) => {
             });
         }
 
+        // Get channel state for speaker/listener info
+        const channelState = voiceChannelState.get(channelId);
+
         // Build response with user details
         const participants = participantArray.map(p => {
             const user = userMap.get(p.userId);
             const membership = membershipMap.get(p.userId);
             const badge = membership?.stakeholderBadge || user?.stakeholderBadge || null;
             const memberRole = membership?.role || user?.role || 'member';
+            const isSpeaker = channelState?.speakers?.has(p.userId) || false;
+            const isHost = channelState?.hostId === p.userId;
+            const hasHandRaised = channelState?.waveRequests?.has(p.userId) || false;
 
             return {
                 agoraUid: p.agoraUid,
                 userId: p.userId,
                 joinedAt: p.joinedAt,
+                // Voice channel role (host, speaker, listener)
+                voiceRole: isHost ? 'host' : (isSpeaker ? 'speaker' : 'listener'),
+                isMuted: p.isMuted || false,
+                isHandRaised: hasHandRaised,
                 userDetails: user ? {
                     firstName: user.firstName,
                     lastName: user.lastName,
@@ -891,12 +959,289 @@ const getVoiceChannelParticipants = async (req, res) => {
             };
         });
 
+        // Get wave requests with user details
+        const waveRequests = [];
+        if (channelState?.waveRequests) {
+            for (const [waveUserId, timestamp] of channelState.waveRequests.entries()) {
+                const user = userMap.get(waveUserId);
+                if (user) {
+                    waveRequests.push({
+                        userId: waveUserId,
+                        timestamp,
+                        displayName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
+                        avatarUrl: user.avatarUrl,
+                    });
+                }
+            }
+        }
+
         res.json({
             success: true,
-            data: { participants },
+            data: {
+                participants,
+                hostId: channelState?.hostId || null,
+                speakerIds: channelState?.speakers ? Array.from(channelState.speakers) : [],
+                waveRequests,
+            },
         });
     } catch (error) {
         console.error('Get voice channel participants error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Wave to speak (raise hand) in voice channel
+ * POST /api/media/calls/voice-channel/wave
+ */
+const waveToSpeak = async (req, res) => {
+    try {
+        const { channelId } = req.body;
+        const userId = req.user._id.toString();
+
+        if (!channelId) {
+            return res.status(400).json({ success: false, error: 'channelId is required' });
+        }
+
+        const channelState = voiceChannelState.get(channelId);
+        if (!channelState) {
+            return res.status(404).json({ success: false, error: 'Voice channel not found' });
+        }
+
+        // If already a speaker, no need to wave
+        if (channelState.speakers.has(userId)) {
+            return res.json({
+                success: true,
+                data: { message: 'You are already a speaker', alreadySpeaker: true },
+            });
+        }
+
+        // Add wave request with timestamp
+        channelState.waveRequests.set(userId, new Date());
+
+        console.log(`[VoiceChannel] User ${userId} raised hand in channel ${channelId}`);
+
+        res.json({
+            success: true,
+            data: { channelId, waveRequestCount: channelState.waveRequests.size },
+        });
+    } catch (error) {
+        console.error('Wave to speak error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Cancel wave to speak (lower hand)
+ * POST /api/media/calls/voice-channel/cancel-wave
+ */
+const cancelWave = async (req, res) => {
+    try {
+        const { channelId } = req.body;
+        const userId = req.user._id.toString();
+
+        if (!channelId) {
+            return res.status(400).json({ success: false, error: 'channelId is required' });
+        }
+
+        const channelState = voiceChannelState.get(channelId);
+        if (channelState) {
+            channelState.waveRequests.delete(userId);
+        }
+
+        console.log(`[VoiceChannel] User ${userId} lowered hand in channel ${channelId}`);
+
+        res.json({
+            success: true,
+            data: { channelId },
+        });
+    } catch (error) {
+        console.error('Cancel wave error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Grant speaker permission (host only)
+ * POST /api/media/calls/voice-channel/grant-speaker
+ */
+const grantSpeaker = async (req, res) => {
+    try {
+        const { channelId, targetUserId } = req.body;
+        const userId = req.user._id.toString();
+
+        if (!channelId || !targetUserId) {
+            return res.status(400).json({ success: false, error: 'channelId and targetUserId are required' });
+        }
+
+        const channelState = voiceChannelState.get(channelId);
+        if (!channelState) {
+            return res.status(404).json({ success: false, error: 'Voice channel not found' });
+        }
+
+        // Only host can grant speaker permission
+        if (channelState.hostId !== userId) {
+            return res.status(403).json({ success: false, error: 'Only host can grant speaker permission' });
+        }
+
+        // Add target user as speaker
+        channelState.speakers.add(targetUserId);
+        channelState.waveRequests.delete(targetUserId);
+
+        // Update participant record
+        const channelMap = voiceChannelParticipants.get(channelId);
+        if (channelMap) {
+            for (const [agoraUid, participant] of channelMap.entries()) {
+                if (participant.userId === targetUserId) {
+                    participant.role = 'speaker';
+                    participant.isMuted = false;
+                    break;
+                }
+            }
+        }
+
+        console.log(`[VoiceChannel] User ${targetUserId} granted speaker by ${userId} in channel ${channelId}`);
+
+        res.json({
+            success: true,
+            data: { channelId, targetUserId, role: 'speaker' },
+        });
+    } catch (error) {
+        console.error('Grant speaker error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Revoke speaker permission (host only)
+ * POST /api/media/calls/voice-channel/revoke-speaker
+ */
+const revokeSpeaker = async (req, res) => {
+    try {
+        const { channelId, targetUserId } = req.body;
+        const userId = req.user._id.toString();
+
+        if (!channelId || !targetUserId) {
+            return res.status(400).json({ success: false, error: 'channelId and targetUserId are required' });
+        }
+
+        const channelState = voiceChannelState.get(channelId);
+        if (!channelState) {
+            return res.status(404).json({ success: false, error: 'Voice channel not found' });
+        }
+
+        // Only host can revoke speakers
+        if (channelState.hostId !== userId) {
+            return res.status(403).json({ success: false, error: 'Only host can revoke speaker permission' });
+        }
+
+        // Cannot revoke host
+        if (channelState.hostId === targetUserId) {
+            return res.status(400).json({ success: false, error: 'Cannot revoke host speaker permission' });
+        }
+
+        // Remove target user from speakers
+        channelState.speakers.delete(targetUserId);
+
+        // Update participant record
+        const channelMap = voiceChannelParticipants.get(channelId);
+        if (channelMap) {
+            for (const [agoraUid, participant] of channelMap.entries()) {
+                if (participant.userId === targetUserId) {
+                    participant.role = 'listener';
+                    participant.isMuted = true;
+                    break;
+                }
+            }
+        }
+
+        console.log(`[VoiceChannel] User ${targetUserId} revoked speaker by ${userId} in channel ${channelId}`);
+
+        res.json({
+            success: true,
+            data: { channelId, targetUserId, role: 'listener' },
+        });
+    } catch (error) {
+        console.error('Revoke speaker error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Mute a participant (host only can mute others)
+ * POST /api/media/calls/voice-channel/mute-participant
+ */
+const muteParticipant = async (req, res) => {
+    try {
+        const { channelId, targetUserId, mute } = req.body;
+        const userId = req.user._id.toString();
+
+        if (!channelId || !targetUserId || mute === undefined) {
+            return res.status(400).json({ success: false, error: 'channelId, targetUserId, and mute are required' });
+        }
+
+        const channelState = voiceChannelState.get(channelId);
+        if (!channelState) {
+            return res.status(404).json({ success: false, error: 'Voice channel not found' });
+        }
+
+        // Only host can mute other participants
+        if (channelState.hostId !== userId) {
+            return res.status(403).json({ success: false, error: 'Only host can mute participants' });
+        }
+
+        // Update participant mute state
+        const channelMap = voiceChannelParticipants.get(channelId);
+        if (channelMap) {
+            for (const [agoraUid, participant] of channelMap.entries()) {
+                if (participant.userId === targetUserId) {
+                    participant.isMuted = mute;
+                    break;
+                }
+            }
+        }
+
+        console.log(`[VoiceChannel] User ${targetUserId} ${mute ? 'muted' : 'unmuted'} by ${userId} in channel ${channelId}`);
+
+        res.json({
+            success: true,
+            data: { channelId, targetUserId, isMuted: mute },
+        });
+    } catch (error) {
+        console.error('Mute participant error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Update own mute state
+ * POST /api/media/calls/voice-channel/update-mute
+ */
+const updateMuteState = async (req, res) => {
+    try {
+        const { channelId, isMuted } = req.body;
+        const userId = req.user._id.toString();
+
+        if (!channelId || isMuted === undefined) {
+            return res.status(400).json({ success: false, error: 'channelId and isMuted are required' });
+        }
+
+        const channelMap = voiceChannelParticipants.get(channelId);
+        if (channelMap) {
+            for (const [agoraUid, participant] of channelMap.entries()) {
+                if (participant.userId === userId) {
+                    participant.isMuted = isMuted;
+                    break;
+                }
+            }
+        }
+
+        res.json({
+            success: true,
+            data: { channelId, isMuted },
+        });
+    } catch (error) {
+        console.error('Update mute state error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
@@ -926,4 +1271,11 @@ module.exports = {
     joinVoiceChannel,
     leaveVoiceChannel,
     getVoiceChannelParticipants,
+    // Voice channel Spaces-like features
+    waveToSpeak,
+    cancelWave,
+    grantSpeaker,
+    revokeSpeaker,
+    muteParticipant,
+    updateMuteState,
 };

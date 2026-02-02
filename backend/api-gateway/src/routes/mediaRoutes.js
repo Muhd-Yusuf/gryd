@@ -292,6 +292,42 @@ router.get('/calls/voice-channel/:channelId/participants',
     mediaController.getVoiceChannelParticipants
 );
 
+// Wave to speak (raise hand)
+router.post('/calls/voice-channel/wave',
+    requireUser,
+    mediaController.waveToSpeak
+);
+
+// Cancel wave to speak (lower hand)
+router.post('/calls/voice-channel/cancel-wave',
+    requireUser,
+    mediaController.cancelWave
+);
+
+// Grant speaker permission (host/admin only)
+router.post('/calls/voice-channel/grant-speaker',
+    requireUser,
+    mediaController.grantSpeaker
+);
+
+// Revoke speaker permission (host only)
+router.post('/calls/voice-channel/revoke-speaker',
+    requireUser,
+    mediaController.revokeSpeaker
+);
+
+// Mute a participant (host/speaker can mute listeners)
+router.post('/calls/voice-channel/mute-participant',
+    requireUser,
+    mediaController.muteParticipant
+);
+
+// Update own mute state
+router.post('/calls/voice-channel/update-mute',
+    requireUser,
+    mediaController.updateMuteState
+);
+
 // ===================
 // DEV/DEBUG ROUTES
 // ===================

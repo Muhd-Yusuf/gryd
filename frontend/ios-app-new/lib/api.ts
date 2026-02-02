@@ -1145,6 +1145,32 @@ export const getVoiceChannelParticipants = (channelId: string, subgridId?: strin
     return callsGet(`/voice-channel/${channelId}/participants${params}`);
 };
 
+// Voice channel Spaces-like features
+
+// Wave to speak (raise hand)
+export const waveToSpeak = (channelId: string) =>
+    callsPost('/voice-channel/wave', { channelId });
+
+// Cancel wave to speak (lower hand)
+export const cancelWave = (channelId: string) =>
+    callsPost('/voice-channel/cancel-wave', { channelId });
+
+// Grant speaker permission (host/admin only)
+export const grantSpeaker = (channelId: string, targetUserId: string) =>
+    callsPost('/voice-channel/grant-speaker', { channelId, targetUserId });
+
+// Revoke speaker permission (host only)
+export const revokeSpeaker = (channelId: string, targetUserId: string) =>
+    callsPost('/voice-channel/revoke-speaker', { channelId, targetUserId });
+
+// Mute a participant (host/speaker can mute listeners)
+export const muteParticipant = (channelId: string, targetUserId: string, mute: boolean) =>
+    callsPost('/voice-channel/mute-participant', { channelId, targetUserId, mute });
+
+// Update own mute state
+export const updateVoiceChannelMuteState = (channelId: string, isMuted: boolean) =>
+    callsPost('/voice-channel/update-mute', { channelId, isMuted });
+
 // Subscribe to call events (SSE)
 // Returns a cleanup function. Call this after ensuring bootstrap is complete.
 export const subscribeToCallEvents = (onEvent: (event: string, data: any) => void): (() => void) => {

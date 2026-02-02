@@ -1,10 +1,13 @@
 /**
- * Voice Channel Screen
- * Handles voice calls in community voice channels using Agora
- * Supports both web and native platforms
+ * Voice Channel Screen - Twitter Spaces-like Experience
+ * Features:
+ * - Host/Speaker/Listener roles
+ * - Admin can mute members
+ * - Members can wave (raise hand) to request speaking
+ * - Admin can grant/revoke speaker permissions
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
     StyleSheet,
     View,
@@ -12,17 +15,37 @@ import {
     TouchableOpacity,
     Platform,
     ScrollView,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Mic, MicOff, PhoneOff, Users, Volume2 } from 'lucide-react-native';
+import { ArrowLeft, Mic, MicOff, PhoneOff, Users, Volume2, Crown, Shield } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/theme';
-import { getAuthUser, getCallDetails, communityGet, joinVoiceChannel, leaveVoiceChannel, getVoiceChannelParticipants } from '../../lib/api';
-import useAgoraCall from '../../hooks/useAgoraCall';
-import useAgoraCallWeb from '../../hooks/useAgoraCallWeb';
+import {
+    getAuthUser,
+    communityGet,
+    joinVoiceChannel,
+    leaveVoiceChannel,
+    getVoiceChannelParticipants,
+    waveToSpeak,
+    cancelWave,
+    grantSpeaker,
+    revokeSpeaker,
+    muteParticipant,
+    updateVoiceChannelMuteState,
+} from '../../lib/api';
+import { useAgoraCall } from '../../hooks';
+import { useAgoraCallWeb } from '../../hooks/useAgoraCallWeb';
 import UserAvatar from '../../components/UserAvatar';
+import {
+    diagnoseVoiceChannelState,
+    testClientConnectionState,
+    testVoiceRoleAssignment,
+    runVoiceChannelConnectionTests,
+} from '../../lib/voiceChannelTestUtils';
 
-// Type for participant details fetched from the call API
+// Type for participant details
 interface ParticipantDetails {
     agoraUid: number;
     userId: string;
@@ -32,31 +55,37 @@ interface ParticipantDetails {
     memberRole?: string;
     stakeholderBadge?: string | null;
     company?: string | null;
+    voiceRole: 'host' | 'speaker' | 'listener';
+    isMuted: boolean;
+    isHandRaised: boolean;
+}
+
+// Wave request type
+interface WaveRequest {
+    userId: string;
+    timestamp: Date;
+    displayName: string;
+    avatarUrl: string | null;
 }
 
 // Badge colors for stakeholders and roles
 const BADGE_COLORS: Record<string, string> = {
-    // Stakeholder badges
     stakeholder: '#3B82F6',
     vendor: '#8B5CF6',
     partner: '#10B981',
     sponsor: '#F59E0B',
     investor: '#EC4899',
-    // Role badges
-    subgrid_admin: '#DC2626', // Red for CU Admin
-    moderator: '#F97316', // Orange for moderator
+    subgrid_admin: '#DC2626',
+    moderator: '#F97316',
 };
 
-// Helper to get badge display info
 const getBadgeInfo = (memberRole?: string, stakeholderBadge?: string | null): { label: string; color: string } | null => {
-    // Admin roles take priority
     if (memberRole === 'subgrid_admin') {
         return { label: 'CU Admin', color: BADGE_COLORS.subgrid_admin };
     }
     if (memberRole === 'moderator') {
         return { label: 'Moderator', color: BADGE_COLORS.moderator };
     }
-    // Then stakeholder badge
     if (stakeholderBadge && BADGE_COLORS[stakeholderBadge]) {
         return { label: stakeholderBadge.charAt(0).toUpperCase() + stakeholderBadge.slice(1), color: BADGE_COLORS[stakeholderBadge] };
     }
@@ -82,24 +111,23 @@ const VoiceChannelScreen = () => {
     const token = normalizeParam(params.token);
     const uid = parseInt(normalizeParam(params.uid) || '0', 10);
     const appId = normalizeParam(params.appId);
-    // Peer info passed from navigation (for DM calls)
-    const peerName = normalizeParam(params.peerName);
-    const peerAvatar = normalizeParam(params.peerAvatar);
 
     const isWeb = Platform.OS === 'web';
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [currentUserName, setCurrentUserName] = useState('You');
-    const [currentUserUsername, setCurrentUserUsername] = useState<string | null>(null);
     const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
-    // Map of agoraUid -> participant details for remote users
-    const [participantMap, setParticipantMap] = useState<Map<number, ParticipantDetails>>(new Map());
-    // Store all participants from API for fallback lookup
-    const [allParticipants, setAllParticipants] = useState<ParticipantDetails[]>([]);
-    // Store subgrid members for voice channel calls (no callId)
-    const [subgridMembers, setSubgridMembers] = useState<any[]>([]);
 
-    // Use web hook for web platform, native hook for mobile
-    // IMPORTANT: Must be called before any useEffect that depends on callState
+    // Participants and channel state
+    const [participants, setParticipants] = useState<ParticipantDetails[]>([]);
+    const [hostId, setHostId] = useState<string | null>(null);
+    const [waveRequests, setWaveRequests] = useState<WaveRequest[]>([]);
+    const [myVoiceRole, setMyVoiceRole] = useState<'host' | 'speaker' | 'listener'>('listener');
+    const [isHandRaised, setIsHandRaised] = useState(false);
+
+    // UI state
+    const [showParticipantActions, setShowParticipantActions] = useState<string | null>(null);
+
+    // Agora hooks
     const webHook = useAgoraCallWeb({
         channelName: agoraChannelName,
         token,
@@ -107,32 +135,22 @@ const VoiceChannelScreen = () => {
         appId,
         callId,
         autoJoin: isWeb && !!token && !!appId && !!agoraChannelName,
-        onCallEnded: () => {
-            router.back();
-        },
-        onError: (err) => {
-            console.error('[VoiceChannel] Web Error:', err);
-        },
+        onCallEnded: () => router.back(),
+        onError: (err) => console.error('[VoiceChannel] Web Error:', err),
     });
 
     const nativeHook = useAgoraCall({
-        onCallEnded: () => {
-            router.back();
-        },
-        onError: (err) => {
-            console.error('[VoiceChannel] Native Error:', err);
-        },
+        onCallEnded: () => router.back(),
+        onError: (err) => console.error('[VoiceChannel] Native Error:', err),
     });
 
-    // Select the appropriate hook based on platform
     const {
         callState,
         isMuted,
-        remoteUsers,
         callDuration,
         error,
         hangup,
-        toggleMute,
+        toggleMute: agoraToggleMute,
     } = isWeb ? webHook : nativeHook;
 
     // Fetch current user details
@@ -144,169 +162,156 @@ const VoiceChannelScreen = () => {
                 setCurrentUserId(user.userId);
                 const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
                 setCurrentUserName(name || user.email || 'You');
-                setCurrentUserUsername(user.username || null);
                 setCurrentUserAvatar(user.avatarUrl || null);
             })
             .catch(() => {});
-        return () => {
-            isActive = false;
-        };
+        return () => { isActive = false; };
     }, []);
 
-    // Fetch call participant details when we have a callId
-    useEffect(() => {
-        if (!callId) return;
+    // Fetch participants and channel state
+    const fetchParticipantsData = useCallback(async () => {
+        if (!channelId) return;
 
-        let isActive = true;
-        const fetchParticipants = async () => {
-            try {
-                console.log('[VoiceChannel] Fetching call details for callId:', callId);
-                const response = await getCallDetails(callId);
-                if (!isActive) return;
+        try {
+            const response = await getVoiceChannelParticipants(channelId, subgridId);
+            if (!response?.success) return;
 
-                const participants = response?.data?.participants || [];
-                const newMap = new Map<number, ParticipantDetails>();
-                const allParts: ParticipantDetails[] = [];
+            const data = response.data;
+            const participantList: ParticipantDetails[] = (data.participants || []).map((p: any) => ({
+                agoraUid: p.agoraUid || 0,
+                userId: p.userId?.toString() || '',
+                displayName: p.userDetails?.displayName || `User ${p.agoraUid || 'Unknown'}`,
+                username: p.userDetails?.username || null,
+                avatarUrl: p.userDetails?.avatarUrl || null,
+                memberRole: p.userDetails?.memberRole || 'member',
+                stakeholderBadge: p.userDetails?.stakeholderBadge || null,
+                company: p.userDetails?.company || null,
+                voiceRole: p.voiceRole || 'listener',
+                isMuted: p.isMuted || false,
+                isHandRaised: p.isHandRaised || false,
+            }));
 
-                participants.forEach((p: any) => {
-                    if (p.userDetails) {
-                        const detail: ParticipantDetails = {
-                            agoraUid: p.agoraUid || 0,
-                            userId: p.userId?.toString() || '',
-                            displayName: p.userDetails.displayName || `User ${p.agoraUid || 'Unknown'}`,
-                            username: p.userDetails.username || null,
-                            avatarUrl: p.userDetails.avatarUrl || null,
-                            memberRole: p.userDetails.memberRole || 'member',
-                            stakeholderBadge: p.userDetails.stakeholderBadge || null,
-                            company: p.userDetails.company || null,
-                        };
-                        allParts.push(detail);
+            setParticipants(participantList);
+            setHostId(data.hostId || null);
+            setWaveRequests(data.waveRequests || []);
 
-                        // Only add to map if we have a valid agoraUid
-                        if (p.agoraUid) {
-                            newMap.set(p.agoraUid, detail);
-                        }
-                    }
-                });
-
-                console.log('[VoiceChannel] Participant map updated:', newMap.size, 'participants, allParts:', allParts.length);
-                console.log('[VoiceChannel] All participants:', JSON.stringify(allParts));
-                setParticipantMap(newMap);
-                setAllParticipants(allParts);
-            } catch (err) {
-                console.error('[VoiceChannel] Failed to fetch call participants:', err);
+            // Update my role
+            if (currentUserId) {
+                const myParticipant = participantList.find(p => p.userId === currentUserId);
+                if (myParticipant) {
+                    setMyVoiceRole(myParticipant.voiceRole);
+                    setIsHandRaised(myParticipant.isHandRaised);
+                }
             }
-        };
+        } catch (err) {
+            console.error('[VoiceChannel] Failed to fetch participants:', err);
+        }
+    }, [channelId, subgridId, currentUserId]);
 
-        fetchParticipants();
-
-        // Refresh participant list periodically in case new users join
-        const interval = setInterval(fetchParticipants, 10000);
-
-        return () => {
-            isActive = false;
-            clearInterval(interval);
-        };
-    }, [callId]);
-
-    // Fetch subgrid members for voice channel calls (when no callId)
-    useEffect(() => {
-        if (!subgridId) return;
-
-        let isActive = true;
-        const fetchMembers = async () => {
-            try {
-                console.log('[VoiceChannel] Fetching subgrid members for:', subgridId);
-                const response = await communityGet(`/subgrids/${subgridId}/members`);
-                if (!isActive) return;
-
-                const members = response?.data || [];
-                console.log('[VoiceChannel] Fetched', members.length, 'members from subgrid');
-                setSubgridMembers(members);
-            } catch (err) {
-                console.error('[VoiceChannel] Failed to fetch subgrid members:', err);
-            }
-        };
-
-        fetchMembers();
-
-        return () => {
-            isActive = false;
-        };
-    }, [subgridId]);
-
-    // Join voice channel when connected and fetch participants
+    // Join voice channel and start polling participants
     useEffect(() => {
         if (callState !== 'connected' || !channelId || !uid) return;
 
         let isActive = true;
 
-        // Register ourselves in the voice channel
         const registerAndFetch = async () => {
             try {
-                console.log('[VoiceChannel] Registering in voice channel:', channelId, 'uid:', uid);
                 await joinVoiceChannel(channelId, subgridId, uid);
             } catch (err) {
-                console.error('[VoiceChannel] Failed to join voice channel tracking:', err);
+                console.error('[VoiceChannel] Failed to join:', err);
             }
-
-            // Fetch participants
-            fetchVoiceChannelParticipants();
-        };
-
-        const fetchVoiceChannelParticipants = async () => {
-            if (!isActive) return;
-            try {
-                console.log('[VoiceChannel] Fetching voice channel participants for:', channelId);
-                const response = await getVoiceChannelParticipants(channelId, subgridId);
-                if (!isActive) return;
-
-                const participants = response?.data?.participants || [];
-                const newMap = new Map<number, ParticipantDetails>();
-                const allParts: ParticipantDetails[] = [];
-
-                participants.forEach((p: any) => {
-                    if (p.userDetails) {
-                        const detail: ParticipantDetails = {
-                            agoraUid: p.agoraUid || 0,
-                            userId: p.userId?.toString() || '',
-                            displayName: p.userDetails.displayName || `User ${p.agoraUid || 'Unknown'}`,
-                            username: p.userDetails.username || null,
-                            avatarUrl: p.userDetails.avatarUrl || null,
-                            memberRole: p.userDetails.memberRole || 'member',
-                            stakeholderBadge: p.userDetails.stakeholderBadge || null,
-                            company: p.userDetails.company || null,
-                        };
-                        allParts.push(detail);
-
-                        if (p.agoraUid) {
-                            newMap.set(p.agoraUid, detail);
-                        }
-                    }
-                });
-
-                console.log('[VoiceChannel] Voice channel participants updated:', newMap.size, 'participants');
-                setParticipantMap(newMap);
-                setAllParticipants(allParts);
-            } catch (err) {
-                console.error('[VoiceChannel] Failed to fetch voice channel participants:', err);
-            }
+            if (isActive) fetchParticipantsData();
         };
 
         registerAndFetch();
 
-        // Refresh participant list periodically
-        const interval = setInterval(fetchVoiceChannelParticipants, 5000);
+        const interval = setInterval(() => {
+            if (isActive) fetchParticipantsData();
+        }, 3000);
 
         return () => {
             isActive = false;
             clearInterval(interval);
-            // Unregister from voice channel
-            leaveVoiceChannel(channelId, uid).catch(err => {
-                console.error('[VoiceChannel] Failed to leave voice channel tracking:', err);
-            });
+            leaveVoiceChannel(channelId, uid).catch(() => {});
         };
-    }, [callState, channelId, subgridId, uid]);
+    }, [callState, channelId, subgridId, uid, fetchParticipantsData]);
+
+    // Toggle mute with server sync
+    const handleToggleMute = useCallback(async () => {
+        agoraToggleMute();
+        const newMutedState = !isMuted;
+        try {
+            await updateVoiceChannelMuteState(channelId, newMutedState);
+        } catch (err) {
+            console.error('[VoiceChannel] Failed to update mute state:', err);
+        }
+    }, [agoraToggleMute, isMuted, channelId]);
+
+    // Wave to speak (raise hand)
+    const handleWaveToSpeak = useCallback(async () => {
+        if (isHandRaised) {
+            try {
+                await cancelWave(channelId);
+                setIsHandRaised(false);
+            } catch (err) {
+                console.error('[VoiceChannel] Failed to cancel wave:', err);
+            }
+        } else {
+            try {
+                await waveToSpeak(channelId);
+                setIsHandRaised(true);
+            } catch (err) {
+                console.error('[VoiceChannel] Failed to wave:', err);
+            }
+        }
+    }, [channelId, isHandRaised]);
+
+    // Grant speaker (host/speaker action)
+    const handleGrantSpeaker = useCallback(async (targetUserId: string) => {
+        try {
+            await grantSpeaker(channelId, targetUserId);
+            fetchParticipantsData();
+            setShowParticipantActions(null);
+        } catch (err: any) {
+            console.error('[VoiceChannel] Failed to grant speaker:', err);
+            if (Platform.OS !== 'web') {
+                Alert.alert('Error', err.message || 'Failed to grant speaker permission');
+            }
+        }
+    }, [channelId, fetchParticipantsData]);
+
+    // Revoke speaker (host action)
+    const handleRevokeSpeaker = useCallback(async (targetUserId: string) => {
+        try {
+            await revokeSpeaker(channelId, targetUserId);
+            fetchParticipantsData();
+            setShowParticipantActions(null);
+        } catch (err: any) {
+            console.error('[VoiceChannel] Failed to revoke speaker:', err);
+            if (Platform.OS !== 'web') {
+                Alert.alert('Error', err.message || 'Failed to revoke speaker permission');
+            }
+        }
+    }, [channelId, fetchParticipantsData]);
+
+    // Mute participant (host/speaker action)
+    const handleMuteParticipant = useCallback(async (targetUserId: string, mute: boolean) => {
+        try {
+            await muteParticipant(channelId, targetUserId, mute);
+            fetchParticipantsData();
+            setShowParticipantActions(null);
+        } catch (err: any) {
+            console.error('[VoiceChannel] Failed to mute participant:', err);
+            if (Platform.OS !== 'web') {
+                Alert.alert('Error', err.message || 'Failed to mute participant');
+            }
+        }
+    }, [channelId, fetchParticipantsData]);
+
+    const handleLeave = async () => {
+        await hangup();
+        router.back();
+    };
 
     const formatDuration = (seconds: number): string => {
         const mins = Math.floor(seconds / 60);
@@ -314,10 +319,68 @@ const VoiceChannelScreen = () => {
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const handleLeave = async () => {
-        await hangup();
-        router.back();
-    };
+    const isHost = myVoiceRole === 'host';
+    const isSpeaker = myVoiceRole === 'speaker' || myVoiceRole === 'host';
+    // Only host (CU Admin) can mute others, grant/revoke speaker permissions
+    const canMuteOthers = isHost;
+    const canGrantSpeaker = isHost;
+    const canRevokeSpeaker = isHost;
+
+    // Separate participants into speakers and listeners
+    const speakers = participants.filter(p => p.voiceRole === 'host' || p.voiceRole === 'speaker');
+    const listeners = participants.filter(p => p.voiceRole === 'listener');
+
+    // Expose test utilities to browser console (web only)
+    useEffect(() => {
+        if (!isWeb) return;
+
+        const webClient = webHook.client;
+
+        (window as any).voiceChannelTest = {
+            diagnose: () => diagnoseVoiceChannelState({
+                callState,
+                participants,
+                hostId,
+                myVoiceRole,
+                isHandRaised,
+                isMuted,
+                error,
+                client: webClient
+            }),
+            testClientState: () => testClientConnectionState(webClient),
+            testRoles: () => testVoiceRoleAssignment(
+                participants.map(p => ({
+                    userId: p.userId,
+                    voiceRole: p.voiceRole,
+                    memberRole: p.memberRole
+                })),
+                hostId
+            ),
+            runTests: () => runVoiceChannelConnectionTests({
+                getClient: () => webClient
+            }),
+            getState: () => ({
+                callState,
+                isMuted,
+                isHandRaised,
+                myVoiceRole,
+                hostId,
+                participantCount: participants.length,
+                speakers: speakers.length,
+                listeners: listeners.length,
+                waveRequests: waveRequests.length,
+                clientState: webClient?.connectionState,
+                error
+            })
+        };
+
+        console.log('[VoiceChannel] Test utilities available at window.voiceChannelTest');
+        console.log('[VoiceChannel] Commands: diagnose(), testClientState(), testRoles(), runTests(), getState()');
+
+        return () => {
+            delete (window as any).voiceChannelTest;
+        };
+    }, [isWeb, callState, participants, hostId, myVoiceRole, isHandRaised, isMuted, error, webHook.client, speakers.length, listeners.length, waveRequests.length]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -330,144 +393,203 @@ const VoiceChannelScreen = () => {
                     <Volume2 size={20} color={colors.primary} />
                     <Text style={styles.headerTitle}>{displayName || 'Voice Channel'}</Text>
                 </View>
-                <View style={{ width: 40 }} />
+                <View style={styles.headerRight}>
+                    <View style={styles.liveIndicator}>
+                        <View style={styles.liveDot} />
+                        <Text style={styles.liveText}>LIVE</Text>
+                    </View>
+                </View>
             </View>
 
             {/* Call Info */}
             <View style={styles.callInfo}>
                 <Text style={styles.callStatus}>
-                    {callState === 'connected' ? 'Connected' : callState === 'connecting' ? 'Connecting...' : 'Voice Channel'}
+                    {callState === 'connected' ? `${participants.length} listening` : callState === 'connecting' ? 'Connecting...' : 'Voice Channel'}
                 </Text>
                 {callState === 'connected' && (
                     <Text style={styles.callDuration}>{formatDuration(callDuration)}</Text>
                 )}
             </View>
 
-            {/* Participants */}
-            <View style={styles.participantsSection}>
-                <View style={styles.participantsHeader}>
-                    <Users size={16} color={colors.textMuted} />
-                    <Text style={styles.participantsTitle}>
-                        Participants ({1 + remoteUsers.length})
-                    </Text>
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+                {/* Speakers Section - Twitter Spaces style */}
+                <View style={styles.speakersSection}>
+                    <View style={styles.sectionHeader}>
+                        <Crown size={16} color={colors.primary} />
+                        <Text style={styles.sectionTitle}>Speakers ({speakers.length})</Text>
+                    </View>
+                    <View style={styles.speakersGrid}>
+                        {speakers.map((participant) => {
+                            const isMe = participant.userId === currentUserId;
+                            const badgeInfo = getBadgeInfo(participant.memberRole, participant.stakeholderBadge);
+                            const showMuted = isMe ? isMuted : participant.isMuted;
+
+                            return (
+                                <TouchableOpacity
+                                    key={participant.userId}
+                                    style={styles.speakerCard}
+                                    onPress={() => !isMe && canMuteOthers && setShowParticipantActions(
+                                        showParticipantActions === participant.userId ? null : participant.userId
+                                    )}
+                                    activeOpacity={canMuteOthers && !isMe ? 0.7 : 1}
+                                >
+                                    <View style={[styles.speakerAvatarContainer, participant.voiceRole === 'host' && styles.hostAvatarContainer]}>
+                                        <UserAvatar
+                                            uri={isMe ? currentUserAvatar : participant.avatarUrl}
+                                            name={isMe ? currentUserName : participant.displayName}
+                                            style={styles.speakerAvatar}
+                                        />
+                                        {participant.voiceRole === 'host' && (
+                                            <View style={styles.hostBadge}>
+                                                <Crown size={10} color="#FFFFFF" />
+                                            </View>
+                                        )}
+                                        <View style={[styles.micIndicator, showMuted && styles.micIndicatorMuted]}>
+                                            {showMuted ? (
+                                                <MicOff size={10} color="#FFFFFF" />
+                                            ) : (
+                                                <Mic size={10} color="#FFFFFF" />
+                                            )}
+                                        </View>
+                                    </View>
+                                    <Text style={styles.speakerName} numberOfLines={1}>
+                                        {isMe ? 'You' : participant.displayName}
+                                    </Text>
+                                    {badgeInfo && (
+                                        <View style={[styles.roleBadge, { backgroundColor: badgeInfo.color }]}>
+                                            <Text style={styles.roleBadgeText}>{badgeInfo.label}</Text>
+                                        </View>
+                                    )}
+
+                                    {/* Actions dropdown */}
+                                    {showParticipantActions === participant.userId && !isMe && (
+                                        <View style={styles.actionsDropdown}>
+                                            <TouchableOpacity
+                                                style={styles.actionItem}
+                                                onPress={() => handleMuteParticipant(participant.userId, !participant.isMuted)}
+                                            >
+                                                <MaterialIcons name={participant.isMuted ? 'mic' : 'mic-off'} size={16} color={colors.text} />
+                                                <Text style={styles.actionText}>{participant.isMuted ? 'Unmute' : 'Mute'}</Text>
+                                            </TouchableOpacity>
+                                            {canRevokeSpeaker && participant.voiceRole !== 'host' && (
+                                                <TouchableOpacity
+                                                    style={styles.actionItem}
+                                                    onPress={() => handleRevokeSpeaker(participant.userId)}
+                                                >
+                                                    <MaterialIcons name="person-remove" size={16} color={colors.error} />
+                                                    <Text style={[styles.actionText, { color: colors.error }]}>Remove Speaker</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                            <TouchableOpacity
+                                                style={styles.actionItem}
+                                                onPress={() => setShowParticipantActions(null)}
+                                            >
+                                                <Text style={styles.actionText}>Cancel</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
                 </View>
 
-                <ScrollView style={styles.participantsList}>
-                    {/* Self */}
-                    <View style={styles.participantRow}>
-                        <UserAvatar
-                            uri={currentUserAvatar}
-                            name={currentUserName}
-                            style={styles.participantAvatar}
-                        />
-                        <View style={styles.participantInfo}>
-                            <Text style={styles.participantName}>{currentUserName}</Text>
-                            {currentUserUsername && (
-                                <Text style={styles.participantUsername}>@{currentUserUsername}</Text>
-                            )}
+                {/* Wave Requests Section (visible to host only) */}
+                {isHost && waveRequests.length > 0 && (
+                    <View style={styles.waveSection}>
+                        <View style={styles.sectionHeader}>
+                            <MaterialIcons name="pan-tool" size={16} color="#F59E0B" />
+                            <Text style={styles.sectionTitle}>Requests to Speak ({waveRequests.length})</Text>
                         </View>
-                        {isMuted ? (
-                            <MicOff size={16} color={colors.error} />
-                        ) : (
-                            <Mic size={16} color={colors.success} />
-                        )}
-                    </View>
-
-                    {/* Remote Users */}
-                    {remoteUsers.map((agoraUid, index) => {
-                        // Strategy 1: Direct lookup by agoraUid in the map
-                        let participant = participantMap.get(agoraUid);
-                        let remoteDisplayName = participant?.displayName;
-                        let remoteUsername = participant?.username || null;
-                        let remoteAvatarUrl = participant?.avatarUrl || null;
-                        let remoteMemberRole = participant?.memberRole || null;
-                        let remoteStakeholderBadge = participant?.stakeholderBadge || null;
-                        let remoteCompany = participant?.company || null;
-
-                        // Strategy 2: For DM calls, find the "other" participant (not current user)
-                        if (!remoteDisplayName && currentUserId && allParticipants.length > 0) {
-                            const otherParticipant = allParticipants.find(p => p.userId !== currentUserId);
-                            if (otherParticipant) {
-                                remoteDisplayName = otherParticipant.displayName;
-                                remoteUsername = otherParticipant.username;
-                                remoteAvatarUrl = otherParticipant.avatarUrl;
-                                remoteMemberRole = otherParticipant.memberRole || null;
-                                remoteStakeholderBadge = otherParticipant.stakeholderBadge || null;
-                                remoteCompany = otherParticipant.company || null;
-                                console.log('[VoiceChannel] Using other participant fallback:', remoteDisplayName);
-                            }
-                        }
-
-                        // Strategy 3: Use peer info from navigation params (for DM calls)
-                        if (!remoteDisplayName && peerName) {
-                            remoteDisplayName = peerName;
-                            remoteAvatarUrl = peerAvatar || null;
-                            console.log('[VoiceChannel] Using peerName param fallback:', remoteDisplayName);
-                        }
-
-                        // Strategy 4: For voice channel calls, look up member from subgrid members
-                        // Find member who is not the current user (other members in channel)
-                        if (!remoteDisplayName && subgridMembers.length > 0 && currentUserId) {
-                            // Find a member who is not the current user
-                            // For multiple remote users, use index to pick different members
-                            const otherMembers = subgridMembers.filter(m => {
-                                const memberId = m.userId?.toString() || m.user?._id?.toString();
-                                return memberId !== currentUserId;
-                            });
-                            if (otherMembers.length > index) {
-                                const member = otherMembers[index];
-                                const firstName = member.firstName || member.user?.firstName || '';
-                                const lastName = member.lastName || member.user?.lastName || '';
-                                remoteDisplayName = [firstName, lastName].filter(Boolean).join(' ').trim() || member.email || member.user?.email;
-                                remoteUsername = member.username || member.user?.username || null;
-                                remoteAvatarUrl = member.avatarUrl || member.user?.avatarUrl || null;
-                                remoteMemberRole = member.role || member.user?.role || null;
-                                remoteStakeholderBadge = member.stakeholderBadge || member.user?.stakeholderBadge || null;
-                                remoteCompany = member.company || member.user?.company || null;
-                                console.log('[VoiceChannel] Using subgrid member fallback:', remoteDisplayName);
-                            }
-                        }
-
-                        // Final fallback with agoraUid
-                        if (!remoteDisplayName) {
-                            remoteDisplayName = `User ${agoraUid}`;
-                            console.log('[VoiceChannel] Using UID fallback for agoraUid:', agoraUid, 'participantMap keys:', Array.from(participantMap.keys()));
-                        }
-
-                        // Get badge info (prioritizes admin roles over stakeholder badges)
-                        const badgeInfo = getBadgeInfo(remoteMemberRole || undefined, remoteStakeholderBadge);
-
-                        return (
-                            <View key={agoraUid} style={styles.participantRow}>
+                        {waveRequests.map((request) => (
+                            <View key={request.userId} style={styles.waveRequestRow}>
                                 <UserAvatar
-                                    uri={remoteAvatarUrl}
-                                    name={remoteDisplayName}
-                                    style={styles.participantAvatar}
+                                    uri={request.avatarUrl}
+                                    name={request.displayName}
+                                    style={styles.waveAvatar}
                                 />
-                                <View style={styles.participantInfo}>
-                                    <View style={styles.participantNameRow}>
-                                        <Text style={styles.participantName}>{remoteDisplayName}</Text>
-                                        {badgeInfo && (
-                                            <View style={[styles.participantBadge, { backgroundColor: badgeInfo.color }]}>
-                                                <Text style={styles.participantBadgeText}>
-                                                    {badgeInfo.label}
-                                                </Text>
+                                <Text style={styles.waveName}>{request.displayName}</Text>
+                                <View style={styles.waveActions}>
+                                    <TouchableOpacity
+                                        style={styles.grantButton}
+                                        onPress={() => handleGrantSpeaker(request.userId)}
+                                    >
+                                        <MaterialIcons name="person-add" size={14} color="#FFFFFF" />
+                                        <Text style={styles.grantButtonText}>Allow</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                {/* Listeners Section */}
+                <View style={styles.listenersSection}>
+                    <View style={styles.sectionHeader}>
+                        <Users size={16} color={colors.textMuted} />
+                        <Text style={styles.sectionTitle}>Listeners ({listeners.length})</Text>
+                    </View>
+                    <View style={styles.listenersGrid}>
+                        {listeners.map((participant) => {
+                            const isMe = participant.userId === currentUserId;
+                            const hasRaisedHand = participant.isHandRaised;
+
+                            return (
+                                <TouchableOpacity
+                                    key={participant.userId}
+                                    style={styles.listenerCard}
+                                    onPress={() => !isMe && isHost && setShowParticipantActions(
+                                        showParticipantActions === participant.userId ? null : participant.userId
+                                    )}
+                                    activeOpacity={isHost && !isMe ? 0.7 : 1}
+                                >
+                                    <View style={styles.listenerAvatarContainer}>
+                                        <UserAvatar
+                                            uri={isMe ? currentUserAvatar : participant.avatarUrl}
+                                            name={isMe ? currentUserName : participant.displayName}
+                                            style={styles.listenerAvatar}
+                                        />
+                                        {hasRaisedHand && (
+                                            <View style={styles.handRaisedBadge}>
+                                                <MaterialIcons name="pan-tool" size={8} color="#FFFFFF" />
                                             </View>
                                         )}
                                     </View>
-                                    {remoteUsername && (
-                                        <Text style={styles.participantUsername}>@{remoteUsername}</Text>
+                                    <Text style={styles.listenerName} numberOfLines={1}>
+                                        {isMe ? 'You' : participant.displayName}
+                                    </Text>
+
+                                    {/* Actions dropdown for listeners (host only) */}
+                                    {showParticipantActions === participant.userId && !isMe && isHost && (
+                                        <View style={styles.actionsDropdown}>
+                                            <TouchableOpacity
+                                                style={styles.actionItem}
+                                                onPress={() => handleGrantSpeaker(participant.userId)}
+                                            >
+                                                <MaterialIcons name="person-add" size={16} color={colors.primary} />
+                                                <Text style={[styles.actionText, { color: colors.primary }]}>Make Speaker</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.actionItem}
+                                                onPress={() => handleMuteParticipant(participant.userId, !participant.isMuted)}
+                                            >
+                                                <MaterialIcons name={participant.isMuted ? 'mic' : 'mic-off'} size={16} color={colors.text} />
+                                                <Text style={styles.actionText}>{participant.isMuted ? 'Unmute' : 'Mute'}</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={styles.actionItem}
+                                                onPress={() => setShowParticipantActions(null)}
+                                            >
+                                                <Text style={styles.actionText}>Cancel</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     )}
-                                    {remoteCompany && (
-                                        <Text style={styles.participantCompany}>{remoteCompany}</Text>
-                                    )}
-                                </View>
-                                <Mic size={16} color={colors.success} />
-                            </View>
-                        );
-                    })}
-                </ScrollView>
-            </View>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </View>
+            </ScrollView>
 
             {/* Error Message */}
             {error && (
@@ -478,20 +600,42 @@ const VoiceChannelScreen = () => {
 
             {/* Controls */}
             <View style={styles.controls}>
-                <TouchableOpacity
-                    style={[styles.controlButton, isMuted && styles.controlButtonActive]}
-                    onPress={toggleMute}
-                >
-                    {isMuted ? (
-                        <MicOff size={24} color="#FFFFFF" />
-                    ) : (
-                        <Mic size={24} color="#FFFFFF" />
-                    )}
-                </TouchableOpacity>
+                {/* Wave/Lower Hand button for listeners */}
+                {myVoiceRole === 'listener' && (
+                    <TouchableOpacity
+                        style={[styles.controlButton, isHandRaised && styles.controlButtonActive]}
+                        onPress={handleWaveToSpeak}
+                    >
+                        <MaterialIcons name="pan-tool" size={24} color={isHandRaised ? '#F59E0B' : '#FFFFFF'} />
+                    </TouchableOpacity>
+                )}
 
+                {/* Mute button for speakers */}
+                {isSpeaker && (
+                    <TouchableOpacity
+                        style={[styles.controlButton, isMuted && styles.controlButtonMuted]}
+                        onPress={handleToggleMute}
+                    >
+                        {isMuted ? (
+                            <MicOff size={24} color="#EF4444" />
+                        ) : (
+                            <Mic size={24} color="#FFFFFF" />
+                        )}
+                    </TouchableOpacity>
+                )}
+
+                {/* Leave button */}
                 <TouchableOpacity style={styles.endCallButton} onPress={handleLeave}>
                     <PhoneOff size={28} color="#FFFFFF" />
                 </TouchableOpacity>
+
+                {/* Host indicator */}
+                {isHost && (
+                    <View style={styles.hostIndicator}>
+                        <Shield size={16} color={colors.primary} />
+                        <Text style={styles.hostIndicatorText}>Host</Text>
+                    </View>
+                )}
             </View>
         </SafeAreaView>
     );
@@ -525,87 +669,234 @@ const createStyles = (colors: any) =>
             fontWeight: '600',
             color: colors.text,
         },
+        headerRight: {
+            width: 60,
+            alignItems: 'flex-end',
+        },
+        liveIndicator: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: '#EF4444',
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 12,
+            gap: 4,
+        },
+        liveDot: {
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: '#FFFFFF',
+        },
+        liveText: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: '#FFFFFF',
+        },
         callInfo: {
             alignItems: 'center',
-            paddingVertical: 24,
+            paddingVertical: 16,
         },
         callStatus: {
-            fontSize: 16,
+            fontSize: 14,
             color: colors.textMuted,
             marginBottom: 4,
         },
         callDuration: {
-            fontSize: 24,
+            fontSize: 20,
             fontWeight: '600',
             color: colors.text,
         },
-        participantsSection: {
+        content: {
             flex: 1,
             paddingHorizontal: 16,
         },
-        participantsHeader: {
+        speakersSection: {
+            marginBottom: 24,
+        },
+        sectionHeader: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
             marginBottom: 12,
         },
-        participantsTitle: {
+        sectionTitle: {
             fontSize: 14,
-            fontWeight: '500',
+            fontWeight: '600',
             color: colors.textMuted,
         },
-        participantsList: {
-            flex: 1,
-        },
-        participantRow: {
+        speakersGrid: {
             flexDirection: 'row',
-            alignItems: 'center',
-            paddingVertical: 12,
-            paddingHorizontal: 12,
-            backgroundColor: colors.cardBg,
-            borderRadius: 8,
-            marginBottom: 8,
-            gap: 12,
-        },
-        participantAvatar: {
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: colors.border,
-        },
-        participantInfo: {
-            flex: 1,
-        },
-        participantNameRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
             flexWrap: 'wrap',
+            justifyContent: 'center',
+            gap: 16,
         },
-        participantName: {
-            fontSize: 16,
-            color: colors.text,
+        speakerCard: {
+            alignItems: 'center',
+            width: 80,
         },
-        participantBadge: {
-            paddingHorizontal: 8,
-            paddingVertical: 2,
+        speakerAvatarContainer: {
+            position: 'relative',
+            marginBottom: 8,
+        },
+        hostAvatarContainer: {
+            borderWidth: 2,
+            borderColor: colors.primary,
+            borderRadius: 32,
+            padding: 2,
+        },
+        speakerAvatar: {
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+        },
+        hostBadge: {
+            position: 'absolute',
+            top: -4,
+            right: -4,
+            backgroundColor: colors.primary,
+            width: 20,
+            height: 20,
             borderRadius: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
         },
-        participantBadgeText: {
-            fontSize: 10,
+        micIndicator: {
+            position: 'absolute',
+            bottom: -2,
+            right: -2,
+            backgroundColor: '#22C55E',
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 2,
+            borderColor: colors.appBg,
+        },
+        micIndicatorMuted: {
+            backgroundColor: '#EF4444',
+        },
+        speakerName: {
+            fontSize: 12,
+            color: colors.text,
+            textAlign: 'center',
+        },
+        roleBadge: {
+            marginTop: 4,
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 8,
+        },
+        roleBadgeText: {
+            fontSize: 9,
             fontWeight: '600',
             color: '#FFFFFF',
         },
-        participantUsername: {
-            fontSize: 12,
-            color: colors.textMuted,
-            marginTop: 2,
+        actionsDropdown: {
+            position: 'absolute',
+            top: 70,
+            left: -20,
+            right: -20,
+            backgroundColor: colors.cardBg,
+            borderRadius: 8,
+            padding: 8,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 4,
+            elevation: 5,
+            zIndex: 100,
         },
-        participantCompany: {
-            fontSize: 11,
+        actionItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 4,
+        },
+        actionText: {
+            fontSize: 12,
+            color: colors.text,
+        },
+        waveSection: {
+            marginBottom: 24,
+            backgroundColor: '#FEF3C7',
+            borderRadius: 12,
+            padding: 12,
+        },
+        waveRequestRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 8,
+            gap: 12,
+        },
+        waveAvatar: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+        },
+        waveName: {
+            flex: 1,
+            fontSize: 14,
+            color: '#78350F',
+        },
+        waveActions: {
+            flexDirection: 'row',
+            gap: 8,
+        },
+        grantButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            backgroundColor: '#22C55E',
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 16,
+        },
+        grantButtonText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        listenersSection: {
+            marginBottom: 24,
+        },
+        listenersGrid: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 12,
+        },
+        listenerCard: {
+            alignItems: 'center',
+            width: 60,
+        },
+        listenerAvatarContainer: {
+            position: 'relative',
+            marginBottom: 4,
+        },
+        listenerAvatar: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+        },
+        handRaisedBadge: {
+            position: 'absolute',
+            bottom: -2,
+            right: -2,
+            backgroundColor: '#F59E0B',
+            width: 16,
+            height: 16,
+            borderRadius: 8,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 2,
+            borderColor: colors.appBg,
+        },
+        listenerName: {
+            fontSize: 10,
             color: colors.textMuted,
-            fontStyle: 'italic',
-            marginTop: 1,
+            textAlign: 'center',
         },
         errorContainer: {
             backgroundColor: colors.error + '20',
@@ -626,6 +917,8 @@ const createStyles = (colors: any) =>
             gap: 24,
             paddingVertical: 24,
             paddingBottom: 40,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
         },
         controlButton: {
             width: 56,
@@ -636,7 +929,14 @@ const createStyles = (colors: any) =>
             alignItems: 'center',
         },
         controlButtonActive: {
-            backgroundColor: colors.primary,
+            backgroundColor: colors.cardBg,
+            borderWidth: 2,
+            borderColor: '#F59E0B',
+        },
+        controlButtonMuted: {
+            backgroundColor: colors.cardBg,
+            borderWidth: 2,
+            borderColor: colors.border,
         },
         endCallButton: {
             width: 64,
@@ -645,6 +945,20 @@ const createStyles = (colors: any) =>
             backgroundColor: '#EF4444',
             justifyContent: 'center',
             alignItems: 'center',
+        },
+        hostIndicator: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            backgroundColor: colors.primary + '20',
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 16,
+        },
+        hostIndicatorText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.primary,
         },
     });
 

@@ -55,6 +55,8 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
     const cleanupSSERef = useRef<(() => void) | null>(null);
     const currentCallIdRef = useRef<string | null>(null);
     const hasJoinedRef = useRef(false);
+    const isJoiningRef = useRef(false); // Track if currently in the process of joining
+    const currentChannelRef = useRef<string | null>(null); // Track current channel name
     const optionsRef = useRef(options);
 
     // Store the AgoraRTC instance dynamically imported
@@ -69,6 +71,8 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
     const cleanup = useCallback(async () => {
         if (!isWeb) return;
 
+        console.log('[AgoraWeb] Cleanup starting, hasJoined:', hasJoinedRef.current, 'channel:', currentChannelRef.current);
+
         // Stop duration timer
         if (durationIntervalRef.current) {
             clearInterval(durationIntervalRef.current);
@@ -77,25 +81,42 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
 
         // Close local tracks
         if (localAudioTrackRef.current) {
-            localAudioTrackRef.current.close();
+            try {
+                localAudioTrackRef.current.close();
+            } catch (err) {
+                console.error('[AgoraWeb] Close audio track error:', err);
+            }
             localAudioTrackRef.current = null;
         }
 
         if (localVideoTrackRef.current) {
-            localVideoTrackRef.current.close();
+            try {
+                localVideoTrackRef.current.close();
+            } catch (err) {
+                console.error('[AgoraWeb] Close video track error:', err);
+            }
             localVideoTrackRef.current = null;
         }
 
         // Leave channel
         if (clientRef.current) {
             try {
-                await clientRef.current.leave();
+                const connectionState = clientRef.current.connectionState;
+                console.log('[AgoraWeb] Client connection state before leave:', connectionState);
+
+                // Only attempt to leave if actually connected
+                if (connectionState === 'CONNECTED' || connectionState === 'CONNECTING') {
+                    await clientRef.current.leave();
+                    console.log('[AgoraWeb] Successfully left channel');
+                }
             } catch (err) {
                 console.error('[AgoraWeb] Leave error:', err);
             }
         }
 
         hasJoinedRef.current = false;
+        isJoiningRef.current = false;
+        currentChannelRef.current = null;
     }, [isWeb]);
 
     // Initialize Agora client (WEB ONLY)
@@ -171,65 +192,165 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
     useEffect(() => {
         if (!isWeb) return;
 
-        if (options.autoJoin && options.channelName && options.token && options.appId && !hasJoinedRef.current) {
-            const joinAsync = async () => {
-                // Wait for client to be initialized
-                if (!clientRef.current || !agoraRtcRef.current) {
-                    // Retry once after a short delay if init is slow
-                    setTimeout(() => {
-                        if (clientRef.current && agoraRtcRef.current && !hasJoinedRef.current) {
-                            joinAsync();
-                        }
-                    }, 500);
-                    return;
-                }
-
-                const client = clientRef.current;
-                const AgoraRTC = agoraRtcRef.current;
-
-                try {
-                    setCallState('connecting');
-                    setError(null);
-                    currentCallIdRef.current = options.callId || null;
-                    hasJoinedRef.current = true;
-
-                    console.log('[AgoraWeb] Joining channel:', options.channelName, 'with uid:', options.uid);
-
-                    // Join the channel
-                    await client.join(options.appId, options.channelName, options.token, options.uid || 0);
-
-                    // Create and publish local audio track
-                    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                    localAudioTrackRef.current = audioTrack;
-                    await client.publish([audioTrack]);
-
-                    setCallState('connected');
-                    console.log('[AgoraWeb] Successfully joined and published');
-
-                    // Start duration timer
-                    durationIntervalRef.current = setInterval(() => {
-                        setCallDuration(prev => prev + 1);
-                    }, 1000);
-
-                } catch (err: any) {
-                    console.error('[AgoraWeb] Join failed:', err);
-                    setError(err.message || 'Failed to join voice channel');
-                    setCallState('idle');
-                    hasJoinedRef.current = false;
-                    optionsRef.current.onError?.(err);
-                }
-            };
-
-            joinAsync();
+        // Skip if not configured for auto-join or missing required params
+        if (!options.autoJoin || !options.channelName || !options.token || !options.appId) {
+            return;
         }
+
+        // Skip if already joined to this channel or currently joining
+        if ((hasJoinedRef.current && currentChannelRef.current === options.channelName) || isJoiningRef.current) {
+            console.log('[AgoraWeb] Skip join - already joined or joining:', {
+                hasJoined: hasJoinedRef.current,
+                isJoining: isJoiningRef.current,
+                currentChannel: currentChannelRef.current,
+                targetChannel: options.channelName
+            });
+            return;
+        }
+
+        const joinAsync = async () => {
+            // Wait for client to be initialized
+            if (!clientRef.current || !agoraRtcRef.current) {
+                // Retry once after a short delay if init is slow
+                setTimeout(() => {
+                    if (clientRef.current && agoraRtcRef.current && !hasJoinedRef.current && !isJoiningRef.current) {
+                        joinAsync();
+                    }
+                }, 500);
+                return;
+            }
+
+            // Double-check we're not already joining
+            if (isJoiningRef.current) {
+                console.log('[AgoraWeb] Join already in progress, skipping');
+                return;
+            }
+
+            const client = clientRef.current;
+            const AgoraRTC = agoraRtcRef.current;
+
+            try {
+                // Mark as joining to prevent duplicate attempts
+                isJoiningRef.current = true;
+                setCallState('connecting');
+                setError(null);
+                currentCallIdRef.current = options.callId || null;
+
+                console.log('[AgoraWeb] Attempting to join channel:', options.channelName, 'with uid:', options.uid);
+                console.log('[AgoraWeb] Current client state:', client.connectionState);
+
+                // If client is already connected to a different channel, leave first
+                if (client.connectionState === 'CONNECTED' || client.connectionState === 'CONNECTING') {
+                    console.log('[AgoraWeb] Client already connected/connecting, cleaning up first');
+                    try {
+                        // Close existing tracks
+                        if (localAudioTrackRef.current) {
+                            localAudioTrackRef.current.close();
+                            localAudioTrackRef.current = null;
+                        }
+                        if (localVideoTrackRef.current) {
+                            localVideoTrackRef.current.close();
+                            localVideoTrackRef.current = null;
+                        }
+                        await client.leave();
+                        console.log('[AgoraWeb] Left previous channel');
+                        // Wait a moment for the leave to fully process
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    } catch (leaveErr) {
+                        console.error('[AgoraWeb] Error leaving previous channel:', leaveErr);
+                    }
+                }
+
+                // Join the channel
+                console.log('[AgoraWeb] Joining channel:', options.channelName);
+                await client.join(options.appId, options.channelName, options.token, options.uid || 0);
+                console.log('[AgoraWeb] Successfully joined channel');
+
+                // Track current channel
+                currentChannelRef.current = options.channelName;
+                hasJoinedRef.current = true;
+
+                // Create and publish local audio track
+                const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                localAudioTrackRef.current = audioTrack;
+                await client.publish([audioTrack]);
+
+                setCallState('connected');
+                console.log('[AgoraWeb] Successfully joined and published');
+
+                // Start duration timer
+                durationIntervalRef.current = setInterval(() => {
+                    setCallDuration(prev => prev + 1);
+                }, 1000);
+
+            } catch (err: any) {
+                console.error('[AgoraWeb] Join failed:', err);
+
+                // Handle UID_CONFLICT specifically
+                if (err.message && err.message.includes('UID_CONFLICT')) {
+                    console.log('[AgoraWeb] UID conflict detected, attempting recovery...');
+                    try {
+                        // Force cleanup and retry
+                        if (localAudioTrackRef.current) {
+                            localAudioTrackRef.current.close();
+                            localAudioTrackRef.current = null;
+                        }
+                        if (localVideoTrackRef.current) {
+                            localVideoTrackRef.current.close();
+                            localVideoTrackRef.current = null;
+                        }
+                        await client.leave();
+                        console.log('[AgoraWeb] Recovery: left channel');
+
+                        // Wait and retry
+                        await new Promise(resolve => setTimeout(resolve, 500));
+
+                        console.log('[AgoraWeb] Recovery: rejoining...');
+                        await client.join(options.appId!, options.channelName!, options.token!, options.uid || 0);
+                        currentChannelRef.current = options.channelName!;
+                        hasJoinedRef.current = true;
+
+                        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                        localAudioTrackRef.current = audioTrack;
+                        await client.publish([audioTrack]);
+
+                        setCallState('connected');
+                        console.log('[AgoraWeb] Recovery successful');
+
+                        durationIntervalRef.current = setInterval(() => {
+                            setCallDuration(prev => prev + 1);
+                        }, 1000);
+
+                        isJoiningRef.current = false;
+                        return; // Success after recovery
+                    } catch (recoveryErr: any) {
+                        console.error('[AgoraWeb] Recovery failed:', recoveryErr);
+                        setError('Failed to join voice channel. Please try again.');
+                    }
+                } else {
+                    setError(err.message || 'Failed to join voice channel');
+                }
+
+                setCallState('idle');
+                hasJoinedRef.current = false;
+                currentChannelRef.current = null;
+                optionsRef.current.onError?.(err);
+            } finally {
+                isJoiningRef.current = false;
+            }
+        };
+
+        joinAsync();
     }, [isWeb, options.autoJoin, options.channelName, options.token, options.appId, options.uid, options.callId]);
 
     const leaveChannel = useCallback(async () => {
         if (!isWeb) return;
+        console.log('[AgoraWeb] leaveChannel called');
         await cleanup();
         setCallState('ended');
         setRemoteUsers([]);
         setCallDuration(0);
+        setError(null);
     }, [isWeb, cleanup]);
 
     const hangup = useCallback(async () => {

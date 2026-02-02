@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
     StyleSheet,
     Text,
@@ -10,6 +10,7 @@ import {
     useWindowDimensions,
     Modal,
     Pressable,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -23,6 +24,10 @@ import { useTheme } from '../../../lib/theme';
 import { formatRelativeTime, formatMessageDate, Attachment, twemojiUrl } from '../../../lib/chatMedia';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
+import { useAgoraCall } from '../../../hooks';
+import { useCallContext } from '../../../contexts/CallContext';
+import { CallModalDefault as CallModal } from '../../../components';
+import { diagnoseCallState } from '../../../lib/callTestUtils';
 
 type Subgrid = {
     _id: string;
@@ -44,6 +49,7 @@ type UserProfile = {
     firstName?: string;
     lastName?: string;
     email?: string;
+    username?: string;
     avatarUrl?: string;
 };
 
@@ -185,9 +191,6 @@ const DirectMessagesScreen = () => {
     const [search, setSearch] = useState('');
     const [memberSearch, setMemberSearch] = useState('');
     const [addFriendOpen, setAddFriendOpen] = useState(false);
-    const [incomingCallOpen, setIncomingCallOpen] = useState(false);
-    const [incomingCallType, setIncomingCallType] = useState<'audio' | 'video'>('video');
-    const [incomingCallerId, setIncomingCallerId] = useState('');
     const [activePeerId, setActivePeerId] = useState('');
     const [messages, setMessages] = useState<Message[]>([]);
     const [draft, setDraft] = useState('');
@@ -199,6 +202,7 @@ const DirectMessagesScreen = () => {
     const [settingsModalOpen, setSettingsModalOpen] = useState(false);
     const [showSearchInput, setShowSearchInput] = useState(false);
     const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
+    const [channels, setChannels] = useState<{ _id: string; name?: string }[]>([]);
 
     // Settings state
     const [notifyAllMessages, setNotifyAllMessages] = useState(true);
@@ -206,12 +210,59 @@ const DirectMessagesScreen = () => {
     const [allowDMs, setAllowDMs] = useState(true);
     const [showOnlineStatus, setShowOnlineStatus] = useState(true);
 
-    // Call State
-    const [callType, setCallType] = useState<'audio' | 'video' | null>(null);
+    // Call State - using Agora
     const [callError, setCallError] = useState('');
-    const [muted, setMuted] = useState(false);
-    const [cameraOff, setCameraOff] = useState(false);
-    const activeStreamRef = React.useRef<any>(null);
+
+    // Get call context for managing calls
+    const { incomingCall, clearIncomingCall, markCallConnected } = useCallContext();
+
+    // Agora call hook - memoize callbacks to prevent unnecessary re-renders
+    const onCallEnded = useCallback((callId: string, reason: string) => {
+        // Call ended - refresh messages to show call history
+        if (subgridId && activePeerId) {
+            communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`)
+                .then(response => setMessages(response?.data || []))
+                .catch(() => {});
+        }
+    }, [subgridId, activePeerId]);
+
+    const onCallError = useCallback((err: Error) => {
+        setCallError(err.message);
+        if (Platform.OS !== 'web') {
+            Alert.alert('Call Error', err.message);
+        }
+    }, []);
+
+    // Memoize options to prevent useAgoraCall from recreating functions unnecessarily
+    const agoraCallOptions = useMemo(() => ({
+        onCallEnded,
+        onError: onCallError,
+    }), [onCallEnded, onCallError]);
+
+    const agoraCall = useAgoraCall(agoraCallOptions);
+
+    // Check if call modal should be visible
+    const isCallModalVisible = agoraCall.callState !== 'idle';
+
+    // Debug: Log call state changes
+    useEffect(() => {
+        console.log('[DM Page] Call state changed:', {
+            callState: agoraCall.callState,
+            callType: agoraCall.callType,
+            hasCurrentCall: !!agoraCall.currentCall,
+            remoteUsers: agoraCall.remoteUsers,
+            isModalVisible: isCallModalVisible,
+            error: agoraCall.error,
+            duration: agoraCall.callDuration,
+        });
+    }, [agoraCall.callState, agoraCall.callType, agoraCall.currentCall, agoraCall.remoteUsers, isCallModalVisible, agoraCall.error, agoraCall.callDuration]);
+
+    // Update CallContext when Agora call becomes connected
+    useEffect(() => {
+        if (agoraCall.callState === 'connected' && agoraCall.currentCall?.callId) {
+            markCallConnected();
+        }
+    }, [agoraCall.callState, agoraCall.currentCall?.callId, markCallConnected]);
 
     // Chat features state
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -359,8 +410,19 @@ const DirectMessagesScreen = () => {
             }
         };
 
+        const loadChannels = async () => {
+            if (!subgridId) return;
+            try {
+                const response = await communityGet(`/subgrids/${subgridId}/channels`);
+                setChannels(response?.data || []);
+            } catch {
+                setChannels([]);
+            }
+        };
+
         if (subgridId) {
             refreshFriendState(subgridId);
+            loadChannels();
         }
         loadMembers();
     }, [subgridId]);
@@ -538,6 +600,33 @@ const DirectMessagesScreen = () => {
         }
     };
 
+    const handleRemoveFriend = async () => {
+        if (!subgridId || !activePeerId) return;
+        setError('');
+        try {
+            await communityDelete(`/subgrids/${subgridId}/friends/${activePeerId}`);
+            await refreshFriendState(subgridId);
+            setActivePeerId('');
+        } catch (err: any) {
+            setError(err.message || 'Failed to remove friend.');
+        }
+    };
+
+    const handleBlockToggle = async () => {
+        if (!subgridId || !activePeerId) return;
+        setError('');
+        try {
+            if (blockedSet.has(activePeerId)) {
+                await communityDelete(`/subgrids/${subgridId}/friends/${activePeerId}/block`);
+            } else {
+                await communityPost(`/subgrids/${subgridId}/friends/${activePeerId}/block`, {});
+            }
+            await refreshFriendState(subgridId);
+        } catch (err: any) {
+            setError(err.message || 'Failed to update block status.');
+        }
+    };
+
     const handleSendMessage = async () => {
         const body = draft.trim();
 
@@ -603,50 +692,72 @@ const DirectMessagesScreen = () => {
         }
     };
 
-    // Call Handlers
+    // Call Handlers - using Agora
     const handleStartCall = async (type: 'audio' | 'video') => {
-        setCallError('');
-        setCallType(type);
-        setMuted(false);
-        setCameraOff(type !== 'video');
-        if (typeof window === 'undefined' || !navigator.mediaDevices) {
-            setCallError('Calls are available on web only right now.');
+        if (!activePeerId || !subgridId) {
+            setCallError('Please select a friend to call.');
             return;
         }
+        setCallError('');
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
-            activeStreamRef.current = stream;
+            console.log('[DM] Starting call:', { activePeerId, type, subgridId });
+            await agoraCall.startCall(activePeerId, type, subgridId);
         } catch (err: any) {
+            console.error('[DM] Call error:', err);
             setCallError(err.message || 'Unable to start call.');
         }
     };
 
     const handleEndCall = () => {
-        if (activeStreamRef.current) {
-            activeStreamRef.current.getTracks().forEach((track: any) => track.stop());
-            activeStreamRef.current = null;
-        }
-        setCallType(null);
+        console.log('[DM] Ending call');
+        agoraCall.hangup();
         setCallError('');
-        setMuted(false);
-        setCameraOff(false);
     };
 
-    const toggleMute = () => {
-        const stream = activeStreamRef.current;
-        if (stream) {
-            stream.getAudioTracks().forEach((track: any) => { track.enabled = !track.enabled; });
-            setMuted((prev) => !prev);
+    const handleAnswerCall = async (callId: string, type: 'audio' | 'video') => {
+        try {
+            console.log('[DM] Answering call:', { callId, type });
+            await agoraCall.answer(callId, type);
+            clearIncomingCall();
+        } catch (err: any) {
+            console.error('[DM] Answer error:', err);
+            setCallError(err.message || 'Unable to answer call.');
         }
     };
 
-    const toggleCamera = () => {
-        const stream = activeStreamRef.current;
-        if (stream) {
-            stream.getVideoTracks().forEach((track: any) => { track.enabled = !track.enabled; });
-            setCameraOff((prev) => !prev);
+    const handleDeclineCall = async (callId: string) => {
+        try {
+            console.log('[DM] Declining call:', { callId });
+            await agoraCall.decline(callId);
+            clearIncomingCall();
+        } catch (err: any) {
+            console.error('[DM] Decline error:', err);
+            setCallError(err.message || 'Unable to decline call.');
         }
     };
+
+    // Expose call test utilities to browser console (web only)
+    useEffect(() => {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            (window as any).callTest = {
+                diagnose: () => diagnoseCallState(agoraCall),
+                startAudioCall: () => handleStartCall('audio'),
+                startVideoCall: () => handleStartCall('video'),
+                endCall: handleEndCall,
+                getState: () => ({
+                    callState: agoraCall.callState,
+                    callType: agoraCall.callType,
+                    currentCall: agoraCall.currentCall,
+                    remoteUsers: agoraCall.remoteUsers,
+                    isModalVisible: isCallModalVisible,
+                    error: agoraCall.error || callError,
+                }),
+                toggleMute: agoraCall.toggleMute,
+                toggleVideo: agoraCall.toggleVideo,
+            };
+            console.log('[DM Page] Call test utilities exposed to window.callTest');
+        }
+    }, [agoraCall, isCallModalVisible, callError]);
 
     // File/Image picker handlers
     const handlePickFile = async () => {
@@ -823,21 +934,6 @@ const DirectMessagesScreen = () => {
             onPress: () => router.push('/(main)/profile'),
         },
     ];
-
-    // Handle incoming call accept
-    const handleAcceptIncomingCall = () => {
-        setIncomingCallOpen(false);
-        handleStartCall(incomingCallType);
-    };
-
-    // Handle incoming call decline
-    const handleDeclineIncomingCall = () => {
-        setIncomingCallOpen(false);
-        setIncomingCallerId('');
-    };
-
-    // Get caller info
-    const incomingCallerName = incomingCallerId ? buildName(incomingCallerId, friendUsers[incomingCallerId]) : 'Unknown Caller';
 
     const activePeer = friendUsers[activePeerId];
     const activePeerName = buildName(activePeerId, activePeer);
@@ -1075,6 +1171,41 @@ const DirectMessagesScreen = () => {
                                     </View>
 
                                     <ScrollView contentContainerStyle={styles.messageList} showsVerticalScrollIndicator={false}>
+                                        {/* Profile Section - matching mobile DM view */}
+                                        <View style={styles.profileSection}>
+                                            <View style={styles.profileAvatarWrap}>
+                                                <UserAvatar
+                                                    uri={getAvatarUrl(activePeerId)}
+                                                    name={activePeerName}
+                                                    style={styles.profileAvatar}
+                                                />
+                                            </View>
+                                            <Text style={styles.profileName}>{activePeerName}</Text>
+                                            <Text style={styles.profileHandle}>
+                                                @{friendUsers[activePeerId]?.username || activePeerId?.slice(-8) || 'user'}
+                                            </Text>
+                                            <Text style={styles.profileIntro}>
+                                                This is the beginning of your direct message with{'\n'}
+                                                <Text style={styles.profileIntroName}>{activePeerName}</Text>
+                                            </Text>
+                                            <Text style={styles.forumCommon}>
+                                                Forum in common:{' '}
+                                                <Text style={styles.forumCommonValue}>
+                                                    {channels.length > 0 ? channels.slice(0, 3).map(c => c.name).filter(Boolean).join(', ') || 'None' : 'None'}
+                                                </Text>
+                                            </Text>
+                                            <View style={styles.profileActions}>
+                                                <TouchableOpacity style={styles.removeButton} onPress={handleRemoveFriend}>
+                                                    <Text style={styles.removeButtonText}>Remove Friend</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity style={styles.blockButton} onPress={handleBlockToggle}>
+                                                    <Text style={styles.blockButtonText}>
+                                                        {blockedSet.has(activePeerId) ? 'Unblock' : 'Block'}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+
                                         {sortedMessages.length === 0 && (
                                             <View style={styles.emptyChat}>
                                                 <Text style={styles.emptyChatText}>No messages yet. Say hello!</Text>
@@ -1354,106 +1485,6 @@ const DirectMessagesScreen = () => {
                 </View>
             </Modal>
 
-            <Modal visible={incomingCallOpen} transparent animationType="fade" onRequestClose={handleDeclineIncomingCall}>
-                <View style={styles.callModalOverlay}>
-                    <TouchableOpacity style={styles.callModalBackdrop} activeOpacity={1} onPress={handleDeclineIncomingCall} />
-                    <View style={styles.callModalCard}>
-                        <View style={styles.callModalHeader}>
-                            <UserAvatar
-                                uri={getAvatarUrl(incomingCallerId || activePeerId)}
-                                name={incomingCallerName}
-                                style={styles.callModalAvatar}
-                            />
-                            <View style={styles.callModalInfo}>
-                                <Text style={styles.callModalName}>{incomingCallerName}</Text>
-                                <View style={styles.callModalType}>
-                                    <Text style={styles.callModalTypeText}>Incoming {incomingCallType === 'video' ? 'Video' : 'Voice'} call</Text>
-                                    <MaterialIcons name={incomingCallType === 'video' ? 'videocam' : 'phone'} size={16} color={colors.textMuted} />
-                                </View>
-                            </View>
-                        </View>
-                        <View style={styles.callModalActions}>
-                            <TouchableOpacity
-                                style={styles.acceptCallButton}
-                                onPress={handleAcceptIncomingCall}
-                            >
-                                <Text style={styles.acceptCallText}>Accept</Text>
-                                <MaterialIcons name="phone" size={18} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.declineCallButton}
-                                onPress={handleDeclineIncomingCall}
-                            >
-                                <Text style={styles.declineCallText}>Decline</Text>
-                                <MaterialIcons name="call-end" size={18} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* Outgoing Call Modal */}
-            <Modal visible={callType !== null} transparent animationType="fade" onRequestClose={handleEndCall}>
-                <View style={styles.callModalOverlay}>
-                    <View style={styles.outgoingCallCard}>
-                        <TouchableOpacity style={styles.callCloseButton} onPress={handleEndCall}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <Text style={styles.outgoingCallTitle}>
-                            {callType === 'video' ? 'Video Call' : 'Voice Call'}
-                        </Text>
-                        {!!callError && <Text style={styles.callErrorText}>{callError}</Text>}
-
-                        {callType === 'video' ? (
-                            <View style={styles.videoCallContainer}>
-                            <View style={styles.mainVideoWrap}>
-                                    <UserAvatar
-                                        uri={getAvatarUrl(activePeerId)}
-                                        name={activePeerName}
-                                        style={styles.mainVideoAvatar}
-                                    />
-                                    <Text style={styles.videoParticipantName}>{activePeerName}</Text>
-                                </View>
-                                <View style={styles.selfVideoWrap}>
-                                    <UserAvatar
-                                        uri={getAvatarUrl(userId)}
-                                        name="You"
-                                        style={styles.selfVideoAvatar}
-                                    />
-                                    <Text style={styles.selfVideoName}>You</Text>
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={styles.audioCallContainer}>
-                                <View style={styles.callAvatarWrap}>
-                                    <UserAvatar
-                                        uri={getAvatarUrl(activePeerId)}
-                                        name={activePeerName}
-                                        style={styles.callAvatarLarge}
-                                    />
-                                </View>
-                                <Text style={styles.callParticipantName}>{activePeerName}</Text>
-                                <Text style={styles.callStatus}>Calling...</Text>
-                            </View>
-                        )}
-
-                        <View style={styles.callControls}>
-                            <TouchableOpacity style={styles.callControlButton} onPress={toggleMute}>
-                                {muted ? <MaterialIcons name="mic-off" size={22} color="#EF4444" /> : <MaterialIcons name="mic" size={22} color={colors.text} />}
-                            </TouchableOpacity>
-                            {callType === 'video' && (
-                                <TouchableOpacity style={styles.callControlButton} onPress={toggleCamera}>
-                                    {cameraOff ? <MaterialIcons name="videocam-off" size={22} color="#EF4444" /> : <MaterialIcons name="videocam" size={22} color={colors.text} />}
-                                </TouchableOpacity>
-                            )}
-                            <TouchableOpacity style={styles.endCallBtn} onPress={handleEndCall}>
-                                <MaterialIcons name="call-end" size={22} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
             {/* Settings Modal */}
             <Modal visible={settingsModalOpen} transparent animationType="fade" onRequestClose={() => setSettingsModalOpen(false)}>
                 <View style={styles.settingsModalOverlay}>
@@ -1540,6 +1571,83 @@ const DirectMessagesScreen = () => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Agora Call Modal */}
+            {isCallModalVisible && (
+                <CallModal
+                    visible={isCallModalVisible}
+                    callState={agoraCall.callState}
+                    callType={agoraCall.callType}
+                    currentCall={agoraCall.currentCall}
+                    incomingCall={null}
+                    isMuted={agoraCall.isMuted}
+                    isVideoEnabled={agoraCall.isVideoEnabled}
+                    isSpeakerOn={agoraCall.isSpeakerOn}
+                    remoteUsers={agoraCall.remoteUsers}
+                    callDuration={agoraCall.callDuration}
+                    error={agoraCall.error || callError}
+                    peerName={activePeerName}
+                    peerAvatar={getAvatarUrl(activePeerId) || undefined}
+                    selfAvatar={getAvatarUrl(userId) || undefined}
+                    engine={agoraCall.engine}
+                    onAnswer={() => {}}
+                    onDecline={() => {}}
+                    onHangup={handleEndCall}
+                    onToggleMute={agoraCall.toggleMute}
+                    onToggleVideo={agoraCall.toggleVideo}
+                    onToggleSpeaker={agoraCall.toggleSpeaker}
+                    onSwitchCamera={agoraCall.switchCamera}
+                />
+            )}
+
+            {/* Incoming Call Modal */}
+            {incomingCall && !isCallModalVisible && (
+                <Modal visible={true} transparent animationType="fade">
+                    <View style={styles.callModalOverlay}>
+                        <TouchableOpacity style={styles.callModalBackdrop} activeOpacity={1} onPress={() => handleDeclineCall(incomingCall.callId)} />
+                        <View style={styles.callModalCard}>
+                            <View style={styles.callModalHeader}>
+                                <UserAvatar
+                                    uri={getAvatarUrl(incomingCall.callerId)}
+                                    name={buildName(incomingCall.callerId, friendUsers[incomingCall.callerId])}
+                                    style={styles.callModalAvatar}
+                                />
+                                <View style={styles.callModalInfo}>
+                                    <Text style={styles.callModalName}>
+                                        {buildName(incomingCall.callerId, friendUsers[incomingCall.callerId])}
+                                    </Text>
+                                    <View style={styles.callModalType}>
+                                        <MaterialIcons
+                                            name={incomingCall.callType === 'video' ? 'videocam' : 'phone'}
+                                            size={16}
+                                            color={colors.textMuted}
+                                        />
+                                        <Text style={styles.callModalTypeText}>
+                                            Incoming {incomingCall.callType === 'video' ? 'Video' : 'Audio'} Call
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+                            <View style={styles.callModalActions}>
+                                <TouchableOpacity
+                                    style={styles.declineCallButton}
+                                    onPress={() => handleDeclineCall(incomingCall.callId)}
+                                >
+                                    <MaterialIcons name="call-end" size={20} color="#FFFFFF" />
+                                    <Text style={styles.declineCallText}>Decline</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.acceptCallButton}
+                                    onPress={() => handleAnswerCall(incomingCall.callId, incomingCall.callType)}
+                                >
+                                    <MaterialIcons name="call" size={20} color="#FFFFFF" />
+                                    <Text style={styles.acceptCallText}>Accept</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+            )}
         </SafeAreaView>
     );
 };
@@ -2595,6 +2703,91 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 15,
             fontWeight: '600',
             color: '#FFFFFF',
+        },
+        // Profile section styles (matching mobile DM view)
+        profileSection: {
+            alignItems: 'center',
+            paddingVertical: 24,
+            paddingHorizontal: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            marginBottom: 16,
+        },
+        profileAvatarWrap: {
+            width: 88,
+            height: 88,
+            borderRadius: 44,
+            borderWidth: 3,
+            borderColor: colors.primary,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 12,
+        },
+        profileAvatar: {
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+        },
+        profileName: {
+            fontSize: 20,
+            fontWeight: '700',
+            color: colors.text,
+            marginBottom: 4,
+        },
+        profileHandle: {
+            fontSize: 14,
+            color: colors.textMuted,
+            marginBottom: 12,
+        },
+        profileIntro: {
+            fontSize: 14,
+            color: colors.textMuted,
+            textAlign: 'center',
+            lineHeight: 20,
+            marginBottom: 12,
+        },
+        profileIntroName: {
+            fontWeight: '600',
+            color: colors.text,
+        },
+        forumCommon: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginBottom: 16,
+        },
+        forumCommonValue: {
+            fontWeight: '600',
+            color: colors.text,
+        },
+        profileActions: {
+            flexDirection: 'row',
+            gap: 12,
+        },
+        removeButton: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surfaceMuted,
+        },
+        removeButtonText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text,
+        },
+        blockButton: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: '#EF4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        },
+        blockButtonText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: '#EF4444',
         },
     });
 

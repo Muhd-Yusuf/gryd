@@ -3,6 +3,9 @@
  * Full-screen modal for voice/video calls using Agora Web SDK
  */
 
+// Debug log to track which file is being loaded
+console.log('[CallModal.web] Loading WEB implementation (CallModal.web.tsx)');
+
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
     StyleSheet,
@@ -13,7 +16,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../lib/theme';
-import { CallState, CallType, IncomingCall, CallSession } from '../hooks/useAgoraCall';
+import { CallState, CallType, IncomingCall, CallSession } from '../hooks';
 import UserAvatar from './UserAvatar';
 
 interface CallModalProps {

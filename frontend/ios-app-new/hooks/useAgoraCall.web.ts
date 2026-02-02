@@ -3,6 +3,9 @@
  * Uses Agora Web SDK for browser-based voice/video calls
  */
 
+// Debug log to track which file is being loaded
+console.log('[useAgoraCall.web] Loading WEB implementation (useAgoraCall.web.ts)');
+
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import AgoraRTC, {
     IAgoraRTCClient,
@@ -122,9 +125,11 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             });
 
             client.on('user-joined', (user: IAgoraRTCRemoteUser) => {
+                console.log('[Agora Web] user-joined event:', user.uid, 'current state:', callStateRef.current);
                 setRemoteUsers(prev => [...prev.filter(uid => uid !== user.uid), user.uid as number]);
-                // Transition from 'ringing' to 'connected' when the other user joins
-                if (callStateRef.current === 'ringing') {
+                // Transition from 'ringing' or 'connecting' to 'connected' when the other user joins
+                if (callStateRef.current === 'ringing' || callStateRef.current === 'connecting') {
+                    console.log('[Agora Web] Transitioning to connected state');
                     setCallState('connected');
                     startDurationTimerRef.current?.();
                 }
@@ -143,6 +148,10 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                     }
                     return newUsers;
                 });
+            });
+
+            client.on('connection-state-change', (curState: string, prevState: string, reason?: string) => {
+                console.log('[Agora Web] Connection state changed:', prevState, '->', curState, 'reason:', reason);
             });
 
             client.on('token-privilege-will-expire', async () => {
@@ -283,14 +292,18 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             const { audioTrack, videoTrack } = await createLocalTracks(type);
 
             // Join channel
+            console.log('[Agora Web] Joining channel:', channelName, 'with uid:', uid);
             await client.join(appId, channelName, token, uid);
+            console.log('[Agora Web] Joined channel successfully');
 
             // Publish tracks
             const tracksToPublish = [audioTrack];
             if (videoTrack) {
                 tracksToPublish.push(videoTrack);
             }
+            console.log('[Agora Web] Publishing tracks:', tracksToPublish.length);
             await client.publish(tracksToPublish);
+            console.log('[Agora Web] Tracks published successfully');
 
             setCurrentCall({
                 callId,
@@ -303,7 +316,18 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 duration: 0,
             });
 
+            console.log('[Agora Web] Call initiated, setting state to ringing');
             setCallState('ringing');
+
+            // Check if there are already remote users in the channel (they joined before us)
+            const existingRemoteUsers = client.remoteUsers || [];
+            if (existingRemoteUsers.length > 0) {
+                console.log('[Agora Web] Found existing remote users:', existingRemoteUsers.length);
+                setRemoteUsers(existingRemoteUsers.map(u => u.uid as number));
+                setCallState('connected');
+                startDurationTimer();
+            }
+
             return response.data;
         } catch (err: any) {
             console.error('[Agora Web] Start call failed:', err);
