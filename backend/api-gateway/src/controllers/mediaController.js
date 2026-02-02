@@ -774,9 +774,23 @@ const joinVoiceChannel = async (req, res) => {
             });
         }
 
-        // First participant becomes host/speaker, others are listeners
+        // Get channel state and participant map
         const channelState = voiceChannelState.get(channelId);
         const channelMap = voiceChannelParticipants.get(channelId);
+
+        // IMPORTANT: Remove any existing entries for this user (handles reconnects with new agoraUid)
+        let existingRole = null;
+        for (const [existingUid, participant] of channelMap.entries()) {
+            if (participant.userId === userId) {
+                existingRole = participant.role;
+                console.log(`[VoiceChannel] Removing stale entry for user ${userId} with old agoraUid ${existingUid}, role was: ${existingRole}`);
+                channelMap.delete(existingUid);
+                // Also clean up from speakers set if they were a speaker
+                channelState.speakers.delete(userId);
+            }
+        }
+
+        // Now check if this is the first participant (after cleanup)
         const isFirstParticipant = channelMap.size === 0;
 
         // Check if user is a subgrid admin (they auto-become speakers)
@@ -792,15 +806,17 @@ const joinVoiceChannel = async (req, res) => {
 
         // Determine role: host, speaker (admin), or listener
         // Priority:
-        // 1. If no host exists and user is admin -> become host
-        // 2. If no host exists and first participant -> become host
-        // 3. If host exists and user is admin -> become speaker
-        // 4. Otherwise -> listener
+        // 1. If user was previously the host and is rejoining -> become host again
+        // 2. If no host exists and user is admin -> become host
+        // 3. If no host exists and first participant -> become host
+        // 4. If host exists and user is admin -> become speaker
+        // 5. Otherwise -> listener
         let role = 'listener';
 
         // Check if host actually exists in participants (may have left without cleanup)
         let hostStillInChannel = false;
         if (channelState.hostId) {
+            // Check if host is in the remaining participants (after our cleanup)
             for (const [, participant] of channelMap.entries()) {
                 if (participant.userId === channelState.hostId) {
                     hostStillInChannel = true;
@@ -814,9 +830,18 @@ const joinVoiceChannel = async (req, res) => {
             }
         }
 
+        // Special case: if this user WAS the host and is rejoining, restore host role
+        const wasHost = existingRole === 'host' || channelState.hostId === userId;
+
         const hasHost = channelState.hostId !== null && hostStillInChannel;
 
-        if (!hasHost && isAdmin) {
+        if (wasHost) {
+            // User was previously host and is rejoining - restore host role
+            role = 'host';
+            channelState.hostId = userId;
+            channelState.speakers.add(userId);
+            console.log(`[VoiceChannel] Restored host role for returning user ${userId}`);
+        } else if (!hasHost && isAdmin) {
             // Admin joins when no host - they become host
             role = 'host';
             channelState.hostId = userId;
@@ -833,6 +858,8 @@ const joinVoiceChannel = async (req, res) => {
             role = 'speaker';
             channelState.speakers.add(userId);
             console.log(`[VoiceChannel] Admin ${userId} became speaker (host exists: ${channelState.hostId})`);
+        } else {
+            console.log(`[VoiceChannel] User ${userId} became listener (hasHost: ${hasHost}, isAdmin: ${isAdmin}, isFirst: ${isFirstParticipant})`);
         }
 
         // Add participant with extended data
@@ -846,11 +873,12 @@ const joinVoiceChannel = async (req, res) => {
             isHandRaised: false,
         });
 
-        console.log(`[VoiceChannel] User ${userId} joined channel ${channelId} with agoraUid ${agoraUid}`);
+        console.log(`[VoiceChannel] User ${userId} joined channel ${channelId} with agoraUid ${agoraUid}, role: ${role}`);
+        console.log(`[VoiceChannel] Channel state: hostId=${channelState.hostId}, speakers=${Array.from(channelState.speakers).join(',')}, participantCount=${channelMap.size}`);
 
         res.json({
             success: true,
-            data: { channelId, agoraUid, participantCount: channelMap.size },
+            data: { channelId, agoraUid, participantCount: channelMap.size, role },
         });
     } catch (error) {
         console.error('Join voice channel error:', error);
