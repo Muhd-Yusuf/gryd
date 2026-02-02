@@ -835,30 +835,42 @@ const joinVoiceChannel = async (req, res) => {
 
         const hasHost = channelState.hostId !== null && hostStillInChannel;
 
-        if (wasHost) {
-            // User was previously host and is rejoining - restore host role
+        // CU Admin (subgrid_admin) should ALWAYS be the host
+        // If admin joins, they take over host role from any non-admin
+        if (isAdmin) {
+            // Admin ALWAYS becomes host - this is the CU Admin
+            role = 'host';
+
+            // If there was a previous non-admin host, demote them to speaker
+            if (hasHost && channelState.hostId !== userId) {
+                const previousHostId = channelState.hostId;
+                // Find and update the previous host's role
+                for (const [, participant] of channelMap.entries()) {
+                    if (participant.userId === previousHostId) {
+                        participant.role = 'speaker';
+                        console.log(`[VoiceChannel] Demoted previous host ${previousHostId} to speaker`);
+                        break;
+                    }
+                }
+            }
+
+            channelState.hostId = userId;
+            channelState.speakers.add(userId);
+            console.log(`[VoiceChannel] Admin ${userId} became HOST (admin always gets host)`);
+        } else if (wasHost) {
+            // Non-admin user was previously host and is rejoining - restore host role only if no admin is present
             role = 'host';
             channelState.hostId = userId;
             channelState.speakers.add(userId);
             console.log(`[VoiceChannel] Restored host role for returning user ${userId}`);
-        } else if (!hasHost && isAdmin) {
-            // Admin joins when no host - they become host
-            role = 'host';
-            channelState.hostId = userId;
-            channelState.speakers.add(userId);
-            console.log(`[VoiceChannel] Admin ${userId} became host (no existing host)`);
         } else if (!hasHost && isFirstParticipant) {
-            // First non-admin participant becomes host if no host
+            // First non-admin participant becomes host if no host (temporary until admin joins)
             role = 'host';
             channelState.hostId = userId;
             channelState.speakers.add(userId);
-            console.log(`[VoiceChannel] First participant ${userId} became host`);
-        } else if (isAdmin) {
-            // Admin joins when host exists - they become speaker
-            role = 'speaker';
-            channelState.speakers.add(userId);
-            console.log(`[VoiceChannel] Admin ${userId} became speaker (host exists: ${channelState.hostId})`);
+            console.log(`[VoiceChannel] First participant ${userId} became temporary host (until admin joins)`);
         } else {
+            // Regular member joins when host exists - they become listener
             console.log(`[VoiceChannel] User ${userId} became listener (hasHost: ${hasHost}, isAdmin: ${isAdmin}, isFirst: ${isFirstParticipant})`);
         }
 
