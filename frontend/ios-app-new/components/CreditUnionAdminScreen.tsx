@@ -263,8 +263,7 @@ const CreditUnionAdminScreen = () => {
     const [initialLoading, setInitialLoading] = useState(true);
 
     // UI State
-    const [textChannelsOpen, setTextChannelsOpen] = useState(true);
-    const [voiceChannelsOpen, setVoiceChannelsOpen] = useState(true);
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
     const [serverMenuOpen, setServerMenuOpen] = useState(false);
     const [messageDraft, setMessageDraft] = useState('');
     const [showMembersSidebar, setShowMembersSidebar] = useState(false);
@@ -320,10 +319,12 @@ const CreditUnionAdminScreen = () => {
     const [newChannelName, setNewChannelName] = useState('');
     const [newChannelType, setNewChannelType] = useState<'text' | 'voice'>('text');
     const [isPrivateChannel, setIsPrivateChannel] = useState(false);
+    const [newChannelCategoryId, setNewChannelCategoryId] = useState('');
     const [editChannelId, setEditChannelId] = useState('');
     const [editChannelName, setEditChannelName] = useState('');
     const [editChannelType, setEditChannelType] = useState<'text' | 'voice'>('text');
     const [editChannelPrivate, setEditChannelPrivate] = useState(false);
+    const [editChannelCategoryId, setEditChannelCategoryId] = useState('');
     const [permissionChannelId, setPermissionChannelId] = useState('');
     const [channelPermissions, setChannelPermissions] = useState({
         members: true,
@@ -331,6 +332,11 @@ const CreditUnionAdminScreen = () => {
         serverAdmin: true,
         serverOwner: true,
     });
+    const [channelMembersModalOpen, setChannelMembersModalOpen] = useState(false);
+    const [channelMembers, setChannelMembers] = useState<any[]>([]);
+    const [channelMembersLoading, setChannelMembersLoading] = useState(false);
+    const [addMemberSearchQuery, setAddMemberSearchQuery] = useState('');
+    const [managingChannelId, setManagingChannelId] = useState<string | null>(null);
     const [newCategoryName, setNewCategoryName] = useState('');
     const [isPrivateCategory, setIsPrivateCategory] = useState(false);
     const [newEventTitle, setNewEventTitle] = useState('');
@@ -730,6 +736,52 @@ const CreditUnionAdminScreen = () => {
     const textChannels = channels.filter(c => c.type !== 'voice' && c.type !== 'announcement');
     const voiceChannels = channels.filter(c => c.type === 'voice');
 
+    // Group channels by category for the sidebar
+    const adminGroupedChannels = useMemo(() => {
+        type AdminChannelGroup = {
+            groupId: string;
+            groupName: string;
+            order: number;
+            channels: Channel[];
+        };
+        const categoryMap = new Map<string, Category>();
+        categories.forEach((cat) => categoryMap.set(cat._id, cat));
+
+        const groupMap = new Map<string, Channel[]>();
+        channels.forEach((channel) => {
+            const catId = channel.categoryId || 'null';
+            if (!groupMap.has(catId)) {
+                groupMap.set(catId, []);
+            }
+            groupMap.get(catId)!.push(channel);
+        });
+
+        const groups: AdminChannelGroup[] = [];
+        const uncategorized = groupMap.get('null') || [];
+        if (uncategorized.length > 0) {
+            const uncatText = uncategorized.filter((c) => c.type !== 'voice');
+            const uncatVoice = uncategorized.filter((c) => c.type === 'voice');
+            if (uncatText.length > 0) {
+                groups.push({ groupId: '__uncategorized_text', groupName: 'Text Channels', order: -2, channels: uncatText });
+            }
+            if (uncatVoice.length > 0) {
+                groups.push({ groupId: '__uncategorized_voice', groupName: 'Voice Channels', order: -1, channels: uncatVoice });
+            }
+        }
+        groupMap.forEach((chans, catId) => {
+            if (catId === 'null') return;
+            const cat = categoryMap.get(catId);
+            groups.push({
+                groupId: catId,
+                groupName: cat?.name || 'Unknown',
+                order: cat?.order ?? 999,
+                channels: chans,
+            });
+        });
+        groups.sort((a, b) => a.order - b.order);
+        return groups;
+    }, [channels, categories]);
+
     // Check if server is empty (no channels)
     const isServerEmpty = channels.length === 0;
 
@@ -1049,6 +1101,7 @@ const CreditUnionAdminScreen = () => {
                 name: channelName,
                 type: newChannelType,
                 visibility: isPrivateChannel ? 'admin' : 'public',
+                categoryId: newChannelCategoryId || null,
             });
             const response = await communityGet(`/subgrids/${activeSubgridId}/channels`);
             setChannels(response?.data || []);
@@ -1056,6 +1109,7 @@ const CreditUnionAdminScreen = () => {
             setNewChannelName('');
             setNewChannelType('text');
             setIsPrivateChannel(false);
+            setNewChannelCategoryId('');
             showSuccessModal('Channel Created', `Channel "${channelName}" has been created successfully!`);
         } catch (err: any) {
             setError(err.message || 'Failed to create channel.');
@@ -1072,6 +1126,7 @@ const CreditUnionAdminScreen = () => {
         setEditChannelName(channel.name || '');
         setEditChannelType(channel.type === 'voice' ? 'voice' : 'text');
         setEditChannelPrivate(channel.visibility === 'admin');
+        setEditChannelCategoryId(channel.categoryId || '');
         setEditChannelModalOpen(true);
         setChannelSettingsModalOpen(false);
     };
@@ -1090,6 +1145,7 @@ const CreditUnionAdminScreen = () => {
                 name: channelName,
                 type: editChannelType,
                 visibility: editChannelPrivate ? 'admin' : 'public',
+                categoryId: editChannelCategoryId || null,
             });
             const response = await communityGet(`/subgrids/${activeSubgridId}/channels`);
             setChannels(response?.data || []);
@@ -1141,6 +1197,54 @@ const CreditUnionAdminScreen = () => {
 
     const toggleChannelPermission = (key: ChannelPermissionKey) => {
         setChannelPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const openChannelMembersModal = async (channel: Channel) => {
+        setManagingChannelId(channel._id);
+        setChannelMembersModalOpen(true);
+        setChannelSettingsModalOpen(false);
+        setAddMemberSearchQuery('');
+        setChannelMembersLoading(true);
+        try {
+            const response = await communityGet(`/subgrids/${activeSubgridId}/channels/${channel._id}/members`);
+            setChannelMembers(response?.data || []);
+        } catch (err) {
+            console.error('Failed to load channel members:', err);
+            setChannelMembers([]);
+        } finally {
+            setChannelMembersLoading(false);
+        }
+    };
+
+    const handleAddChannelMember = async (userId: string) => {
+        if (!managingChannelId || !activeSubgridId) return;
+        try {
+            await communityPost(`/subgrids/${activeSubgridId}/channels/${managingChannelId}/members`, {
+                userIds: [userId],
+            });
+            const response = await communityGet(`/subgrids/${activeSubgridId}/channels/${managingChannelId}/members`);
+            setChannelMembers(response?.data || []);
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to add member');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to add member');
+            }
+        }
+    };
+
+    const handleRemoveChannelMember = async (userId: string) => {
+        if (!managingChannelId || !activeSubgridId) return;
+        try {
+            await communityDelete(`/subgrids/${activeSubgridId}/channels/${managingChannelId}/members/${userId}`);
+            setChannelMembers(prev => prev.filter(m => (m._id || m.userId) !== userId));
+        } catch (err: any) {
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to remove member');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to remove member');
+            }
+        }
     };
 
     const toggleEngagementSetting = (key: EngagementSettingKey) => {
@@ -1346,9 +1450,10 @@ const CreditUnionAdminScreen = () => {
 
     const handleCreateCategory = async () => {
         if (!newCategoryName.trim() || !activeSubgridId) return;
+        const categoryName = newCategoryName.trim();
         try {
             await communityPost(`/subgrids/${activeSubgridId}/categories`, {
-                name: newCategoryName.trim(),
+                name: categoryName,
                 visibility: isPrivateCategory ? 'private' : 'public',
             });
             const response = await communityGet(`/subgrids/${activeSubgridId}/categories`);
@@ -1356,8 +1461,38 @@ const CreditUnionAdminScreen = () => {
             setCreateCategoryModalOpen(false);
             setNewCategoryName('');
             setIsPrivateCategory(false);
+            showSuccessModal('Category Created', `Category "${categoryName}" has been created successfully!`);
         } catch (err: any) {
             setError(err.message || 'Failed to create category.');
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to create category.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to create category.');
+            }
+        }
+    };
+
+    const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
+        const confirmDelete = Platform.OS === 'web'
+            ? window.confirm(`Delete category "${categoryName}"? Channels in this category will become uncategorized.`)
+            : true;
+        if (!confirmDelete) return;
+        try {
+            await communityDelete(`/subgrids/${activeSubgridId}/categories/${categoryId}`);
+            const [catRes, chanRes] = await Promise.all([
+                communityGet(`/subgrids/${activeSubgridId}/categories`),
+                communityGet(`/subgrids/${activeSubgridId}/channels`),
+            ]);
+            setCategories(catRes?.data || []);
+            setChannels(chanRes?.data || []);
+            showSuccessModal('Category Deleted', `Category "${categoryName}" has been deleted. Its channels are now uncategorized.`);
+        } catch (err: any) {
+            setError(err.message || 'Failed to delete category.');
+            if (Platform.OS === 'web') {
+                window.alert(err.message || 'Failed to delete category.');
+            } else {
+                Alert.alert('Error', err.message || 'Failed to delete category.');
+            }
         }
     };
 
@@ -2336,124 +2471,103 @@ const CreditUnionAdminScreen = () => {
                             </TouchableOpacity>
                         </TouchableOpacity>
 
-                        {/* Text Channels */}
-                        <View style={styles.channelGroup}>
-                            <View style={styles.channelGroupHeader}>
-                                <TouchableOpacity
-                                    style={styles.channelGroupToggle}
-                                    onPress={() => setTextChannelsOpen(!textChannelsOpen)}
-                                >
-                                    <MaterialIcons
-                                        name="expand-more"
-                                        size={12}
-                                        color={colors.textMuted}
-                                        style={!textChannelsOpen ? { transform: [{ rotate: '-90deg' }] } : undefined}
-                                    />
-                                    <Text style={styles.channelGroupTitle}>Text Channels</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={() => {
-                                    setNewChannelType('text');
-                                    setCreateChannelModalOpen(true);
-                                }}>
-                                    <MaterialIcons name="add" size={16} color={colors.textMuted} />
-                                </TouchableOpacity>
-                            </View>
-                            {textChannelsOpen && textChannels.map((channel) => {
-                                const isActive = channel._id === activeChannelId;
-                                return (
-                                    <TouchableOpacity
-                                        key={channel._id}
-                                        style={[styles.channelItem, isActive && styles.channelItemActive]}
-                                        onPress={() => {
-                                            setActiveChannelId(channel._id);
-                                        }}
-                                    >
-                                        <MaterialIcons name="tag" size={16} color={isActive ? colors.text : colors.textMuted} />
-                                        <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
-                                            <Text style={[styles.channelName, isActive && styles.channelNameActive]} numberOfLines={1} ellipsizeMode="tail">
-                                                {channel.name || 'untitled'}
-                                            </Text>
-                                        </View>
-                                        {isActive && (
-                                            <View style={styles.channelActions}>
-                                                <TouchableOpacity
-                                                    onPress={(e) => { e.stopPropagation(); setInviteModalOpen(true); }}
-                                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                >
-                                                    <MaterialIcons name="person-add" size={14} color={colors.textMuted} />
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    onPress={(e) => {
-                                                        e.stopPropagation();
-                                                        openChannelSettingsModal(channel);
-                                                    }}
-                                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                >
-                                                    <MaterialIcons name="settings" size={14} color={colors.textMuted} />
-                                                </TouchableOpacity>
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            })}
-                            {textChannelsOpen && textChannels.length === 0 && (
-                                <Text style={styles.emptyText}>No text channels</Text>
-                            )}
-                        </View>
-
-                        {/* Voice Channels */}
-                        <View style={styles.channelGroup}>
-                            <View style={styles.channelGroupHeader}>
-                                <TouchableOpacity
-                                    style={styles.channelGroupToggle}
-                                    onPress={() => setVoiceChannelsOpen(!voiceChannelsOpen)}
-                                >
-                                    <MaterialIcons
-                                        name="expand-more"
-                                        size={12}
-                                        color={colors.textMuted}
-                                        style={!voiceChannelsOpen ? { transform: [{ rotate: '-90deg' }] } : undefined}
-                                    />
-                                    <Text style={styles.channelGroupTitle}>Voice Channels</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={() => {
-                                    setNewChannelType('voice');
-                                    setCreateChannelModalOpen(true);
-                                }}>
-                                    <MaterialIcons name="add" size={16} color={colors.textMuted} />
-                                </TouchableOpacity>
-                            </View>
-                            {voiceChannelsOpen && voiceChannels.map((channel) => (
-                                <TouchableOpacity
-                                    key={channel._id}
-                                    style={styles.channelItem}
-                                    onPress={() => {
-                                        handleVoiceChannelClick(channel);
-                                    }}
-                                >
-                                    <MaterialIcons name="headphones" size={16} color={colors.textMuted} />
-                                    <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
-                                        <Text style={styles.channelName} numberOfLines={1} ellipsizeMode="tail">
-                                            {channel.name || 'untitled'}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.channelActions}>
+                        {/* Channel groups (categories + uncategorized) */}
+                        {adminGroupedChannels.map((group) => {
+                            const isOpen = !collapsedGroups[group.groupId];
+                            return (
+                                <View key={group.groupId} style={styles.channelGroup}>
+                                    <View style={styles.channelGroupHeader}>
                                         <TouchableOpacity
-                                            onPress={(e) => {
-                                                e.stopPropagation();
-                                                openChannelSettingsModal(channel);
-                                            }}
-                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                            style={styles.channelGroupToggle}
+                                            onPress={() => setCollapsedGroups((prev) => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}
                                         >
-                                            <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                            <MaterialIcons
+                                                name="expand-more"
+                                                size={12}
+                                                color={colors.textMuted}
+                                                style={!isOpen ? { transform: [{ rotate: '-90deg' }] } : undefined}
+                                            />
+                                            <Text style={styles.channelGroupTitle}>{group.groupName}</Text>
                                         </TouchableOpacity>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                            {!group.groupId.startsWith('__') && (
+                                                <TouchableOpacity onPress={() => handleDeleteCategory(group.groupId, group.groupName)}>
+                                                    <MaterialIcons name="delete-outline" size={14} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                            )}
+                                            <TouchableOpacity onPress={() => {
+                                                setCreateChannelModalOpen(true);
+                                            }}>
+                                                <MaterialIcons name="add" size={16} color={colors.textMuted} />
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
-                                </TouchableOpacity>
-                            ))}
-                            {voiceChannelsOpen && voiceChannels.length === 0 && (
-                                <Text style={styles.emptyText}>No voice channels</Text>
-                            )}
-                        </View>
+                                    {isOpen && group.channels.map((channel) => {
+                                        const isActive = channel._id === activeChannelId;
+                                        const isVoice = channel.type === 'voice';
+                                        return (
+                                            <TouchableOpacity
+                                                key={channel._id}
+                                                style={[styles.channelItem, isActive && styles.channelItemActive]}
+                                                onPress={() => {
+                                                    if (isVoice) {
+                                                        handleVoiceChannelClick(channel);
+                                                    } else {
+                                                        setActiveChannelId(channel._id);
+                                                    }
+                                                }}
+                                            >
+                                                <MaterialIcons
+                                                    name={isVoice ? 'headphones' : (channel.visibility === 'admin' ? 'lock' : 'tag')}
+                                                    size={16}
+                                                    color={isActive ? colors.text : colors.textMuted}
+                                                />
+                                                <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
+                                                    <Text style={[styles.channelName, isActive && styles.channelNameActive]} numberOfLines={1} ellipsizeMode="tail">
+                                                        {channel.name || 'untitled'}
+                                                    </Text>
+                                                </View>
+                                                {isActive && !isVoice && (
+                                                    <View style={styles.channelActions}>
+                                                        <TouchableOpacity
+                                                            onPress={(e) => { e.stopPropagation(); setInviteModalOpen(true); }}
+                                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                        >
+                                                            <MaterialIcons name="person-add" size={14} color={colors.textMuted} />
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity
+                                                            onPress={(e) => {
+                                                                e.stopPropagation();
+                                                                openChannelSettingsModal(channel);
+                                                            }}
+                                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                        >
+                                                            <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                )}
+                                                {isVoice && (
+                                                    <View style={styles.channelActions}>
+                                                        <TouchableOpacity
+                                                            onPress={(e) => {
+                                                                e.stopPropagation();
+                                                                openChannelSettingsModal(channel);
+                                                            }}
+                                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                        >
+                                                            <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                )}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                    {isOpen && group.channels.length === 0 && (
+                                        <Text style={styles.emptyText}>No channels</Text>
+                                    )}
+                                </View>
+                            );
+                        })}
                     </ScrollView>
 
                     {/* User Profile */}
@@ -2630,7 +2744,7 @@ const CreditUnionAdminScreen = () => {
                     {/* Channel Header */}
                     <View style={styles.contentHeader}>
                         <View style={styles.contentHeaderLeft}>
-                            <MaterialIcons name="tag" size={18} color={colors.textMuted} />
+                            <MaterialIcons name={activeChannel?.visibility === 'admin' ? 'lock' : 'tag'} size={18} color={colors.textMuted} />
                             <Text style={styles.contentTitle}>{activeChannel?.name || 'general'}</Text>
                         </View>
                         <View style={styles.contentHeaderRight}>
@@ -2697,10 +2811,10 @@ const CreditUnionAdminScreen = () => {
                                 {feedItems.length === 0 && !feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
                                         <View style={styles.welcomeIcon}>
-                                            <MaterialIcons name="tag" size={32} color={colors.textMuted} />
+                                            <MaterialIcons name={activeChannel?.visibility === 'admin' ? 'lock' : 'tag'} size={32} color={colors.textMuted} />
                                         </View>
-                                        <Text style={styles.welcomeTitle}>Welcome to {activeChannel?.name || 'general'}</Text>
-                                        <Text style={styles.welcomeSubtitle}>This is the start of the #{activeChannel?.name || 'general'} channel.</Text>
+                                        <Text style={styles.welcomeTitle}>Welcome to {activeChannel?.visibility === 'admin' ? '' : '#'}{activeChannel?.name || 'general'}</Text>
+                                        <Text style={styles.welcomeSubtitle}>This is the start of the {activeChannel?.visibility === 'admin' ? '' : '#'}{activeChannel?.name || 'general'} channel.</Text>
                                         <TouchableOpacity
                                             style={styles.editChannelBtn}
                                             onPress={() => {
@@ -3113,6 +3227,43 @@ const CreditUnionAdminScreen = () => {
                             </TouchableOpacity>
                         </View>
 
+                        {categories.length > 0 && (
+                            <>
+                                <Text style={styles.modalLabel}>CATEGORY (OPTIONAL)</Text>
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                    <TouchableOpacity
+                                        style={{
+                                            paddingHorizontal: 14,
+                                            paddingVertical: 7,
+                                            borderRadius: 16,
+                                            borderWidth: 1,
+                                            borderColor: !newChannelCategoryId ? colors.primary : colors.border,
+                                            backgroundColor: !newChannelCategoryId ? colors.primary + '18' : 'transparent',
+                                        }}
+                                        onPress={() => setNewChannelCategoryId('')}
+                                    >
+                                        <Text style={{ fontSize: 13, color: !newChannelCategoryId ? colors.primary : colors.textMuted }}>None</Text>
+                                    </TouchableOpacity>
+                                    {categories.map((cat) => (
+                                        <TouchableOpacity
+                                            key={cat._id}
+                                            style={{
+                                                paddingHorizontal: 14,
+                                                paddingVertical: 7,
+                                                borderRadius: 16,
+                                                borderWidth: 1,
+                                                borderColor: newChannelCategoryId === cat._id ? colors.primary : colors.border,
+                                                backgroundColor: newChannelCategoryId === cat._id ? colors.primary + '18' : 'transparent',
+                                            }}
+                                            onPress={() => setNewChannelCategoryId(cat._id)}
+                                        >
+                                            <Text style={{ fontSize: 13, color: newChannelCategoryId === cat._id ? colors.primary : colors.textMuted }}>{cat.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </>
+                        )}
+
                         <View style={styles.modalActions}>
                             <TouchableOpacity style={styles.cancelBtn} onPress={() => setCreateChannelModalOpen(false)}>
                                 <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -3194,6 +3345,43 @@ const CreditUnionAdminScreen = () => {
                             </TouchableOpacity>
                         </View>
 
+                        {categories.length > 0 && (
+                            <>
+                                <Text style={styles.modalLabel}>CATEGORY (OPTIONAL)</Text>
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                    <TouchableOpacity
+                                        style={{
+                                            paddingHorizontal: 14,
+                                            paddingVertical: 7,
+                                            borderRadius: 16,
+                                            borderWidth: 1,
+                                            borderColor: !editChannelCategoryId ? colors.primary : colors.border,
+                                            backgroundColor: !editChannelCategoryId ? colors.primary + '18' : 'transparent',
+                                        }}
+                                        onPress={() => setEditChannelCategoryId('')}
+                                    >
+                                        <Text style={{ fontSize: 13, color: !editChannelCategoryId ? colors.primary : colors.textMuted }}>None</Text>
+                                    </TouchableOpacity>
+                                    {categories.map((cat) => (
+                                        <TouchableOpacity
+                                            key={cat._id}
+                                            style={{
+                                                paddingHorizontal: 14,
+                                                paddingVertical: 7,
+                                                borderRadius: 16,
+                                                borderWidth: 1,
+                                                borderColor: editChannelCategoryId === cat._id ? colors.primary : colors.border,
+                                                backgroundColor: editChannelCategoryId === cat._id ? colors.primary + '18' : 'transparent',
+                                            }}
+                                            onPress={() => setEditChannelCategoryId(cat._id)}
+                                        >
+                                            <Text style={{ fontSize: 13, color: editChannelCategoryId === cat._id ? colors.primary : colors.textMuted }}>{cat.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </>
+                        )}
+
                         <View style={styles.modalActions}>
                             <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditChannelModalOpen(false)}>
                                 <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -3226,7 +3414,7 @@ const CreditUnionAdminScreen = () => {
                             }}
                         >
                             <MaterialIcons name="edit" size={18} color="#9CA3AF" />
-                            <Text style={styles.channelSettingsText}>Rename Channel</Text>
+                            <Text style={styles.channelSettingsText}>Edit Channel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.channelSettingsItem}
@@ -3240,6 +3428,17 @@ const CreditUnionAdminScreen = () => {
                             <MaterialIcons name="delete" size={18} color="#EF4444" />
                             <Text style={[styles.channelSettingsText, { color: '#EF4444' }]}>Delete Channel</Text>
                         </TouchableOpacity>
+                        {selectedSettingsChannel?.visibility === 'admin' && (
+                            <TouchableOpacity
+                                style={styles.channelSettingsItem}
+                                onPress={() => {
+                                    if (selectedSettingsChannel) openChannelMembersModal(selectedSettingsChannel);
+                                }}
+                            >
+                                <MaterialIcons name="people" size={18} color="#9CA3AF" />
+                                <Text style={styles.channelSettingsText}>Manage Members</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity
                             style={styles.channelSettingsItem}
                             onPress={() => {
@@ -3294,6 +3493,108 @@ const CreditUnionAdminScreen = () => {
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.createBtnBlack} onPress={handleSaveChannelPermissions}>
                                 <Text style={styles.createBtnBlackText}>Save</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Channel Members Modal */}
+            <Modal visible={channelMembersModalOpen} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <TouchableOpacity style={styles.modalClose} onPress={() => setChannelMembersModalOpen(false)}>
+                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>Manage Channel Members</Text>
+                        <Text style={styles.modalSubtitle}>Add or remove members who can access this private channel</Text>
+
+                        <Text style={styles.modalLabel}>ADD MEMBER</Text>
+                        <View style={styles.inputRow}>
+                            <MaterialIcons name="search" size={18} color={colors.textMuted} />
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="Search members..."
+                                placeholderTextColor={colors.textSubtle}
+                                value={addMemberSearchQuery}
+                                onChangeText={setAddMemberSearchQuery}
+                            />
+                        </View>
+
+                        <ScrollView style={{ maxHeight: 150, marginBottom: 12 }} showsVerticalScrollIndicator={false}>
+                            {members
+                                .filter((m: any) => {
+                                    const memberId = m.userId || m.user?._id || m._id;
+                                    const isAlreadyMember = channelMembers.some((cm: any) => String(cm._id || cm.userId) === String(memberId));
+                                    if (isAlreadyMember) return false;
+                                    if (!addMemberSearchQuery.trim()) return true;
+                                    const name = getMemberName(m).toLowerCase();
+                                    const email = (m.email || m.user?.email || '').toLowerCase();
+                                    return name.includes(addMemberSearchQuery.toLowerCase()) || email.includes(addMemberSearchQuery.toLowerCase());
+                                })
+                                .slice(0, 20)
+                                .map((m: any) => {
+                                    const memberId = m.userId || m.user?._id || m._id;
+                                    const memberRole = m.role || m.user?.role || 'member';
+                                    return (
+                                        <TouchableOpacity
+                                            key={memberId}
+                                            style={styles.permissionRow}
+                                            onPress={() => handleAddChannelMember(memberId)}
+                                        >
+                                            <MaterialIcons name="person-add" size={16} color={colors.primary} />
+                                            <View style={{ flex: 1, marginLeft: 8 }}>
+                                                <Text style={styles.permissionLabel}>{getMemberName(m)}</Text>
+                                                {memberRole !== 'member' && (
+                                                    <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>
+                                                        {memberRole === 'subgrid_admin' ? 'CU Admin' : memberRole === 'stakeholder' ? 'Stakeholder' : memberRole}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            {members.filter((m: any) => {
+                                const memberId = m.userId || m.user?._id || m._id;
+                                return !channelMembers.some((cm: any) => String(cm._id || cm.userId) === String(memberId));
+                            }).length === 0 && (
+                                <Text style={styles.emptyText}>All members have been added</Text>
+                            )}
+                        </ScrollView>
+
+                        <Text style={styles.modalLabel}>CURRENT MEMBERS ({channelMembers.length})</Text>
+                        <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+                            {channelMembersLoading ? (
+                                <Text style={styles.emptyText}>Loading...</Text>
+                            ) : channelMembers.length === 0 ? (
+                                <Text style={styles.emptyText}>No members added yet</Text>
+                            ) : (
+                                channelMembers.map((member: any) => {
+                                    const memberId = member._id || member.userId;
+                                    const name = [member.firstName, member.lastName].filter(Boolean).join(' ') || member.email || member.username || 'Unknown';
+                                    const role = member.memberRole || 'member';
+                                    return (
+                                        <View key={memberId} style={[styles.permissionRow, { justifyContent: 'space-between' }]}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.permissionLabel}>{name}</Text>
+                                                {role !== 'member' && (
+                                                    <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>
+                                                        {role === 'subgrid_admin' ? 'CU Admin' : role === 'stakeholder' ? 'Stakeholder' : role}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                            <TouchableOpacity onPress={() => handleRemoveChannelMember(memberId)}>
+                                                <MaterialIcons name="remove-circle" size={20} color="#EF4444" />
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })
+                            )}
+                        </ScrollView>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.createBtn} onPress={() => setChannelMembersModalOpen(false)}>
+                                <Text style={styles.createBtnText}>Done</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

@@ -12,7 +12,7 @@ const UserPresence = require('../models/UserPresence');
 const { getTenantConnection } = require('../services/tenantDb');
 const { defineModels } = require('../services/tenantModels');
 const { generateInviteToken, hashInviteToken, signEmbedToken } = require('../utils/tokenUtils');
-const { sendInviteEmail } = require('../services/emailService');
+const { sendInviteEmail, sendChannelInviteEmail } = require('../services/emailService');
 const websocketService = require('../services/websocketService');
 const logger = require('../utils/logger');
 const {
@@ -1351,13 +1351,40 @@ exports.listChannels = async (req, res) => {
         if (!includeArchived) {
             filter.status = 'active';
         }
-        if (visibility) {
-            filter.visibility = visibility;
-        }
         if (req.embed?.channelId) {
             filter._id = req.embed.channelId;
         }
-        const channels = await Channel.find(filter).sort({ createdAt: 1 });
+
+        // Determine user identity and role for private channel filtering
+        const userId = req.user?.id || req.embed?.userId;
+        let isAdmin = false;
+        if (req.user?.id) {
+            const membership = await getSubgridMembership(subgrid.tenantId, subgridId, req.user.id);
+            isAdmin = membership && ['subgrid_admin'].includes(membership.role);
+        }
+
+        let channels;
+        if (isAdmin || req.embed?.role === 'subgrid_admin') {
+            // Admins see all channels
+            if (visibility) {
+                filter.visibility = visibility;
+            }
+            channels = await Channel.find(filter).sort({ createdAt: 1 });
+        } else if (visibility) {
+            // Explicit visibility filter requested
+            filter.visibility = visibility;
+            channels = await Channel.find(filter).sort({ createdAt: 1 });
+        } else {
+            // Non-admins: see public channels + private channels they're members of
+            channels = await Channel.find({
+                ...filter,
+                $or: [
+                    { visibility: 'public' },
+                    { visibility: 'admin', allowedMembers: String(userId || '') },
+                ],
+            }).sort({ createdAt: 1 });
+        }
+
         return res.status(200).json({ success: true, data: channels });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to list channels', error: error.message });
@@ -1367,7 +1394,7 @@ exports.listChannels = async (req, res) => {
 exports.createChannel = async (req, res) => {
     try {
         const { subgridId } = req.params;
-        const { name, type, visibility } = req.body;
+        const { name, type, visibility, categoryId } = req.body;
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
@@ -1379,12 +1406,21 @@ exports.createChannel = async (req, res) => {
         }
 
         const { Channel } = await getTenantModels(subgrid);
-        const channel = await Channel.create({
+        const channelData = {
             subgridId: String(subgridId),
             name,
             type: type || 'text',
             visibility: visibility || 'public',
-        });
+            categoryId: categoryId || null,
+        };
+
+        // If private channel, auto-add the creating admin
+        if (visibility === 'admin' && req.user?.id) {
+            channelData.allowedMembers = [String(req.user.id)];
+            channelData.createdBy = String(req.user.id);
+        }
+
+        const channel = await Channel.create(channelData);
 
         // Emit WebSocket event for real-time sync
         websocketService.emitChannelCreated(subgridId, channel);
@@ -1398,7 +1434,7 @@ exports.createChannel = async (req, res) => {
 exports.updateChannel = async (req, res) => {
     try {
         const { subgridId, channelId } = req.params;
-        const { name, type, visibility, status } = req.body;
+        const { name, type, visibility, status, categoryId } = req.body;
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
@@ -1418,11 +1454,25 @@ exports.updateChannel = async (req, res) => {
         if (status) {
             updates.status = status;
         }
+        if (categoryId !== undefined) {
+            updates.categoryId = categoryId || null;
+        }
 
         const { Channel } = await getTenantModels(subgrid);
+
+        const updateOps = { $set: updates };
+        // When switching to private, ensure the admin is in allowedMembers
+        if (visibility === 'admin' && req.user?.id) {
+            updateOps.$addToSet = { allowedMembers: String(req.user.id) };
+        }
+        // When switching to public, clear allowedMembers
+        if (visibility === 'public') {
+            updates.allowedMembers = [];
+        }
+
         const channel = await Channel.findOneAndUpdate(
             { _id: channelId, subgridId: String(subgridId) },
-            { $set: updates },
+            updateOps,
             { new: true }
         );
         if (!channel) {
@@ -1487,6 +1537,204 @@ exports.deleteChannel = async (req, res) => {
     } catch (error) {
         console.error('[deleteChannel] Error:', error.message);
         return res.status(500).json({ message: 'Failed to delete channel', error: error.message });
+    }
+};
+
+// =====================
+// CHANNEL MEMBER MANAGEMENT
+// =====================
+
+/**
+ * List members of a private channel
+ * GET /subgrids/:subgridId/channels/:channelId/members
+ */
+exports.listChannelMembers = async (req, res) => {
+    try {
+        const { subgridId, channelId } = req.params;
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const { Channel } = await getTenantModels(subgrid);
+        const channel = await Channel.findOne({ _id: channelId, subgridId: String(subgridId) });
+        if (!channel) {
+            return res.status(404).json({ message: 'Channel not found' });
+        }
+
+        const memberIds = channel.allowedMembers || [];
+        if (memberIds.length === 0) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // Resolve user details for allowedMembers
+        const users = await User.find({ _id: { $in: memberIds } })
+            .select('_id firstName lastName email username avatarUrl role stakeholderBadge company')
+            .lean();
+
+        // Also get their subgrid membership role
+        const memberships = await SubgridMembership.find({
+            subgridId,
+            userId: { $in: memberIds },
+        }).lean();
+        const membershipMap = {};
+        memberships.forEach(m => {
+            membershipMap[String(m.userId)] = m.role;
+        });
+
+        const enriched = users.map(u => ({
+            ...u,
+            memberRole: membershipMap[String(u._id)] || 'member',
+        }));
+
+        return res.status(200).json({ success: true, data: enriched });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to list channel members', error: error.message });
+    }
+};
+
+/**
+ * Add members to a private channel
+ * POST /subgrids/:subgridId/channels/:channelId/members
+ * Body: { userIds: [string] }
+ */
+exports.addChannelMembers = async (req, res) => {
+    try {
+        const { subgridId, channelId } = req.params;
+        const { userIds } = req.body;
+
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+            return res.status(400).json({ message: 'userIds array is required' });
+        }
+
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const { Channel, DirectMessage } = await getTenantModels(subgrid);
+        const channel = await Channel.findOne({ _id: channelId, subgridId: String(subgridId) });
+        if (!channel) {
+            return res.status(404).json({ message: 'Channel not found' });
+        }
+        if (channel.visibility !== 'admin') {
+            return res.status(400).json({ message: 'Can only manage members of private channels' });
+        }
+
+        // Validate that all userIds are actual subgrid members
+        const validMembers = await SubgridMembership.find({
+            subgridId,
+            userId: { $in: userIds },
+            status: 'active',
+        });
+        const validUserIds = validMembers.map(m => String(m.userId));
+
+        if (validUserIds.length === 0) {
+            return res.status(400).json({ message: 'No valid subgrid members found in the provided userIds' });
+        }
+
+        // Determine which users are actually new (not already in allowedMembers)
+        const existingMembers = new Set((channel.allowedMembers || []).map(String));
+        const newUserIds = validUserIds.filter(uid => !existingMembers.has(uid));
+
+        // Add new members (avoid duplicates with $addToSet)
+        const updatedChannel = await Channel.findByIdAndUpdate(
+            channelId,
+            { $addToSet: { allowedMembers: { $each: validUserIds } } },
+            { new: true }
+        );
+
+        // Send DM and email notifications to newly added members
+        if (newUserIds.length > 0) {
+            const adminId = String(req.user.id);
+            const inviter = await User.findById(adminId);
+            const inviterName = inviter
+                ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || 'An admin'
+                : 'An admin';
+            const subgridName = subgrid.name || 'your community';
+            const channelName = channel.name || 'a private channel';
+
+            // Look up user emails for email notifications
+            const addedUsers = await User.find({ _id: { $in: newUserIds } })
+                .select('_id email firstName lastName')
+                .lean();
+
+            for (const addedUser of addedUsers) {
+                const userId = String(addedUser._id);
+
+                // Send a DM notification
+                try {
+                    const dmBody = `You've been invited to the private channel "${channelName}". You now have access to view and participate in this channel.`;
+                    await DirectMessage.create({
+                        subgridId: String(subgridId),
+                        senderId: adminId,
+                        recipientId: userId,
+                        body: dmBody,
+                        kind: 'text',
+                    });
+
+                    // Emit WebSocket event so they see the DM in real-time
+                    const dmRoomId = [adminId, userId].sort().join('_');
+                    websocketService.sendToUser(userId, 'new_message', {
+                        roomType: 'dm',
+                        roomId: dmRoomId,
+                        message: { senderId: adminId, recipientId: userId, body: dmBody, kind: 'text' },
+                        timestamp: new Date().toISOString(),
+                    });
+                } catch (dmErr) {
+                    logger.error('addChannelMembers', 'Failed to send DM notification', { userId, error: dmErr.message });
+                }
+
+                // Send an email notification
+                if (addedUser.email) {
+                    try {
+                        await sendChannelInviteEmail({
+                            email: addedUser.email,
+                            channelName,
+                            subgridName,
+                            inviterName,
+                        });
+                    } catch (emailErr) {
+                        logger.error('addChannelMembers', 'Failed to send email notification', { email: addedUser.email, error: emailErr.message });
+                    }
+                }
+            }
+        }
+
+        return res.status(200).json({ success: true, data: updatedChannel });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to add channel members', error: error.message });
+    }
+};
+
+/**
+ * Remove a member from a private channel
+ * DELETE /subgrids/:subgridId/channels/:channelId/members/:userId
+ */
+exports.removeChannelMember = async (req, res) => {
+    try {
+        const { subgridId, channelId, userId } = req.params;
+
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const { Channel } = await getTenantModels(subgrid);
+        const channel = await Channel.findOne({ _id: channelId, subgridId: String(subgridId) });
+        if (!channel) {
+            return res.status(404).json({ message: 'Channel not found' });
+        }
+
+        const updatedChannel = await Channel.findByIdAndUpdate(
+            channelId,
+            { $pull: { allowedMembers: String(userId) } },
+            { new: true }
+        );
+
+        return res.status(200).json({ success: true, data: updatedChannel });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to remove channel member', error: error.message });
     }
 };
 
@@ -1584,12 +1832,18 @@ exports.deleteCategory = async (req, res) => {
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
-        const { Category } = await getTenantModels(subgrid);
+        const { Category, Channel } = await getTenantModels(subgrid);
         const result = await Category.deleteOne({ _id: categoryId, subgridId: String(subgridId) });
 
         if (result.deletedCount === 0) {
             return res.status(404).json({ message: 'Category not found' });
         }
+
+        // Unlink all channels from this deleted category
+        await Channel.updateMany(
+            { subgridId: String(subgridId), categoryId: String(categoryId) },
+            { $set: { categoryId: null } }
+        );
 
         return res.status(200).json({ success: true, message: 'Category deleted' });
     } catch (error) {
@@ -1729,7 +1983,7 @@ exports.listMessages = async (req, res) => {
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
-        const { Message, MessageLike, MessageReshare } = await getTenantModels(subgrid);
+        const { Channel, Message, MessageLike, MessageReshare } = await getTenantModels(subgrid);
         const filter = { subgridId: String(subgridId), status: 'active' };
         if (req.embed?.channelId) {
             if (channelId && channelId !== req.embed.channelId) {
@@ -1737,6 +1991,19 @@ exports.listMessages = async (req, res) => {
             }
             filter.channelId = req.embed.channelId;
         } else if (channelId) {
+            // Check private channel access
+            const channel = await Channel.findOne({ _id: channelId, subgridId: String(subgridId) });
+            if (channel && channel.visibility === 'admin') {
+                const userId = req.user?.id;
+                let isAdmin = false;
+                if (userId) {
+                    const membership = await getSubgridMembership(subgrid.tenantId, subgridId, userId);
+                    isAdmin = membership && ['subgrid_admin'].includes(membership.role);
+                }
+                if (!isAdmin && (!userId || !channel.allowedMembers || !channel.allowedMembers.includes(String(userId)))) {
+                    return res.status(403).json({ message: 'Access denied to this channel' });
+                }
+            }
             filter.channelId = channelId;
         }
 

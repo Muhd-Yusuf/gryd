@@ -90,6 +90,9 @@ const {
     unreshareMessage,
     listMessageComments,
     createMessageComment,
+    listChannelMembers,
+    addChannelMembers,
+    removeChannelMember,
 } = require('../controllers/communityController');
 const { attachUserContext, requireUser } = require('../middleware/authMiddleware');
 const { attachEmbedContext } = require('../middleware/embedMiddleware');
@@ -136,6 +139,11 @@ router.get('/subgrids/:subgridId/channels', loadSubgrid, requireSubgridRead, lis
 router.post('/subgrids/:subgridId/channels', requireUser, loadSubgrid, requireSubgridAdmin, createChannel);
 router.patch('/subgrids/:subgridId/channels/:channelId', requireUser, loadSubgrid, requireSubgridAdmin, updateChannel);
 router.delete('/subgrids/:subgridId/channels/:channelId', requireUser, loadSubgrid, requireSubgridAdmin, deleteChannel);
+
+// Channel Members (private channel management)
+router.get('/subgrids/:subgridId/channels/:channelId/members', requireUser, loadSubgrid, requireSubgridAdmin, listChannelMembers);
+router.post('/subgrids/:subgridId/channels/:channelId/members', requireUser, loadSubgrid, requireSubgridAdmin, addChannelMembers);
+router.delete('/subgrids/:subgridId/channels/:channelId/members/:userId', requireUser, loadSubgrid, requireSubgridAdmin, removeChannelMember);
 
 // Categories
 router.get('/subgrids/:subgridId/categories', loadSubgrid, requireSubgridRead, listCategories);

@@ -27,6 +27,19 @@ const defineModels = (connection) => {
             enum: ['active', 'archived'],
             default: 'active',
         },
+        categoryId: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        allowedMembers: {
+            type: [String],
+            default: [],
+        },
+        createdBy: {
+            type: String,
+            default: null,
+        },
         createdAt: {
             type: Date,
             default: Date.now,

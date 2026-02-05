@@ -49,7 +49,25 @@ type Channel = {
     messagesCount?: number;
     count?: number;
     isPrivate?: boolean;
+    visibility?: string;
     type?: 'text' | 'video' | 'voice';
+    categoryId?: string | null;
+    allowedMembers?: string[];
+};
+
+type Category = {
+    _id: string;
+    name?: string;
+    visibility?: 'public' | 'private';
+    order?: number;
+    createdAt?: string;
+};
+
+type ChannelGroup = {
+    groupId: string;
+    groupName: string;
+    order: number;
+    channels: Channel[];
 };
 
 type Subgrid = {
@@ -135,8 +153,8 @@ const formatTime = (value?: string) => {
 
 const getChannelIcon = (channel: Channel) => {
     const name = String(channel.name || '').toLowerCase();
-    if (channel.isPrivate || name.includes('private')) return 'lock';
-    if (channel.type === 'video' || name.includes('video')) return 'video';
+    if (channel.isPrivate || channel.visibility === 'admin' || name.includes('private')) return 'lock';
+    if (channel.type === 'video' || channel.type === 'voice' || name.includes('video')) return 'video';
     return 'hash';
 };
 
@@ -204,6 +222,7 @@ const TenantCommunityScreen = () => {
     const [channelDraft, setChannelDraft] = useState('');
     const [members, setMembers] = useState<Member[]>([]);
     const [events, setEvents] = useState<Event[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
     const [showEventsView, setShowEventsView] = useState(false);
     const [friends, setFriends] = useState<string[]>([]);
     const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>({});
@@ -212,8 +231,7 @@ const TenantCommunityScreen = () => {
     const [dmMessages, setDmMessages] = useState<Message[]>([]);
     const [memberCount, setMemberCount] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
-    const [textChannelsOpen, setTextChannelsOpen] = useState(true);
-    const [voiceChannelsOpen, setVoiceChannelsOpen] = useState(true);
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
     const [activeRail, setActiveRail] = useState('home');
     const [error, setError] = useState('');
     const [feedMenuOpen, setFeedMenuOpen] = useState<string | null>(null);
@@ -330,8 +348,9 @@ const TenantCommunityScreen = () => {
                     communityGet(`/subgrids/${activeSubgridId}/members`),
                     communityGet(`/subgrids/${activeSubgridId}/friends`),
                     communityGet(`/subgrids/${activeSubgridId}/events`),
+                    communityGet(`/subgrids/${activeSubgridId}/categories`),
                 ]);
-                const [channelsRes, postsRes, membersRes, friendsRes, eventsRes] = results;
+                const [channelsRes, postsRes, membersRes, friendsRes, eventsRes, categoriesRes] = results;
                 if (channelsRes.status === 'fulfilled') {
                     setChannels(channelsRes.value?.data || []);
                 }
@@ -350,6 +369,9 @@ const TenantCommunityScreen = () => {
                 }
                 if (eventsRes.status === 'fulfilled') {
                     setEvents(eventsRes.value?.data || []);
+                }
+                if (categoriesRes.status === 'fulfilled') {
+                    setCategories(categoriesRes.value?.data || []);
                 }
             } catch (err: any) {
                 console.error('Failed to load community data:', err.message);
@@ -597,19 +619,62 @@ const TenantCommunityScreen = () => {
         return channels.filter((channel) => String(channel.name || '').toLowerCase().includes(query));
     }, [channels, searchQuery]);
 
-    // Group channels by type (text vs voice) - matching admin dashboard
+    // Group channels by category (or fall back to text/voice for uncategorized)
     const groupedChannels = useMemo(() => {
-        const textChannels: Channel[] = [];
-        const voiceChannels: Channel[] = [];
+        const categoryMap = new Map<string, Category>();
+        categories.forEach((cat) => categoryMap.set(cat._id, cat));
+
+        // Group channels by categoryId
+        const groupMap = new Map<string | 'null', Channel[]>();
         filteredChannels.forEach((channel) => {
-            if (channel.type === 'voice') {
-                voiceChannels.push(channel);
-            } else {
-                textChannels.push(channel);
+            const catId = channel.categoryId || 'null';
+            if (!groupMap.has(catId)) {
+                groupMap.set(catId, []);
             }
+            groupMap.get(catId)!.push(channel);
         });
-        return { textChannels, voiceChannels };
-    }, [filteredChannels]);
+
+        const groups: ChannelGroup[] = [];
+
+        // Uncategorized channels: split into text and voice for backward compat
+        const uncategorized = groupMap.get('null') || [];
+        if (uncategorized.length > 0) {
+            const uncatText = uncategorized.filter((c) => c.type !== 'voice');
+            const uncatVoice = uncategorized.filter((c) => c.type === 'voice');
+            if (uncatText.length > 0) {
+                groups.push({
+                    groupId: '__uncategorized_text',
+                    groupName: 'TEXT CHANNELS',
+                    order: -2,
+                    channels: uncatText,
+                });
+            }
+            if (uncatVoice.length > 0) {
+                groups.push({
+                    groupId: '__uncategorized_voice',
+                    groupName: 'VOICE CHANNELS',
+                    order: -1,
+                    channels: uncatVoice,
+                });
+            }
+        }
+
+        // Categorized channels sorted by category order
+        groupMap.forEach((chans, catId) => {
+            if (catId === 'null') return;
+            const cat = categoryMap.get(catId);
+            groups.push({
+                groupId: catId,
+                groupName: cat?.name?.toUpperCase() || 'UNKNOWN',
+                order: cat?.order ?? 999,
+                channels: chans,
+            });
+        });
+
+        // Sort by order
+        groups.sort((a, b) => a.order - b.order);
+        return groups;
+    }, [filteredChannels, categories]);
 
     // Create a lookup map for member profiles by userId and _id
     const memberMap = useMemo(() => {
@@ -1525,81 +1590,58 @@ const TenantCommunityScreen = () => {
                                     )}
                                 </TouchableOpacity>
 
-                                {/* Text Channels */}
-                                <View style={styles.groupBlock}>
-                                    <TouchableOpacity
-                                        style={styles.groupHeader}
-                                        onPress={() => setTextChannelsOpen((prev) => !prev)}
-                                    >
-                                        <ChevronDown size={16} color={colors.textMuted} style={!textChannelsOpen && { transform: [{ rotate: '-90deg' }] }} />
-                                        <Text style={styles.groupTitle}>TEXT CHANNELS</Text>
-                                    </TouchableOpacity>
-                                    {textChannelsOpen && groupedChannels.textChannels.length === 0 && (
-                                        <Text style={styles.emptyText}>No text channels yet.</Text>
-                                    )}
-                                    {textChannelsOpen && groupedChannels.textChannels.map((channel) => {
-                                        const count = getCount(channel);
-                                        const isActive = channel._id === activeChannelId;
-                                        const iconType = getChannelIcon(channel);
-                                        return (
+                                {/* Channel groups (categories + uncategorized) */}
+                                {groupedChannels.map((group) => {
+                                    const isOpen = !collapsedGroups[group.groupId];
+                                    return (
+                                        <View key={group.groupId} style={styles.groupBlock}>
                                             <TouchableOpacity
-                                                key={channel._id}
-                                                style={[styles.channelRow, isActive && styles.channelRowActive]}
-                                                onPress={() => handleChannelPress(channel)}
+                                                style={styles.groupHeader}
+                                                onPress={() => setCollapsedGroups((prev) => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}
                                             >
-                                                <View style={styles.channelLeft}>
-                                                    {iconType === 'lock' && <Lock size={14} color={colors.textMuted} />}
-                                                    {iconType === 'hash' && <Hash size={14} color={colors.textMuted} />}
-                                                    <Text style={[
-                                                        styles.channelText,
-                                                        isActive && styles.channelTextActive,
-                                                    ]}>
-                                                        {channel.name || 'Untitled'}
-                                                    </Text>
-                                                </View>
-                                                {count > 0 && (
-                                                    <View style={styles.badge}>
-                                                        <Text style={styles.badgeText}>{count}</Text>
-                                                    </View>
-                                                )}
+                                                <ChevronDown size={16} color={colors.textMuted} style={!isOpen ? { transform: [{ rotate: '-90deg' }] } : undefined} />
+                                                <Text style={styles.groupTitle}>{group.groupName}</Text>
                                             </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-
-                                {/* Voice Channels */}
-                                <View style={styles.groupBlock}>
-                                    <TouchableOpacity
-                                        style={styles.groupHeader}
-                                        onPress={() => setVoiceChannelsOpen((prev) => !prev)}
-                                    >
-                                        <ChevronDown size={16} color={colors.textMuted} style={!voiceChannelsOpen && { transform: [{ rotate: '-90deg' }] }} />
-                                        <Text style={styles.groupTitle}>VOICE CHANNELS</Text>
-                                    </TouchableOpacity>
-                                    {voiceChannelsOpen && groupedChannels.voiceChannels.length === 0 && (
-                                        <Text style={styles.emptyText}>No voice channels.</Text>
-                                    )}
-                                    {voiceChannelsOpen && groupedChannels.voiceChannels.map((channel) => {
-                                        const isActive = channel._id === activeChannelId;
-                                        return (
-                                            <TouchableOpacity
-                                                key={channel._id}
-                                                style={[styles.channelRow, isActive && styles.channelRowActive]}
-                                                onPress={() => handleChannelPress(channel)}
-                                            >
-                                                <View style={styles.channelLeft}>
-                                                    <Volume2 size={14} color={colors.textMuted} />
-                                                    <Text style={[
-                                                        styles.channelText,
-                                                        isActive && styles.channelTextActive,
-                                                    ]}>
-                                                        {channel.name || 'Untitled'}
-                                                    </Text>
-                                                </View>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
+                                            {isOpen && group.channels.length === 0 && (
+                                                <Text style={styles.emptyText}>No channels yet.</Text>
+                                            )}
+                                            {isOpen && group.channels.map((channel) => {
+                                                const count = getCount(channel);
+                                                const isActive = channel._id === activeChannelId;
+                                                const isVoice = channel.type === 'voice';
+                                                const iconType = getChannelIcon(channel);
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={channel._id}
+                                                        style={[styles.channelRow, isActive && styles.channelRowActive]}
+                                                        onPress={() => handleChannelPress(channel)}
+                                                    >
+                                                        <View style={styles.channelLeft}>
+                                                            {isVoice ? (
+                                                                <Volume2 size={14} color={colors.textMuted} />
+                                                            ) : iconType === 'lock' ? (
+                                                                <Lock size={14} color={colors.textMuted} />
+                                                            ) : (
+                                                                <Hash size={14} color={colors.textMuted} />
+                                                            )}
+                                                            <Text style={[
+                                                                styles.channelText,
+                                                                isActive && styles.channelTextActive,
+                                                            ]}>
+                                                                {channel.name || 'Untitled'}
+                                                            </Text>
+                                                        </View>
+                                                        {!isVoice && count > 0 && (
+                                                            <View style={styles.badge}>
+                                                                <Text style={styles.badgeText}>{count}</Text>
+                                                            </View>
+                                                        )}
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    );
+                                })}
                             </ScrollView>
                         </View>
                     </View>
@@ -1696,7 +1738,14 @@ const TenantCommunityScreen = () => {
                                 /* Channel View */
                                 <>
                             <View style={styles.centerHeader}>
-                                <Text style={styles.centerTitle}># {activeChannel?.name || 'general'}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    {activeChannel && getChannelIcon(activeChannel) === 'lock' ? (
+                                        <Lock size={16} color={colors.text} />
+                                    ) : (
+                                        <Hash size={16} color={colors.text} />
+                                    )}
+                                    <Text style={styles.centerTitle}>{activeChannel?.name || 'general'}</Text>
+                                </View>
                                 <Search size={16} color={colors.textMuted} />
                             </View>
 
@@ -1712,11 +1761,17 @@ const TenantCommunityScreen = () => {
                                 {activeChannel && (
                                     <View style={styles.channelWelcome}>
                                         <View style={styles.channelWelcomeIcon}>
-                                            <Hash size={32} color={colors.textMuted} />
+                                            {getChannelIcon(activeChannel) === 'lock' ? (
+                                                <Lock size={32} color={colors.textMuted} />
+                                            ) : (
+                                                <Hash size={32} color={colors.textMuted} />
+                                            )}
                                         </View>
-                                        <Text style={styles.channelWelcomeTitle}>Welcome to #{activeChannel.name}</Text>
+                                        <Text style={styles.channelWelcomeTitle}>
+                                            Welcome to {getChannelIcon(activeChannel) === 'lock' ? '' : '#'}{activeChannel.name}
+                                        </Text>
                                         <Text style={styles.channelWelcomeSubtitle}>
-                                            This is the start of the #{activeChannel.name} channel.
+                                            This is the start of the {getChannelIcon(activeChannel) === 'lock' ? '' : '#'}{activeChannel.name} channel.
                                         </Text>
                                     </View>
                                 )}

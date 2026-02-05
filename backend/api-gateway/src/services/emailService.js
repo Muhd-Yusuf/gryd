@@ -649,6 +649,88 @@ The GRYD Team
     return sendEmail({ to: email, subject, text, html });
 };
 
+/**
+ * Send private channel invitation email
+ * @param {Object} options - Invite options
+ * @param {string} options.email - Recipient email
+ * @param {string} options.channelName - Name of the private channel
+ * @param {string} options.subgridName - Name of the Credit Union/Community
+ * @param {string} options.inviterName - Name of the admin who added them
+ * @returns {Promise<Object>} - Send result
+ */
+const sendChannelInviteEmail = async ({ email, channelName, subgridName, inviterName }) => {
+    logger.email('Channel invite email prepared', { to: email, channel: channelName, community: subgridName });
+
+    const subject = `You've been added to a private channel in ${subgridName}`;
+
+    const text = `
+Hello,
+
+${inviterName} has added you to the private channel "${channelName}" in ${subgridName} on The GRYD.
+
+You now have access to view and participate in this channel. Log in to The GRYD to start engaging.
+
+Best regards,
+The GRYD Team
+    `.trim();
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Channel Invitation</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background-color: #f5f5f5;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+        <tr>
+            <td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">THE GRYD</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <h2 style="color: #1f2937; margin: 0 0 20px; font-size: 24px;">Private Channel Invitation</h2>
+                            <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px;">
+                                <strong>${inviterName}</strong> has added you to the private channel <span style="background-color: #1f2937; color: white; padding: 2px 10px; border-radius: 8px; font-size: 14px;">${channelName}</span> in <strong>${subgridName}</strong>.
+                            </p>
+                            <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
+                                You now have access to view and participate in this channel. Log in to The GRYD to start engaging.
+                            </p>
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td align="center">
+                                        <a href="${process.env.PUBLIC_APP_URL || 'http://localhost:8081'}" style="display: inline-block; background-color: #3B82F6; color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 12px; font-size: 16px; font-weight: 600;">Open The GRYD</a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                                If you didn't expect this notification, please contact your community admin.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `.trim();
+
+    return sendEmail({ to: email, subject, text, html });
+};
+
 module.exports = {
     sendEmail,
     sendInviteEmail,
@@ -656,4 +738,5 @@ module.exports = {
     sendOtpEmail,
     sendStakeholderInviteEmail,
     sendTeamMemberInviteEmail,
+    sendChannelInviteEmail,
 };
