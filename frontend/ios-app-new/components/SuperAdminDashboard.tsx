@@ -10,6 +10,7 @@ import {
     Modal,
     Pressable,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-native-svg';
@@ -845,17 +846,19 @@ const SuperAdminDashboard = () => {
                         <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={20} color={colors.textMuted} />
                     </TouchableOpacity>
                 </View>
-                <View style={styles.topBarDivider} />
+                {!isMobile && <View style={styles.topBarDivider} />}
                 <View style={styles.profileSection}>
                     <View style={styles.profileAvatar}>
                         <Text style={styles.profileAvatarText}>
                             {adminUser?.firstName?.[0] || 'J'}
                         </Text>
                     </View>
-                    <View style={styles.profileInfo}>
-                        <Text style={styles.profileName}>{adminUser?.firstName || 'James'} {adminUser?.lastName || 'Bryce'}</Text>
-                        <Text style={styles.profileRole}>Admin Account</Text>
-                    </View>
+                    {!isMobile && (
+                        <View style={styles.profileInfo}>
+                            <Text style={styles.profileName}>{adminUser?.firstName || 'James'} {adminUser?.lastName || 'Bryce'}</Text>
+                            <Text style={styles.profileRole}>Admin Account</Text>
+                        </View>
+                    )}
                 </View>
             </View>
         </View>
@@ -865,7 +868,7 @@ const SuperAdminDashboard = () => {
     const renderOverviewPage = () => (
         <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
             {/* Stats Cards */}
-            <View style={styles.statsGrid}>
+            <View style={[styles.statsGrid, isMobile && styles.statsGridMobile]}>
                 <View style={styles.statCard}>
                     <View style={[styles.statIcon, { backgroundColor: '#dbeafe' }]}>
                         <MaterialIcons name="groups" size={22} color="#3b82f6" />
@@ -916,56 +919,97 @@ const SuperAdminDashboard = () => {
                     </TouchableOpacity>
                 </View>
 
-                <View style={styles.table}>
-                    <View style={styles.tableRowHeader}>
-                        <View style={[styles.tableHeaderCell, { width: 40 }]}>
-                            <View style={styles.checkbox} />
-                        </View>
-                        <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Customer Details</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Server Name</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Server members</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Status</Text>
-                        <View style={[styles.tableHeaderCell, { width: 50 }]} />
+                {isMobile ? (
+                    <View style={styles.mobileCardList}>
+                        {recentCustomers.map((customer) => (
+                            <TouchableOpacity
+                                key={customer._id}
+                                style={styles.mobileCustomerCard}
+                                onPress={() => handleViewCustomer(customer)}
+                            >
+                                <View style={styles.mobileCardRow}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.customerName} numberOfLines={1}>{customer.clientName || customer.owner?.name || '-'}</Text>
+                                        <Text style={styles.customerEmail} numberOfLines={1}>{customer.owner?.email || ''}</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.actionMenuButton}
+                                        onPress={(e) => handleOpenActionMenu(e, customer)}
+                                    >
+                                        <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={styles.mobileCardRow}>
+                                    <View style={styles.mobileCardField}>
+                                        <Text style={styles.mobileCardLabel}>Server</Text>
+                                        <Text style={styles.mobileCardValue} numberOfLines={1}>{customer.name || '-'}</Text>
+                                    </View>
+                                    <View style={styles.mobileCardField}>
+                                        <Text style={styles.mobileCardLabel}>Members</Text>
+                                        <Text style={styles.mobileCardValue}>{customer.memberCount}</Text>
+                                    </View>
+                                    <View style={[styles.statusBadge, customer.status === 'active' ? styles.statusActive : customer.status === 'pending' ? styles.statusPending : styles.statusSuspended]}>
+                                        <View style={[styles.statusDot, customer.status === 'active' ? styles.statusDotActive : customer.status === 'pending' ? styles.statusDotPending : styles.statusDotSuspended]} />
+                                        <Text style={[styles.statusBadgeText, customer.status === 'active' ? styles.statusTextActive : customer.status === 'pending' ? styles.statusTextPending : styles.statusTextSuspended]}>
+                                            {customer.status.charAt(0).toUpperCase() + customer.status.slice(1)}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
                     </View>
-
-                    {recentCustomers.map((customer) => (
-                        <TouchableOpacity
-                            key={customer._id}
-                            style={styles.tableRow}
-                            onPress={() => handleViewCustomer(customer)}
-                        >
-                            <View style={[styles.tableCell, { width: 40 }]}>
+                ) : (
+                    <View style={styles.table}>
+                        <View style={styles.tableRowHeader}>
+                            <View style={[styles.tableHeaderCell, { width: 40 }]}>
                                 <View style={styles.checkbox} />
                             </View>
-                            <View style={[styles.tableCell, { flex: 2 }]}>
-                                <Text style={styles.customerName}>{customer.clientName || customer.owner?.name || '-'}</Text>
-                                <Text style={styles.customerEmail}>{customer.owner?.email || ''}</Text>
-                            </View>
-                            <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.name || '-'}</Text>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{customer.memberCount}</Text>
-                            <View style={[styles.tableCell, { flex: 1 }]}>
-                                <View style={[styles.statusBadge, customer.status === 'active' ? styles.statusActive : customer.status === 'pending' ? styles.statusPending : styles.statusSuspended]}>
-                                    <View style={[styles.statusDot, customer.status === 'active' ? styles.statusDotActive : customer.status === 'pending' ? styles.statusDotPending : styles.statusDotSuspended]} />
-                                    <Text style={[styles.statusBadgeText, customer.status === 'active' ? styles.statusTextActive : customer.status === 'pending' ? styles.statusTextPending : styles.statusTextSuspended]}>
-                                        {customer.status.charAt(0).toUpperCase() + customer.status.slice(1)}
-                                    </Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Customer Details</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Server Name</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Server members</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Status</Text>
+                            <View style={[styles.tableHeaderCell, { width: 50 }]} />
+                        </View>
+
+                        {recentCustomers.map((customer) => (
+                            <TouchableOpacity
+                                key={customer._id}
+                                style={styles.tableRow}
+                                onPress={() => handleViewCustomer(customer)}
+                            >
+                                <View style={[styles.tableCell, { width: 40 }]}>
+                                    <View style={styles.checkbox} />
                                 </View>
-                            </View>
-                            <View style={[styles.tableCell, { width: 50 }]}>
-                                <TouchableOpacity
-                                    style={styles.actionMenuButton}
-                                    onPress={(e) => handleOpenActionMenu(e, customer)}
-                                >
-                                    <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
-                                </TouchableOpacity>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
-                </View>
+                                <View style={[styles.tableCell, { flex: 2 }]}>
+                                    <Text style={styles.customerName}>{customer.clientName || customer.owner?.name || '-'}</Text>
+                                    <Text style={styles.customerEmail}>{customer.owner?.email || ''}</Text>
+                                </View>
+                                <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.name || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 1 }]}>{customer.memberCount}</Text>
+                                <View style={[styles.tableCell, { flex: 1 }]}>
+                                    <View style={[styles.statusBadge, customer.status === 'active' ? styles.statusActive : customer.status === 'pending' ? styles.statusPending : styles.statusSuspended]}>
+                                        <View style={[styles.statusDot, customer.status === 'active' ? styles.statusDotActive : customer.status === 'pending' ? styles.statusDotPending : styles.statusDotSuspended]} />
+                                        <Text style={[styles.statusBadgeText, customer.status === 'active' ? styles.statusTextActive : customer.status === 'pending' ? styles.statusTextPending : styles.statusTextSuspended]}>
+                                            {customer.status.charAt(0).toUpperCase() + customer.status.slice(1)}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.tableCell, { width: 50 }]}>
+                                    <TouchableOpacity
+                                        style={styles.actionMenuButton}
+                                        onPress={(e) => handleOpenActionMenu(e, customer)}
+                                    >
+                                        <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
             </View>
 
             {/* Charts Row */}
-            <View style={styles.chartsRow}>
+            <View style={[styles.chartsRow, isMobile && styles.chartsRowMobile]}>
                 <View style={styles.chartCard}>
                     <View style={styles.chartHeader}>
                         <Text style={styles.chartTitle}>Customer Growth</Text>
@@ -1034,15 +1078,15 @@ const SuperAdminDashboard = () => {
     // Render Customers Page
     const renderCustomersPage = () => (
         <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
-            <View style={styles.customersHeader}>
+            <View style={[styles.customersHeader, isMobile && styles.customersHeaderMobile]}>
                 <Text style={styles.pageTitle}>Customers</Text>
-                <TouchableOpacity style={styles.addCustomerButton} onPress={() => setAddCustomerModalOpen(true)}>
+                <TouchableOpacity style={[styles.addCustomerButton, isMobile && { alignItems: 'center' as const }]} onPress={() => setAddCustomerModalOpen(true)}>
                     <Text style={styles.addCustomerButtonText}>Add New Customer</Text>
                 </TouchableOpacity>
             </View>
 
             {/* Customer Stats Cards */}
-            <View style={styles.customerStatsGrid}>
+            <View style={[styles.customerStatsGrid, isMobile && styles.customerStatsGridMobile]}>
                 <View style={styles.customerStatCard}>
                     <View style={[styles.customerStatIcon, { backgroundColor: '#e0f2fe' }]}>
                         <MaterialIcons name="group" size={24} color="#0284c7" />
@@ -1066,10 +1110,10 @@ const SuperAdminDashboard = () => {
 
             {/* Customers Table Card */}
             <View style={styles.customersTableCard}>
-                <View style={styles.customersTableHeader}>
+                <View style={[styles.customersTableHeader, isMobile && styles.customersTableHeaderMobile]}>
                     <Text style={styles.customerTableTitle}>Customer</Text>
 
-                    <View style={styles.tableControls}>
+                    <View style={[styles.tableControls, isMobile && styles.tableControlsMobile]}>
                         <View style={styles.tableSearchContainer}>
                             <MaterialIcons name="search" size={18} color={colors.textMuted} />
                             <TextInput
@@ -1093,65 +1137,113 @@ const SuperAdminDashboard = () => {
                     </View>
                 </View>
 
-                <View style={styles.table}>
-                    <View style={styles.tableRowHeader}>
-                        <View style={[styles.tableHeaderCell, { width: 40 }]}>
-                            <TouchableOpacity style={styles.checkbox} />
-                        </View>
-                        <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Customer Details</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Server Name</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Server members</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Status</Text>
-                        <View style={[styles.tableHeaderCell, { width: 50 }]} />
-                    </View>
-
-                    {customers.map((customer) => (
-                        <TouchableOpacity key={customer._id} style={styles.tableRow} onPress={() => handleViewCustomer(customer)}>
-                            <View style={[styles.tableCell, { width: 40 }]}>
-                                <TouchableOpacity
-                                    style={[styles.checkbox, selectedCustomers.includes(customer._id) && styles.checkboxChecked]}
-                                    onPress={(e) => { e.stopPropagation(); toggleCustomerSelection(customer._id); }}
-                                >
-                                    {selectedCustomers.includes(customer._id) && (
-                                        <MaterialIcons name="check" size={14} color="#fff" />
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                            <View style={[styles.tableCell, { flex: 2 }]}>
-                                <Text style={styles.customerName}>{customer.clientName || customer.owner?.name || '-'}</Text>
-                                <Text style={styles.customerEmail}>{customer.owner?.email || ''}</Text>
-                            </View>
-                            <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.name || '-'}</Text>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{customer.memberCount}</Text>
-                            <View style={[styles.tableCell, { flex: 1 }]}>
-                                <View style={[styles.statusBadge, customer.status === 'active' ? styles.statusActive : customer.status === 'pending' ? styles.statusPending : styles.statusSuspended]}>
-                                    <View style={[styles.statusDot, customer.status === 'active' ? styles.statusDotActive : customer.status === 'pending' ? styles.statusDotPending : styles.statusDotSuspended]} />
-                                    <Text style={[styles.statusBadgeText, customer.status === 'active' ? styles.statusTextActive : customer.status === 'pending' ? styles.statusTextPending : styles.statusTextSuspended]}>
-                                        {customer.status.charAt(0).toUpperCase() + customer.status.slice(1)}
-                                    </Text>
+                {isMobile ? (
+                    <View style={styles.mobileCardList}>
+                        {customers.map((customer) => (
+                            <TouchableOpacity
+                                key={customer._id}
+                                style={styles.mobileCustomerCard}
+                                onPress={() => handleViewCustomer(customer)}
+                            >
+                                <View style={styles.mobileCardRow}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.customerName} numberOfLines={1}>{customer.clientName || customer.owner?.name || '-'}</Text>
+                                        <Text style={styles.customerEmail} numberOfLines={1}>{customer.owner?.email || ''}</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.actionMenuButton}
+                                        onPress={(e) => { e.stopPropagation(); handleOpenActionMenu(e, customer); }}
+                                    >
+                                        <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
+                                    </TouchableOpacity>
                                 </View>
-                            </View>
-                            <View style={[styles.tableCell, { width: 50 }]}>
-                                <TouchableOpacity
-                                    style={styles.actionMenuButton}
-                                    onPress={(e) => handleOpenActionMenu(e, customer)}
-                                >
-                                    <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
-                                </TouchableOpacity>
-                            </View>
-                        </TouchableOpacity>
-                    ))}
+                                <View style={styles.mobileCardRow}>
+                                    <View style={styles.mobileCardField}>
+                                        <Text style={styles.mobileCardLabel}>Server</Text>
+                                        <Text style={styles.mobileCardValue} numberOfLines={1}>{customer.name || '-'}</Text>
+                                    </View>
+                                    <View style={styles.mobileCardField}>
+                                        <Text style={styles.mobileCardLabel}>Members</Text>
+                                        <Text style={styles.mobileCardValue}>{customer.memberCount}</Text>
+                                    </View>
+                                    <View style={[styles.statusBadge, customer.status === 'active' ? styles.statusActive : customer.status === 'pending' ? styles.statusPending : styles.statusSuspended]}>
+                                        <View style={[styles.statusDot, customer.status === 'active' ? styles.statusDotActive : customer.status === 'pending' ? styles.statusDotPending : styles.statusDotSuspended]} />
+                                        <Text style={[styles.statusBadgeText, customer.status === 'active' ? styles.statusTextActive : customer.status === 'pending' ? styles.statusTextPending : styles.statusTextSuspended]}>
+                                            {customer.status.charAt(0).toUpperCase() + customer.status.slice(1)}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
 
-                    {customers.length === 0 && (
-                        <View style={styles.emptyState}>
-                            <MaterialIcons name="people" size={48} color={colors.textMuted} />
-                            <Text style={styles.emptyStateText}>No customers found</Text>
+                        {customers.length === 0 && (
+                            <View style={styles.emptyState}>
+                                <MaterialIcons name="people" size={48} color={colors.textMuted} />
+                                <Text style={styles.emptyStateText}>No customers found</Text>
+                            </View>
+                        )}
+                    </View>
+                ) : (
+                    <View style={styles.table}>
+                        <View style={styles.tableRowHeader}>
+                            <View style={[styles.tableHeaderCell, { width: 40 }]}>
+                                <TouchableOpacity style={styles.checkbox} />
+                            </View>
+                            <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Customer Details</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Server Name</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Server members</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Status</Text>
+                            <View style={[styles.tableHeaderCell, { width: 50 }]} />
                         </View>
-                    )}
-                </View>
+
+                        {customers.map((customer) => (
+                            <TouchableOpacity key={customer._id} style={styles.tableRow} onPress={() => handleViewCustomer(customer)}>
+                                <View style={[styles.tableCell, { width: 40 }]}>
+                                    <TouchableOpacity
+                                        style={[styles.checkbox, selectedCustomers.includes(customer._id) && styles.checkboxChecked]}
+                                        onPress={(e) => { e.stopPropagation(); toggleCustomerSelection(customer._id); }}
+                                    >
+                                        {selectedCustomers.includes(customer._id) && (
+                                            <MaterialIcons name="check" size={14} color="#fff" />
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={[styles.tableCell, { flex: 2 }]}>
+                                    <Text style={styles.customerName}>{customer.clientName || customer.owner?.name || '-'}</Text>
+                                    <Text style={styles.customerEmail}>{customer.owner?.email || ''}</Text>
+                                </View>
+                                <Text style={[styles.tableCell, { flex: 1.5 }]}>{customer.name || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 1 }]}>{customer.memberCount}</Text>
+                                <View style={[styles.tableCell, { flex: 1 }]}>
+                                    <View style={[styles.statusBadge, customer.status === 'active' ? styles.statusActive : customer.status === 'pending' ? styles.statusPending : styles.statusSuspended]}>
+                                        <View style={[styles.statusDot, customer.status === 'active' ? styles.statusDotActive : customer.status === 'pending' ? styles.statusDotPending : styles.statusDotSuspended]} />
+                                        <Text style={[styles.statusBadgeText, customer.status === 'active' ? styles.statusTextActive : customer.status === 'pending' ? styles.statusTextPending : styles.statusTextSuspended]}>
+                                            {customer.status.charAt(0).toUpperCase() + customer.status.slice(1)}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={[styles.tableCell, { width: 50 }]}>
+                                    <TouchableOpacity
+                                        style={styles.actionMenuButton}
+                                        onPress={(e) => handleOpenActionMenu(e, customer)}
+                                    >
+                                        <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+
+                        {customers.length === 0 && (
+                            <View style={styles.emptyState}>
+                                <MaterialIcons name="people" size={48} color={colors.textMuted} />
+                                <Text style={styles.emptyStateText}>No customers found</Text>
+                            </View>
+                        )}
+                    </View>
+                )}
 
                 {/* Pagination */}
-                <View style={styles.pagination}>
+                <View style={[styles.pagination, isMobile && styles.paginationMobile]}>
                     <Text style={styles.paginationInfo}>
                         {((currentPage - 1) * rowsPerPage) + 1} - {Math.min(currentPage * rowsPerPage, customersTotal)} of {customersTotal}
                     </Text>
@@ -1190,13 +1282,15 @@ const SuperAdminDashboard = () => {
         return (
             <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
                 {/* Header */}
-                <View style={styles.customerDetailHeader}>
-                    <TouchableOpacity style={styles.backButton} onPress={handleBackToCustomers}>
-                        <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-                    </TouchableOpacity>
-                    <Text style={styles.customerDetailTitle}>Customer Details</Text>
+                <View style={[styles.customerDetailHeader, isMobile && styles.customerDetailHeaderMobile]}>
+                    <View style={styles.customerDetailTitleRow}>
+                        <TouchableOpacity style={styles.backButton} onPress={handleBackToCustomers}>
+                            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+                        </TouchableOpacity>
+                        <Text style={styles.customerDetailTitle}>Customer Details</Text>
+                    </View>
 
-                    <View style={styles.customerDetailActions}>
+                    <View style={[styles.customerDetailActions, isMobile && styles.customerDetailActionsMobile]}>
                         <Text style={styles.statusLabel}>Status</Text>
                         <View style={[styles.statusBadge, viewingCustomer.status === 'active' ? styles.statusActive : styles.statusSuspended]}>
                             <View style={[styles.statusDot, viewingCustomer.status === 'active' ? styles.statusDotActive : styles.statusDotSuspended]} />
@@ -1229,10 +1323,10 @@ const SuperAdminDashboard = () => {
                 ) : customerDetailData ? (
                     <>
                         {/* Account Information Card */}
-                        <View style={styles.detailCard}>
+                        <View style={[styles.detailCard, isMobile && styles.detailCardMobile]}>
                             <Text style={styles.detailCardTitle}>Account Information</Text>
 
-                            <View style={styles.detailGrid}>
+                            <View style={[styles.detailGrid, isMobile && styles.detailGridMobile]}>
                                 <View style={styles.detailGridItem}>
                                     <Text style={styles.detailLabel}>Full Name</Text>
                                     <Text style={styles.detailValue}>{customerDetailData.customer?.clientName || viewingCustomer.clientName || 'N/A'}</Text>
@@ -1247,7 +1341,7 @@ const SuperAdminDashboard = () => {
                                 </View>
                             </View>
 
-                            <View style={styles.detailGrid}>
+                            <View style={[styles.detailGrid, isMobile && styles.detailGridMobile]}>
                                 <View style={styles.detailGridItem}>
                                     <Text style={styles.detailLabel}>Server Member</Text>
                                     <Text style={styles.detailValue}>{customerDetailData.stats?.memberCount || 0}</Text>
@@ -1276,7 +1370,7 @@ const SuperAdminDashboard = () => {
                         </View>
 
                         {/* Recent Activity Card */}
-                        <View style={styles.detailCard}>
+                        <View style={[styles.detailCard, isMobile && styles.detailCardMobile]}>
                             <Text style={styles.detailCardTitle}>Recent Activity</Text>
 
                             {customerActivities.length > 0 ? (
@@ -1418,7 +1512,7 @@ const SuperAdminDashboard = () => {
                 </View>
 
                 {/* Settings Tabs */}
-                <View style={styles.settingsTabs}>
+                <View style={[styles.settingsTabs, isMobile && styles.settingsTabsMobile]}>
                     <TouchableOpacity
                         style={[styles.settingsTab, settingsTab === 'admin' && styles.settingsTabActive]}
                         onPress={() => setSettingsTab('admin')}
@@ -1441,11 +1535,11 @@ const SuperAdminDashboard = () => {
 
                 {/* Admin Info Tab */}
                 {settingsTab === 'admin' && (
-                    <View style={styles.settingsContent}>
+                    <View style={[styles.settingsContent, isMobile && styles.settingsContentMobile]}>
                         <Text style={styles.settingsSectionTitle}>Admin Info</Text>
                         <Text style={styles.settingsSectionSubtitle}>Manage your profile details here</Text>
 
-                        <View style={styles.settingsFormRow}>
+                        <View style={[styles.settingsFormRow, isMobile && styles.settingsFormRowMobile]}>
                             <View style={styles.settingsFormGroup}>
                                 <Text style={styles.settingsLabel}>First Name</Text>
                                 <TextInput
@@ -1468,7 +1562,7 @@ const SuperAdminDashboard = () => {
                             </View>
                         </View>
 
-                        <View style={styles.settingsFormRow}>
+                        <View style={[styles.settingsFormRow, isMobile && styles.settingsFormRowMobile]}>
                             <View style={styles.settingsFormGroup}>
                                 <Text style={styles.settingsLabel}>Account Email</Text>
                                 <TextInput
@@ -1505,8 +1599,8 @@ const SuperAdminDashboard = () => {
 
                 {/* Team Tab */}
                 {settingsTab === 'team' && (
-                    <View style={styles.settingsContent}>
-                        <View style={styles.teamHeader}>
+                    <View style={[styles.settingsContent, isMobile && styles.settingsContentMobile]}>
+                        <View style={[styles.teamHeader, isMobile && styles.teamHeaderMobile]}>
                             <View>
                                 <Text style={styles.settingsSectionTitle}>Team</Text>
                                 <Text style={styles.settingsSectionSubtitle}>Manage you team members here</Text>
@@ -1526,62 +1620,108 @@ const SuperAdminDashboard = () => {
                         </View>
 
                         {/* Team Table */}
-                        <View style={styles.teamTable}>
-                            <View style={styles.teamTableHeader}>
-                                <View style={styles.teamCheckboxCell}>
-                                    <View style={styles.checkbox} />
-                                </View>
-                                <Text style={[styles.teamTableHeaderCell, { flex: 2 }]}>Name</Text>
-                                <Text style={[styles.teamTableHeaderCell, { flex: 2 }]}>Email</Text>
-                                <Text style={[styles.teamTableHeaderCell, { flex: 1 }]}>Role</Text>
-                                <Text style={[styles.teamTableHeaderCell, { flex: 1 }]}>Status</Text>
-                                <View style={{ width: 40 }} />
-                            </View>
+                        {isMobile ? (
+                            <View style={styles.mobileCardList}>
+                                {teamMembers.map((member) => {
+                                    const statusColors = getStatusColor(member.status);
+                                    return (
+                                        <View key={member._id} style={styles.mobileCustomerCard}>
+                                            <View style={styles.mobileCardRow}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                                                    <View style={styles.teamMemberAvatar}>
+                                                        <Text style={styles.teamMemberAvatarText}>
+                                                            {member.name.charAt(0).toUpperCase()}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.teamMemberName}>{member.name}</Text>
+                                                        <Text style={[styles.customerEmail, { marginTop: 2 }]}>{member.email}</Text>
+                                                    </View>
+                                                </View>
+                                                <TouchableOpacity style={styles.teamActionButton}>
+                                                    <MaterialIcons name="more-vert" size={20} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                            </View>
+                                            <View style={styles.mobileCardRow}>
+                                                <View style={styles.mobileCardField}>
+                                                    <Text style={styles.mobileCardLabel}>Role</Text>
+                                                    <Text style={styles.mobileCardValue}>{member.role}</Text>
+                                                </View>
+                                                <View style={[styles.teamStatusBadge, { backgroundColor: statusColors.bg }]}>
+                                                    <Text style={[styles.teamStatusText, { color: statusColors.text }]}>
+                                                        {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    );
+                                })}
 
-                            {teamMembers.map((member) => {
-                                const statusColors = getStatusColor(member.status);
-                                return (
-                                    <View key={member._id} style={styles.teamTableRow}>
-                                        <View style={styles.teamCheckboxCell}>
-                                            <View style={styles.checkbox} />
-                                        </View>
-                                        <View style={[styles.teamTableCell, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
-                                            <View style={styles.teamMemberAvatar}>
-                                                <Text style={styles.teamMemberAvatarText}>
-                                                    {member.name.charAt(0).toUpperCase()}
-                                                </Text>
-                                            </View>
-                                            <Text style={styles.teamMemberName}>{member.name}</Text>
-                                        </View>
-                                        <Text style={[styles.teamTableCell, { flex: 2 }]}>{member.email}</Text>
-                                        <Text style={[styles.teamTableCell, { flex: 1 }]}>{member.role}</Text>
-                                        <View style={[styles.teamTableCell, { flex: 1 }]}>
-                                            <View style={[styles.teamStatusBadge, { backgroundColor: statusColors.bg }]}>
-                                                <Text style={[styles.teamStatusText, { color: statusColors.text }]}>
-                                                    {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        <TouchableOpacity style={styles.teamActionButton}>
-                                            <MaterialIcons name="more-vert" size={20} color={colors.textMuted} />
-                                        </TouchableOpacity>
+                                {teamMembers.length === 0 && (
+                                    <View style={styles.emptyState}>
+                                        <MaterialIcons name="people" size={48} color={colors.textMuted} />
+                                        <Text style={styles.emptyStateText}>No team members yet</Text>
                                     </View>
-                                );
-                            })}
-
-                            {teamMembers.length === 0 && (
-                                <View style={styles.emptyState}>
-                                    <MaterialIcons name="people" size={48} color={colors.textMuted} />
-                                    <Text style={styles.emptyStateText}>No team members yet</Text>
+                                )}
+                            </View>
+                        ) : (
+                            <View style={styles.teamTable}>
+                                <View style={styles.teamTableHeader}>
+                                    <View style={styles.teamCheckboxCell}>
+                                        <View style={styles.checkbox} />
+                                    </View>
+                                    <Text style={[styles.teamTableHeaderCell, { flex: 2 }]}>Name</Text>
+                                    <Text style={[styles.teamTableHeaderCell, { flex: 2 }]}>Email</Text>
+                                    <Text style={[styles.teamTableHeaderCell, { flex: 1 }]}>Role</Text>
+                                    <Text style={[styles.teamTableHeaderCell, { flex: 1 }]}>Status</Text>
+                                    <View style={{ width: 40 }} />
                                 </View>
-                            )}
-                        </View>
+
+                                {teamMembers.map((member) => {
+                                    const statusColors = getStatusColor(member.status);
+                                    return (
+                                        <View key={member._id} style={styles.teamTableRow}>
+                                            <View style={styles.teamCheckboxCell}>
+                                                <View style={styles.checkbox} />
+                                            </View>
+                                            <View style={[styles.teamTableCell, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
+                                                <View style={styles.teamMemberAvatar}>
+                                                    <Text style={styles.teamMemberAvatarText}>
+                                                        {member.name.charAt(0).toUpperCase()}
+                                                    </Text>
+                                                </View>
+                                                <Text style={styles.teamMemberName}>{member.name}</Text>
+                                            </View>
+                                            <Text style={[styles.teamTableCell, { flex: 2 }]}>{member.email}</Text>
+                                            <Text style={[styles.teamTableCell, { flex: 1 }]}>{member.role}</Text>
+                                            <View style={[styles.teamTableCell, { flex: 1 }]}>
+                                                <View style={[styles.teamStatusBadge, { backgroundColor: statusColors.bg }]}>
+                                                    <Text style={[styles.teamStatusText, { color: statusColors.text }]}>
+                                                        {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            <TouchableOpacity style={styles.teamActionButton}>
+                                                <MaterialIcons name="more-vert" size={20} color={colors.textMuted} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })}
+
+                                {teamMembers.length === 0 && (
+                                    <View style={styles.emptyState}>
+                                        <MaterialIcons name="people" size={48} color={colors.textMuted} />
+                                        <Text style={styles.emptyStateText}>No team members yet</Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
                     </View>
                 )}
 
                 {/* Notifications Tab */}
                 {settingsTab === 'notifications' && (
-                    <View style={styles.settingsContent}>
+                    <View style={[styles.settingsContent, isMobile && styles.settingsContentMobile]}>
                         <Text style={styles.settingsSectionTitle}>Email Notifications</Text>
                         <Text style={styles.settingsSectionSubtitle}>Configure when to receive email notifications</Text>
 
@@ -1866,7 +2006,7 @@ const SuperAdminDashboard = () => {
 
                     <View style={styles.inviteForm}>
                         {/* Name row */}
-                        <View style={styles.inviteFormRow}>
+                        <View style={[styles.inviteFormRow, isMobile && styles.inviteFormRowMobile]}>
                             <View style={[styles.inviteEmailGroup, { flex: 1 }]}>
                                 <Text style={styles.inviteLabel}>First Name</Text>
                                 <TextInput
@@ -1878,7 +2018,7 @@ const SuperAdminDashboard = () => {
                                     autoCapitalize="words"
                                 />
                             </View>
-                            <View style={[styles.inviteEmailGroup, { flex: 1, marginLeft: 12 }]}>
+                            <View style={[styles.inviteEmailGroup, { flex: 1, marginLeft: isMobile ? 0 : 12 }]}>
                                 <Text style={styles.inviteLabel}>Last Name</Text>
                                 <TextInput
                                     style={styles.inviteInput}
@@ -1892,7 +2032,7 @@ const SuperAdminDashboard = () => {
                         </View>
 
                         {/* Email and Role row */}
-                        <View style={styles.inviteFormRow}>
+                        <View style={[styles.inviteFormRow, isMobile && styles.inviteFormRowMobile]}>
                             <View style={styles.inviteEmailGroup}>
                                 <Text style={styles.inviteLabel}>Email address *</Text>
                                 <TextInput
@@ -1962,9 +2102,36 @@ const SuperAdminDashboard = () => {
         </Modal>
     );
 
+    // Render mobile bottom navigation
+    const renderMobileBottomNav = () => (
+        <View style={[styles.mobileBottomNav, styles.mobileBottomNavSafe]}>
+            {([
+                { key: 'overview', icon: 'dashboard', label: 'Overview' },
+                { key: 'customers', icon: 'people', label: 'Customers' },
+                { key: 'moderation', icon: 'security', label: 'Moderation' },
+                { key: 'configuration', icon: 'settings', label: 'Settings' },
+            ] as { key: NavItem; icon: string; label: string }[]).map((item) => (
+                <TouchableOpacity
+                    key={item.key}
+                    style={[styles.mobileNavItem, activeNav === item.key && styles.mobileNavItemActive]}
+                    onPress={() => { setActiveNav(item.key); setViewingCustomer(null); }}
+                >
+                    <MaterialIcons
+                        name={item.icon as any}
+                        size={22}
+                        color={activeNav === item.key ? colors.primary : colors.textMuted}
+                    />
+                    <Text style={[styles.mobileNavLabel, activeNav === item.key && styles.mobileNavLabelActive]}>
+                        {item.label}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+        </View>
+    );
+
     // Main render - no loading states, data loads seamlessly in background
     return (
-        <View style={[styles.container, isMobile && styles.containerMobile]}>
+        <View style={[styles.container, isMobile && styles.containerMobile, isMobile && styles.containerMobileSafe]}>
             {/* Sidebar */}
             {!isMobile && renderSidebar()}
 
@@ -1996,6 +2163,9 @@ const SuperAdminDashboard = () => {
                 ) : null}
             </View>
 
+            {/* Mobile Bottom Navigation */}
+            {isMobile && renderMobileBottomNav()}
+
             {/* Add Customer Modal */}
             {renderAddCustomerModal()}
 
@@ -2010,49 +2180,93 @@ const SuperAdminDashboard = () => {
 
             {/* Action Menu Overlay and Dropdown */}
             {actionMenuOpen && actionMenuCustomer && (
-                <>
-                    <Pressable
-                        style={styles.actionMenuOverlay}
-                        onPress={closeActionMenu}
-                    />
-                    <View style={[styles.floatingActionMenu, { top: actionMenuPosition.top, right: actionMenuPosition.right }]}>
-                        <TouchableOpacity
-                            style={styles.actionMenuItem}
-                            onPress={() => { handleViewCustomer(actionMenuCustomer); closeActionMenu(); }}
-                        >
-                            <MaterialIcons name="visibility" size={18} color={colors.text} style={{ marginRight: 10 }} />
-                            <Text style={styles.actionMenuText}>View Customer</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.actionMenuItem}
-                            onPress={() => {
-                                if (actionMenuCustomer.status === 'active') {
-                                    openSuspendModal(actionMenuCustomer._id);
-                                } else {
-                                    handleRevokeSuspension(actionMenuCustomer._id);
-                                }
-                                closeActionMenu();
-                            }}
-                        >
-                            <MaterialIcons
-                                name={actionMenuCustomer.status === 'active' ? 'pause-circle-outline' : 'play-circle-outline'}
-                                size={18}
-                                color={colors.text}
-                                style={{ marginRight: 10 }}
-                            />
-                            <Text style={styles.actionMenuText}>
-                                {actionMenuCustomer.status === 'active' ? 'Suspend Customer' : 'Activate Customer'}
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.actionMenuItem}
-                            onPress={() => { openDeleteModal(actionMenuCustomer._id); closeActionMenu(); }}
-                        >
-                            <MaterialIcons name="delete-outline" size={18} color={colors.error} style={{ marginRight: 10 }} />
-                            <Text style={[styles.actionMenuText, { color: colors.error }]}>Delete Account</Text>
-                        </TouchableOpacity>
-                    </View>
-                </>
+                Platform.OS === 'web' ? (
+                    <>
+                        <Pressable
+                            style={styles.actionMenuOverlay}
+                            onPress={closeActionMenu}
+                        />
+                        <View style={[styles.floatingActionMenu, { top: actionMenuPosition.top, right: actionMenuPosition.right }]}>
+                            <TouchableOpacity
+                                style={styles.actionMenuItem}
+                                onPress={() => { handleViewCustomer(actionMenuCustomer); closeActionMenu(); }}
+                            >
+                                <MaterialIcons name="visibility" size={18} color={colors.text} style={{ marginRight: 10 }} />
+                                <Text style={styles.actionMenuText}>View Customer</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.actionMenuItem}
+                                onPress={() => {
+                                    if (actionMenuCustomer.status === 'active') {
+                                        openSuspendModal(actionMenuCustomer._id);
+                                    } else {
+                                        handleRevokeSuspension(actionMenuCustomer._id);
+                                    }
+                                    closeActionMenu();
+                                }}
+                            >
+                                <MaterialIcons
+                                    name={actionMenuCustomer.status === 'active' ? 'pause-circle-outline' : 'play-circle-outline'}
+                                    size={18}
+                                    color={colors.text}
+                                    style={{ marginRight: 10 }}
+                                />
+                                <Text style={styles.actionMenuText}>
+                                    {actionMenuCustomer.status === 'active' ? 'Suspend Customer' : 'Activate Customer'}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.actionMenuItem}
+                                onPress={() => { openDeleteModal(actionMenuCustomer._id); closeActionMenu(); }}
+                            >
+                                <MaterialIcons name="delete-outline" size={18} color={colors.error} style={{ marginRight: 10 }} />
+                                <Text style={[styles.actionMenuText, { color: colors.error }]}>Delete Account</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </>
+                ) : (
+                    <Modal visible transparent animationType="slide" onRequestClose={closeActionMenu}>
+                        <Pressable style={[styles.modalOverlay, { justifyContent: 'flex-end' }]} onPress={closeActionMenu}>
+                            <Pressable style={styles.actionMenuMobile} onPress={(e) => e.stopPropagation()}>
+                                <TouchableOpacity
+                                    style={styles.actionMenuItem}
+                                    onPress={() => { handleViewCustomer(actionMenuCustomer); closeActionMenu(); }}
+                                >
+                                    <MaterialIcons name="visibility" size={18} color={colors.text} style={{ marginRight: 10 }} />
+                                    <Text style={styles.actionMenuText}>View Customer</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.actionMenuItem}
+                                    onPress={() => {
+                                        if (actionMenuCustomer.status === 'active') {
+                                            openSuspendModal(actionMenuCustomer._id);
+                                        } else {
+                                            handleRevokeSuspension(actionMenuCustomer._id);
+                                        }
+                                        closeActionMenu();
+                                    }}
+                                >
+                                    <MaterialIcons
+                                        name={actionMenuCustomer.status === 'active' ? 'pause-circle-outline' : 'play-circle-outline'}
+                                        size={18}
+                                        color={colors.text}
+                                        style={{ marginRight: 10 }}
+                                    />
+                                    <Text style={styles.actionMenuText}>
+                                        {actionMenuCustomer.status === 'active' ? 'Suspend Customer' : 'Activate Customer'}
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.actionMenuItem}
+                                    onPress={() => { openDeleteModal(actionMenuCustomer._id); closeActionMenu(); }}
+                                >
+                                    <MaterialIcons name="delete-outline" size={18} color={colors.error} style={{ marginRight: 10 }} />
+                                    <Text style={[styles.actionMenuText, { color: colors.error }]}>Delete Account</Text>
+                                </TouchableOpacity>
+                            </Pressable>
+                        </Pressable>
+                    </Modal>
+                )
             )}
         </View>
     );
@@ -2068,7 +2282,134 @@ const createStyles = (colors: any) =>
             gap: 16,
         },
         containerMobile: {
+            flexDirection: 'column',
+            padding: 0,
+            paddingBottom: 0,
+            gap: 0,
+        },
+
+        // Mobile Bottom Navigation
+        mobileBottomNav: {
+            flexDirection: 'row',
+            backgroundColor: colors.surface,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            paddingTop: 8,
+            paddingHorizontal: 4,
+        },
+        mobileNavItem: {
+            flex: 1,
+            alignItems: 'center',
+            paddingVertical: 6,
+        },
+        mobileNavItemActive: {},
+        mobileNavLabel: {
+            fontSize: 10,
+            color: colors.textMuted,
+            marginTop: 3,
+            textAlign: 'center',
+        },
+        mobileNavLabelActive: {
+            color: colors.primary,
+            fontWeight: '600',
+        },
+
+        // Mobile Card Layout (replaces tables)
+        mobileCardList: {
             padding: 12,
+            gap: 12,
+        },
+        mobileCustomerCard: {
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
+            gap: 12,
+        },
+        mobileCardRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+        },
+        mobileCardField: {
+            flex: 1,
+        },
+        mobileCardLabel: {
+            fontSize: 11,
+            color: colors.textMuted,
+            marginBottom: 2,
+        },
+        mobileCardValue: {
+            fontSize: 13,
+            fontWeight: '500',
+            color: colors.text,
+        },
+
+        // Charts row mobile
+        chartsRowMobile: {
+            flexDirection: 'column',
+        },
+
+        // Customers header mobile
+        customersHeaderMobile: {
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 12,
+        },
+
+        // Customers table header mobile
+        customersTableHeaderMobile: {
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 12,
+        },
+
+        // Table controls mobile
+        tableControlsMobile: {
+            flexDirection: 'column',
+            gap: 8,
+            width: '100%',
+        },
+
+        // Pagination mobile
+        paginationMobile: {
+            flexDirection: 'column',
+            gap: 12,
+            alignItems: 'center',
+        },
+
+        // Customer detail header mobile
+        customerDetailHeaderMobile: {
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 12,
+        },
+        customerDetailTitleRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        customerDetailActionsMobile: {
+            flexWrap: 'wrap',
+        },
+
+        // Settings form row mobile
+        settingsFormRowMobile: {
+            flexDirection: 'column',
+            gap: 16,
+        },
+
+        // Team header mobile
+        teamHeaderMobile: {
+            flexDirection: 'column',
+            gap: 12,
+        },
+
+        // Invite form row mobile
+        inviteFormRowMobile: {
+            flexDirection: 'column',
+            gap: 12,
         },
         // Sidebar
         sidebar: {
@@ -2164,10 +2505,13 @@ const createStyles = (colors: any) =>
         topBarMobile: {
             marginHorizontal: 0,
             marginTop: 0,
-            marginBottom: 16,
-            paddingHorizontal: 14,
-            flexWrap: 'wrap',
-            gap: 12,
+            marginBottom: 8,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 0,
+            borderLeftWidth: 0,
+            borderRightWidth: 0,
+            gap: 8,
         },
         searchContainer: {
             flexDirection: 'row',
@@ -2183,6 +2527,7 @@ const createStyles = (colors: any) =>
         },
         searchContainerMobile: {
             maxWidth: '100%',
+            flex: 1,
         },
         searchInput: {
             flex: 1,
@@ -2261,8 +2606,8 @@ const createStyles = (colors: any) =>
             paddingBottom: 24,
         },
         pageContentMobile: {
-            paddingHorizontal: 16,
-            paddingBottom: 20,
+            paddingHorizontal: 12,
+            paddingBottom: 16,
         },
         pageHeader: {
             marginBottom: 24,
@@ -2287,13 +2632,13 @@ const createStyles = (colors: any) =>
         },
         statCard: {
             flex: 1,
-            minWidth: 220,
+            minWidth: 150,
             backgroundColor: colors.surface,
             borderRadius: 16,
-            padding: 16,
+            padding: 14,
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 12,
+            gap: 10,
             borderWidth: 1,
             borderColor: colors.border,
         },
@@ -2304,14 +2649,16 @@ const createStyles = (colors: any) =>
             justifyContent: 'center',
             alignItems: 'center',
         },
-        statInfo: {},
+        statInfo: {
+            flex: 1,
+        },
         statLabel: {
             fontSize: 12,
             color: colors.textMuted,
             marginBottom: 4,
         },
         statValue: {
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: '700',
             color: colors.text,
         },
@@ -2325,13 +2672,13 @@ const createStyles = (colors: any) =>
         },
         customerStatCard: {
             flex: 1,
-            minWidth: 180,
+            minWidth: 140,
             backgroundColor: colors.surface,
             borderRadius: 16,
-            padding: 16,
+            padding: 14,
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 12,
+            gap: 10,
             borderWidth: 1,
             borderColor: colors.border,
         },
@@ -2342,7 +2689,9 @@ const createStyles = (colors: any) =>
             justifyContent: 'center',
             alignItems: 'center',
         },
-        customerStatInfo: {},
+        customerStatInfo: {
+            flex: 1,
+        },
         customerStatLabel: {
             fontSize: 12,
             color: colors.textMuted,
@@ -2435,7 +2784,8 @@ const createStyles = (colors: any) =>
             borderRadius: 8,
             paddingHorizontal: 12,
             paddingVertical: 8,
-            minWidth: 200,
+            flex: 1,
+            minWidth: 0,
         },
         tableSearchInput: {
             flex: 1,
@@ -2528,6 +2878,7 @@ const createStyles = (colors: any) =>
             fontSize: 12,
             color: colors.textMuted,
             marginTop: 2,
+            flexShrink: 1,
         },
         planBadge: {
             paddingHorizontal: 10,
@@ -2777,7 +3128,7 @@ const createStyles = (colors: any) =>
         },
         detailGridItem: {
             flex: 1,
-            minWidth: 200,
+            minWidth: 140,
             marginBottom: 16,
         },
         detailLabel: {
@@ -2993,7 +3344,7 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            minWidth: 200,
+            minWidth: 0,
             flex: 1,
             paddingVertical: 8,
             paddingHorizontal: 12,
@@ -3128,9 +3479,9 @@ const createStyles = (colors: any) =>
         // Error & Loading
         errorBanner: {
             position: 'absolute',
-            bottom: 24,
-            left: 24,
-            right: 24,
+            bottom: 12,
+            left: 12,
+            right: 12,
             backgroundColor: '#ef4444',
             borderRadius: 8,
             paddingHorizontal: 16,
@@ -3138,6 +3489,7 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
+            zIndex: 100,
         },
         errorText: {
             color: '#fff',
@@ -3743,9 +4095,9 @@ const createStyles = (colors: any) =>
         },
         inviteCodeText: {
             flex: 1,
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: '700',
-            letterSpacing: 4,
+            letterSpacing: 3,
             color: colors.text,
             fontFamily: 'monospace',
         },
@@ -3852,6 +4204,54 @@ const createStyles = (colors: any) =>
         chartLegendText: {
             fontSize: 12,
             color: colors.successText,
+        },
+
+        // ── Additional Mobile Responsive Styles ──
+        statsGridMobile: {
+            gap: 12,
+        },
+        customerStatsGridMobile: {
+            gap: 12,
+        },
+        detailGridMobile: {
+            flexDirection: 'column',
+        },
+        settingsTabsMobile: {
+            alignSelf: 'stretch',
+        },
+        settingsContentMobile: {
+            padding: 16,
+        },
+        moderationCardMobile: {
+            marginBottom: 12,
+        },
+        detailCardMobile: {
+            padding: 16,
+        },
+        topBarMobileCompact: {
+            borderRadius: 0,
+            marginHorizontal: 0,
+            marginTop: 0,
+            marginBottom: 0,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            flexDirection: 'column',
+            gap: 10,
+        },
+        mobileBottomNavSafe: {
+            paddingBottom: Platform.OS === 'ios' ? 20 : 4,
+        },
+        actionMenuMobile: {
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            width: '100%',
+            paddingVertical: 12,
+            paddingHorizontal: 8,
+            paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+        },
+        containerMobileSafe: {
+            paddingTop: Platform.OS === 'ios' ? 44 : Platform.OS === 'android' ? 24 : 0,
         },
     });
 

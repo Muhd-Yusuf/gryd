@@ -235,7 +235,9 @@ const CreditUnionAdminScreen = () => {
     const router = useRouter();
     const styles = useMemo(() => createStyles(colors), [colors]);
     const { width } = useWindowDimensions();
-    const isMobile = width < 800;
+    const isMobile = width < 900;
+    const [mobileShowContent, setMobileShowContent] = useState(false);
+    const [mobileShowSettingsContent, setMobileShowSettingsContent] = useState(false);
     const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
 
     const handleLogout = async () => {
@@ -2382,12 +2384,14 @@ const CreditUnionAdminScreen = () => {
         <View style={styles.container}>
             <View pointerEvents="none" style={styles.gridBackground} />
             {/* Top Navigation */}
-            <View style={styles.topNav}>
+            <View style={[styles.topNav, isMobile && styles.topNavMobile]}>
+                {!isMobile && (
                 <View style={styles.topNavLeft}>
                     <MaterialIcons name="tag" size={24} color={colors.text} />
                     <Text style={styles.logoText}>THE GRYD</Text>
                 </View>
-                <View style={styles.topNavTabs}>
+                )}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.topNavTabs, isMobile && styles.topNavTabsMobile]}>
                     <TouchableOpacity style={styles.tabActive}>
                         <Text style={styles.tabTextActive}>Server</Text>
                     </TouchableOpacity>
@@ -2397,11 +2401,12 @@ const CreditUnionAdminScreen = () => {
                     <TouchableOpacity style={styles.tab} onPress={() => router.push('/admin/contributors')}>
                         <Text style={styles.tabText}>Top Contributors</Text>
                     </TouchableOpacity>
-                </View>
+                </ScrollView>
             </View>
 
             <View style={styles.mainArea}>
-                {/* Left Icon Rail */}
+                {/* Left Icon Rail - hidden on mobile */}
+                {!isMobile && (
                 <View style={styles.iconRail}>
                     <TouchableOpacity style={styles.railLogo}>
                         {activeSubgrid ? (
@@ -2432,9 +2437,41 @@ const CreditUnionAdminScreen = () => {
                         <MaterialIcons name="close" size={18} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
+                )}
 
-                {/* Channel Sidebar */}
-                <View style={styles.channelSidebar}>
+                {/* Channel Sidebar - full width on mobile when not showing content */}
+                {(!isMobile || !mobileShowContent) && (
+                <View style={[styles.channelSidebar, isMobile && styles.channelSidebarMobile]}>
+                    {/* Mobile Top Bar - replaces icon rail on mobile */}
+                    {isMobile && (
+                        <View style={styles.mobileTopBar}>
+                            <View style={styles.mobileTopBarLeft}>
+                                {activeSubgrid?.logoUrl ? (
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
+                                ) : (
+                                    <View style={styles.mobileTopBarLogoPlaceholder}>
+                                        <Text style={styles.mobileTopBarLogoText}>
+                                            {(activeSubgrid?.name || 'SV').substring(0, 2).toUpperCase()}
+                                        </Text>
+                                    </View>
+                                )}
+                                <Text style={styles.mobileTopBarTitle} numberOfLines={1}>
+                                    {activeSubgrid?.name || 'Server'}
+                                </Text>
+                            </View>
+                            <View style={styles.mobileTopBarRight}>
+                                <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
+                                    <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={18} color={colors.textMuted} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.mobileTopBarBtn} onPress={() => setServerSettingsModalOpen(true)}>
+                                    <MaterialIcons name="settings" size={18} color={colors.textMuted} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.mobileExitButton} onPress={handleLogout}>
+                                    <MaterialIcons name="close" size={16} color="#FFFFFF" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
                     {/* Server Header with Dropdown */}
                     <View style={styles.serverHeaderContainer}>
                         <View style={styles.serverHeader}>
@@ -2459,7 +2496,7 @@ const CreditUnionAdminScreen = () => {
                         {/* Events */}
                         <TouchableOpacity
                             style={[styles.eventsButton, showEventsView && styles.eventsButtonActive]}
-                            onPress={() => setShowEventsView(!showEventsView)}
+                            onPress={() => { setShowEventsView(!showEventsView); if (isMobile) setMobileShowContent(true); }}
                         >
                             <MaterialIcons name="event" size={16} color={showEventsView ? colors.text : colors.textMuted} />
                             <Text style={[styles.eventsText, showEventsView && styles.eventsTextActive]}>Events</Text>
@@ -2515,6 +2552,7 @@ const CreditUnionAdminScreen = () => {
                                                     } else {
                                                         setActiveChannelId(channel._id);
                                                     }
+                                                    if (isMobile) setMobileShowContent(true);
                                                 }}
                                             >
                                                 <MaterialIcons
@@ -2633,10 +2671,12 @@ const CreditUnionAdminScreen = () => {
                         </View>
                     </View>
                 </View>
+                )}
 
-                {/* Main Content */}
+                {/* Main Content - full width on mobile when showing content */}
+                {(!isMobile || mobileShowContent) && (
                 <Pressable
-                    style={styles.mainContent}
+                    style={[styles.mainContent, isMobile && styles.mainContentMobile]}
                     onPress={() => {
                         if (serverMenuOpen) setServerMenuOpen(false);
                     }}
@@ -2646,6 +2686,11 @@ const CreditUnionAdminScreen = () => {
                         <>
                             <View style={styles.contentHeader}>
                                 <View style={styles.contentHeaderLeft}>
+                                    {isMobile && (
+                                        <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
+                                            <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                        </TouchableOpacity>
+                                    )}
                                     <MaterialIcons name="event" size={18} color={colors.textMuted} />
                                     <Text style={styles.contentTitle}>Events & Announcements</Text>
                                 </View>
@@ -2744,6 +2789,11 @@ const CreditUnionAdminScreen = () => {
                     {/* Channel Header */}
                     <View style={styles.contentHeader}>
                         <View style={styles.contentHeaderLeft}>
+                            {isMobile && (
+                                <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
+                                    <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                </TouchableOpacity>
+                            )}
                             <MaterialIcons name={activeChannel?.visibility === 'admin' ? 'lock' : 'tag'} size={18} color={colors.textMuted} />
                             <Text style={styles.contentTitle}>{activeChannel?.name || 'general'}</Text>
                         </View>
@@ -2754,9 +2804,12 @@ const CreditUnionAdminScreen = () => {
                             <TouchableOpacity style={styles.headerIcon} onPress={() => setNotificationSettingsModalOpen(true)}>
                                 <MaterialIcons name="notifications" size={18} color={colors.textMuted} />
                             </TouchableOpacity>
+                            {!isMobile && (
                             <TouchableOpacity style={styles.headerIcon} onPress={() => setShowMembersSidebar(!showMembersSidebar)}>
                                 <MaterialIcons name="group" size={18} color={showMembersSidebar ? colors.text : colors.textMuted} />
                             </TouchableOpacity>
+                            )}
+                            {!isMobile && (
                             <View style={styles.searchBox}>
                                 <TextInput
                                     style={styles.searchInput}
@@ -2773,6 +2826,7 @@ const CreditUnionAdminScreen = () => {
                                     <MaterialIcons name="search" size={14} color={colors.textMuted} />
                                 )}
                             </View>
+                            )}
                         </View>
                     </View>
 
@@ -3130,6 +3184,7 @@ const CreditUnionAdminScreen = () => {
                         </>
                     )}
                 </Pressable>
+                )}
 
                 {/* Members Sidebar */}
                 {!isMobile && showMembersSidebar && (
@@ -3834,78 +3889,91 @@ const CreditUnionAdminScreen = () => {
             </Modal>
 
             {/* Server Settings Full Page Modal */}
-            <Modal visible={serverSettingsModalOpen} transparent animationType="fade">
-                <View style={styles.settingsFullPage}>
-                    {/* Settings Sidebar */}
-                    <View style={styles.settingsSidebar}>
+            <Modal visible={serverSettingsModalOpen} transparent animationType="fade" onRequestClose={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
+                <View style={[styles.settingsFullPage, isMobile && styles.settingsFullPageMobile]}>
+                    {/* Settings Sidebar - full width on mobile, hidden when viewing content */}
+                    {(!isMobile || !mobileShowSettingsContent) && (
+                    <View style={[styles.settingsSidebar, isMobile && styles.settingsSidebarMobile]}>
                         <View style={styles.settingsSidebarHeader}>
                             <MaterialIcons name="tag" size={16} color="#FFFFFF" />
                             <Text style={styles.settingsSidebarTitle}>THE GRYD</Text>
+                            {isMobile && (
+                                <TouchableOpacity style={styles.settingsMobileCloseBtn} onPress={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
+                                    <MaterialIcons name="close" size={20} color="#EF4444" />
+                                </TouchableOpacity>
+                            )}
                         </View>
 
                         <Text style={styles.settingsSectionLabel}>{activeSubgrid?.name || 'RBFCU Server'}</Text>
 
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'server-profile' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('server-profile')}
+                            onPress={() => { setSettingsTab('server-profile'); if (isMobile) setMobileShowSettingsContent(true); }}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'server-profile' && styles.settingsNavTextActive]}>Server Profile</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'engagement' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('engagement')}
+                            onPress={() => { setSettingsTab('engagement'); if (isMobile) setMobileShowSettingsContent(true); }}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'engagement' && styles.settingsNavTextActive]}>Engagement</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'members' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('members')}
+                            onPress={() => { setSettingsTab('members'); if (isMobile) setMobileShowSettingsContent(true); }}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'members' && styles.settingsNavTextActive]}>Members</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'stakeholders' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('stakeholders')}
+                            onPress={() => { setSettingsTab('stakeholders'); if (isMobile) setMobileShowSettingsContent(true); }}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'stakeholders' && styles.settingsNavTextActive]}>Stakeholders</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'roles' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('roles')}
+                            onPress={() => { setSettingsTab('roles'); if (isMobile) setMobileShowSettingsContent(true); }}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'roles' && styles.settingsNavTextActive]}>Roles & Permissions</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'invites' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('invites')}
+                            onPress={() => { setSettingsTab('invites'); if (isMobile) setMobileShowSettingsContent(true); }}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'invites' && styles.settingsNavTextActive]}>Invites</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'bans' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('bans')}
+                            onPress={() => { setSettingsTab('bans'); if (isMobile) setMobileShowSettingsContent(true); }}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'bans' && styles.settingsNavTextActive]}>Ban Members</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'content-moderation' && styles.settingsNavItemActive]}
-                            onPress={() => setSettingsTab('content-moderation')}
+                            onPress={() => { setSettingsTab('content-moderation'); if (isMobile) setMobileShowSettingsContent(true); }}
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'content-moderation' && styles.settingsNavTextActive]}>Content Moderation</Text>
                         </TouchableOpacity>
                     </View>
+                    )}
 
-                    {/* Settings Content */}
-                    <View style={styles.settingsContent}>
+                    {/* Settings Content - full width on mobile, shown when viewing content */}
+                    {(!isMobile || mobileShowSettingsContent) && (
+                    <View style={[styles.settingsContent, isMobile && styles.settingsContentMobile]}>
                         <View style={styles.settingsContentHeader}>
+                            {isMobile && (
+                                <TouchableOpacity onPress={() => setMobileShowSettingsContent(false)} style={styles.settingsMobileBackBtn}>
+                                    <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                </TouchableOpacity>
+                            )}
                             <Text style={styles.settingsContentTitle}>Server Settings</Text>
-                            <TouchableOpacity style={styles.settingsCloseBtn} onPress={() => setServerSettingsModalOpen(false)}>
+                            <TouchableOpacity style={styles.settingsCloseBtn} onPress={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
                                 <Text style={styles.settingsCloseBtnText}>Close</Text>
                                 <MaterialIcons name="close" size={18} color="#EF4444" />
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView style={styles.settingsScrollContent} showsVerticalScrollIndicator={false}>
+                        <ScrollView style={[styles.settingsScrollContent, isMobile && { paddingHorizontal: 16 }]} showsVerticalScrollIndicator={false}>
                             {/* Server Profile Tab */}
                             {settingsTab === 'server-profile' && (
                                 <View style={styles.settingsPanel}>
@@ -4941,6 +5009,7 @@ const CreditUnionAdminScreen = () => {
                             )}
                         </ScrollView>
                     </View>
+                    )}
                 </View>
             </Modal>
 
@@ -5920,6 +5989,87 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             borderRightColor: colors.border,
             overflow: 'visible',
             zIndex: 100,
+        },
+        channelSidebarMobile: {
+            width: '100%',
+            borderRightWidth: 0,
+        },
+        mobileTopBar: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surfaceMuted,
+        },
+        mobileTopBarLeft: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            flex: 1,
+        },
+        mobileTopBarLogo: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+        },
+        mobileTopBarLogoPlaceholder: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: '#1E3A8A',
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        mobileTopBarLogoText: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: '#FFFFFF',
+        },
+        mobileTopBarTitle: {
+            fontSize: 15,
+            fontWeight: '600',
+            color: colors.text,
+            flex: 1,
+        },
+        mobileTopBarRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        mobileTopBarBtn: {
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            backgroundColor: colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        mobileExitButton: {
+            width: 30,
+            height: 30,
+            borderRadius: 15,
+            backgroundColor: '#EF4444',
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        mobileBackButton: {
+            marginRight: 4,
+            padding: 2,
+        },
+        topNavMobile: {
+            paddingHorizontal: 8,
+            justifyContent: 'center',
+        },
+        topNavTabsMobile: {
+            marginLeft: 0,
+            gap: 16,
+            paddingHorizontal: 4,
+        },
+        mainContentMobile: {
+            width: '100%',
         },
         serverHeaderContainer: {
             position: 'relative',
@@ -7614,6 +7764,29 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flex: 1,
             paddingHorizontal: 32,
             paddingVertical: 24,
+        },
+        // Server Settings Mobile Styles
+        settingsFullPageMobile: {
+            padding: 0,
+        },
+        settingsSidebarMobile: {
+            width: '100%',
+            borderRightWidth: 0,
+            borderRadius: 0,
+        },
+        settingsContentMobile: {
+            width: '100%',
+            borderRadius: 0,
+            borderLeftWidth: 0,
+            borderWidth: 0,
+        },
+        settingsMobileCloseBtn: {
+            marginLeft: 'auto',
+            padding: 4,
+        },
+        settingsMobileBackBtn: {
+            marginRight: 8,
+            padding: 4,
         },
         settingsPanel: {
             maxWidth: 800,

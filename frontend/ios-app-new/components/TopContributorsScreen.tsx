@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     Image,
     Platform,
+    useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -54,6 +55,9 @@ type Subgrid = {
 export default function TopContributorsScreen() {
     const { colors, mode, toggleTheme } = useTheme();
     const router = useRouter();
+    const { width } = useWindowDimensions();
+    const isMobile = width < 900;
+    const [mobileShowContent, setMobileShowContent] = useState(false);
 
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [activeSubgridId, setActiveSubgridId] = useState<string | null>(null);
@@ -546,6 +550,94 @@ export default function TopContributorsScreen() {
             fontSize: 14,
             color: colors.textMuted,
         },
+        // Mobile responsive styles
+        topNavMobile: {
+            paddingHorizontal: 8,
+            justifyContent: 'center',
+        },
+        navTabsMobile: {
+            marginLeft: 0,
+            gap: 16,
+            paddingHorizontal: 4,
+        },
+        contributorsSidebarMobile: {
+            width: '100%',
+            borderRightWidth: 0,
+        },
+        profileAreaMobile: {
+            width: '100%',
+        },
+        mobileTopBar: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surfaceMuted,
+        },
+        mobileTopBarLeft: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            flex: 1,
+        },
+        mobileTopBarLogo: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+        },
+        mobileTopBarLogoPlaceholder: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: '#1E3A8A',
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        mobileTopBarLogoText: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: '#FFFFFF',
+        },
+        mobileTopBarTitle: {
+            fontSize: 15,
+            fontWeight: '600',
+            color: colors.text,
+            flex: 1,
+        },
+        mobileTopBarRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        mobileTopBarBtn: {
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            backgroundColor: colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        mobileProfileHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surface,
+        },
+        mobileBackButton: {
+            marginRight: 8,
+            padding: 4,
+        },
+        mobileProfileHeaderTitle: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: colors.text,
+        },
     });
 
     if (loading) {
@@ -574,12 +666,14 @@ export default function TopContributorsScreen() {
     return (
         <View style={styles.container}>
             {/* Top Navigation */}
-            <View style={styles.topNav}>
-                <View style={styles.logo}>
-                    <Text style={styles.logoIcon}>#</Text>
-                    <Text style={styles.logoText}>The Gryd</Text>
-                </View>
-                <View style={styles.navTabs}>
+            <View style={[styles.topNav, isMobile && styles.topNavMobile]}>
+                {!isMobile && (
+                    <View style={styles.logo}>
+                        <Text style={styles.logoIcon}>#</Text>
+                        <Text style={styles.logoText}>The Gryd</Text>
+                    </View>
+                )}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.navTabs, isMobile && styles.navTabsMobile]}>
                     <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin')}>
                         <Text style={styles.navTabText}>Server</Text>
                     </TouchableOpacity>
@@ -589,41 +683,66 @@ export default function TopContributorsScreen() {
                     <TouchableOpacity style={[styles.navTab, styles.navTabActive]}>
                         <Text style={[styles.navTabText, styles.navTabTextActive]}>Top Contributors</Text>
                     </TouchableOpacity>
-                </View>
+                </ScrollView>
             </View>
 
             <View style={styles.mainContent}>
-                {/* Icon Rail */}
-                <View style={styles.iconRail}>
-                    <TouchableOpacity style={styles.serverIcon} onPress={() => router.push('/admin')}>
-                        {activeSubgrid ? (
-                            activeSubgrid.logoUrl ? (
-                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
+                {/* Icon Rail - hidden on mobile */}
+                {!isMobile && (
+                    <View style={styles.iconRail}>
+                        <TouchableOpacity style={styles.serverIcon} onPress={() => router.push('/admin')}>
+                            {activeSubgrid ? (
+                                activeSubgrid.logoUrl ? (
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
+                                ) : (
+                                    <Text style={styles.serverIconText}>
+                                        {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
+                                    </Text>
+                                )
+                            ) : null}
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
+                            <MaterialIcons name="message" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <View style={{ flex: 1 }} />
+                        <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
+                            <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
+                            {mode === 'dark' ? (
+                                <MaterialIcons name="light-mode" size={18} color={colors.textMuted} />
                             ) : (
-                                <Text style={styles.serverIconText}>
-                                    {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
-                                </Text>
-                            )
-                        ) : null}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
-                        <MaterialIcons name="message" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    <View style={{ flex: 1 }} />
-                    <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
-                        <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
-                        {mode === 'dark' ? (
-                            <MaterialIcons name="light-mode" size={18} color={colors.textMuted} />
-                        ) : (
-                            <MaterialIcons name="dark-mode" size={18} color={colors.textMuted} />
-                        )}
-                    </TouchableOpacity>
-                </View>
+                                <MaterialIcons name="dark-mode" size={18} color={colors.textMuted} />
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
 
-                {/* Contributors Sidebar */}
-                <View style={styles.contributorsSidebar}>
+                {/* Contributors Sidebar - full width on mobile, hidden when viewing profile */}
+                {(!isMobile || !mobileShowContent) && (
+                <View style={[styles.contributorsSidebar, isMobile && styles.contributorsSidebarMobile]}>
+                    {/* Mobile Top Bar */}
+                    {isMobile && (
+                        <View style={styles.mobileTopBar}>
+                            <View style={styles.mobileTopBarLeft}>
+                                {activeSubgrid?.logoUrl ? (
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
+                                ) : (
+                                    <View style={styles.mobileTopBarLogoPlaceholder}>
+                                        <Text style={styles.mobileTopBarLogoText}>
+                                            {(activeSubgrid?.name || 'SV').substring(0, 2).toUpperCase()}
+                                        </Text>
+                                    </View>
+                                )}
+                                <Text style={styles.mobileTopBarTitle} numberOfLines={1}>Top Contributors</Text>
+                            </View>
+                            <View style={styles.mobileTopBarRight}>
+                                <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
+                                    <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={16} color={colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
                     <View style={styles.sidebarHeader}>
                         <Text style={styles.sidebarTitle}>Top Contributors</Text>
                     </View>
@@ -635,7 +754,7 @@ export default function TopContributorsScreen() {
                                 <TouchableOpacity
                                     key={stats.member._id}
                                     style={[styles.contributorItem, isActive && styles.contributorItemActive]}
-                                    onPress={() => setSelectedContributor(stats)}
+                                    onPress={() => { setSelectedContributor(stats); if (isMobile) setMobileShowContent(true); }}
                                 >
                                     <View style={styles.contributorAvatar}>
                                         <Text style={styles.contributorAvatarText}>{getInitials(name)}</Text>
@@ -676,11 +795,22 @@ export default function TopContributorsScreen() {
                         </View>
                     </View>
                 </View>
+                )}
 
-                {/* Profile Area */}
-                <View style={styles.profileArea}>
+                {/* Profile Area - full width on mobile, shown when viewing content */}
+                {(!isMobile || mobileShowContent) && (
+                <View style={[styles.profileArea, isMobile && styles.profileAreaMobile]}>
                     {selectedContributor && (
                         <>
+                            {/* Mobile Back Button */}
+                            {isMobile && (
+                                <View style={styles.mobileProfileHeader}>
+                                    <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
+                                        <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                    </TouchableOpacity>
+                                    <Text style={styles.mobileProfileHeaderTitle}>{getMemberName(selectedContributor.member)}</Text>
+                                </View>
+                            )}
                             {/* Profile Banner */}
                             <View style={styles.profileBanner}>
                                 {/* Decorative shapes */}
@@ -741,6 +871,7 @@ export default function TopContributorsScreen() {
                         </>
                     )}
                 </View>
+                )}
             </View>
         </View>
     );

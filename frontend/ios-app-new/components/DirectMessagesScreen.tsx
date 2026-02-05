@@ -12,6 +12,7 @@ import {
     Pressable,
     Alert,
     Animated,
+    useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -119,6 +120,9 @@ type Subgrid = {
 export default function DirectMessagesScreen() {
     const { colors, mode, toggleTheme } = useTheme();
     const router = useRouter();
+    const { width } = useWindowDimensions();
+    const isMobile = width < 900;
+    const [mobileShowContent, setMobileShowContent] = useState(false);
 
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [activeSubgridId, setActiveSubgridId] = useState<string | null>(null);
@@ -250,19 +254,23 @@ export default function DirectMessagesScreen() {
             const friendIds = response?.data?.friends || [];
             const users = response?.data?.users || {};
             const normalizedIds = Array.isArray(friendIds) ? friendIds : [];
+            console.log('[DirectMessages] refreshFriends loaded:', normalizedIds.length, 'friends');
             setFriends(normalizedIds);
             setFriendUsers(users);
-            if (normalizedIds.length > 0 && !selectedFriendId) {
-                setSelectedFriendId(normalizedIds[0]);
-            } else if (selectedFriendId && !normalizedIds.includes(selectedFriendId)) {
-                setSelectedFriendId(normalizedIds[0] || null);
-            }
+            setSelectedFriendId((prev) => {
+                if (normalizedIds.length > 0 && !prev) {
+                    return normalizedIds[0];
+                } else if (prev && !normalizedIds.includes(prev)) {
+                    return normalizedIds[0] || null;
+                }
+                return prev;
+            });
         } catch (error) {
             console.error('[DirectMessages] Failed to load friends:', error);
             setFriends([]);
             setFriendUsers({});
         }
-    }, [selectedFriendId]);
+    }, []);
 
     // Load friends and members when subgrid changes
     useEffect(() => {
@@ -1101,12 +1109,14 @@ export default function DirectMessagesScreen() {
     return (
         <View style={styles.container}>
             {/* Top Navigation */}
-            <View style={styles.topNav}>
-                <View style={styles.logo}>
-                    <Text style={styles.logoIcon}>#</Text>
-                    <Text style={styles.logoText}>The Gryd</Text>
-                </View>
-                <View style={styles.navTabs}>
+            <View style={[styles.topNav, isMobile && styles.topNavMobile]}>
+                {!isMobile && (
+                    <View style={styles.logo}>
+                        <Text style={styles.logoIcon}>#</Text>
+                        <Text style={styles.logoText}>The Gryd</Text>
+                    </View>
+                )}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.navTabs, isMobile && styles.navTabsMobile]}>
                     <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin')}>
                         <Text style={styles.navTabText}>Server</Text>
                     </TouchableOpacity>
@@ -1116,41 +1126,66 @@ export default function DirectMessagesScreen() {
                     <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin/contributors')}>
                         <Text style={styles.navTabText}>Top Contributors</Text>
                     </TouchableOpacity>
-                </View>
+                </ScrollView>
             </View>
 
             <View style={styles.mainContent}>
-                {/* Icon Rail */}
-                <View style={styles.iconRail}>
-                    <TouchableOpacity style={styles.serverIcon} onPress={() => router.push('/admin')}>
-                        {activeSubgrid ? (
-                            activeSubgrid.logoUrl ? (
-                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
+                {/* Icon Rail - hidden on mobile */}
+                {!isMobile && (
+                    <View style={styles.iconRail}>
+                        <TouchableOpacity style={styles.serverIcon} onPress={() => router.push('/admin')}>
+                            {activeSubgrid ? (
+                                activeSubgrid.logoUrl ? (
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
+                                ) : (
+                                    <Text style={styles.serverIconText}>
+                                        {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
+                                    </Text>
+                                )
+                            ) : null}
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
+                            <MaterialIcons name="message" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <View style={{ flex: 1 }} />
+                        <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
+                            <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
+                            {mode === 'dark' ? (
+                                <MaterialIcons name="light-mode" size={18} color={colors.textMuted} />
                             ) : (
-                                <Text style={styles.serverIconText}>
-                                    {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
-                                </Text>
-                            )
-                        ) : null}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
-                        <MaterialIcons name="message" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    <View style={{ flex: 1 }} />
-                    <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
-                        <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
-                        {mode === 'dark' ? (
-                            <MaterialIcons name="light-mode" size={18} color={colors.textMuted} />
-                        ) : (
-                            <MaterialIcons name="dark-mode" size={18} color={colors.textMuted} />
-                        )}
-                    </TouchableOpacity>
-                </View>
+                                <MaterialIcons name="dark-mode" size={18} color={colors.textMuted} />
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
 
-                {/* Friends Sidebar */}
-                <View style={styles.friendsSidebar}>
+                {/* Friends Sidebar - full width on mobile, hidden when viewing content */}
+                {(!isMobile || !mobileShowContent) && (
+                <View style={[styles.friendsSidebar, isMobile && styles.friendsSidebarMobile]}>
+                    {/* Mobile Top Bar */}
+                    {isMobile && (
+                        <View style={styles.mobileTopBar}>
+                            <View style={styles.mobileTopBarLeft}>
+                                {activeSubgrid?.logoUrl ? (
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
+                                ) : (
+                                    <View style={styles.mobileTopBarLogoPlaceholder}>
+                                        <Text style={styles.mobileTopBarLogoText}>
+                                            {(activeSubgrid?.name || 'SV').substring(0, 2).toUpperCase()}
+                                        </Text>
+                                    </View>
+                                )}
+                                <Text style={styles.mobileTopBarTitle} numberOfLines={1}>Direct Messages</Text>
+                            </View>
+                            <View style={styles.mobileTopBarRight}>
+                                <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
+                                    <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={16} color={colors.text} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
                     {/* Sidebar Header */}
                     <View style={styles.sidebarHeader}>
                         <View style={styles.sidebarHeaderLeft}>
@@ -1163,24 +1198,32 @@ export default function DirectMessagesScreen() {
 
                     {/* Friends List */}
                     <ScrollView style={styles.friendsList} showsVerticalScrollIndicator={false}>
-                        {(friends || []).map((friendId, index) => {
-                            const isActive = selectedFriendId === friendId;
-                            const name = getFriendName(friendId);
-                            return (
-                                <TouchableOpacity
-                                    key={friendId}
-                                    style={[styles.friendItem, isActive && styles.friendItemActive]}
-                                    onPress={() => setSelectedFriendId(friendId)}
-                                >
-                                    <UserAvatar
-                                        uri={getAvatarUrl(friendId)}
-                                        name={getFriendName(friendId)}
-                                        style={styles.friendAvatar}
-                                    />
-                                    <Text style={[styles.friendName, isActive && styles.friendNameActive]}>{name}</Text>
-                                </TouchableOpacity>
-                            );
-                        })}
+                        {(friends || []).length === 0 ? (
+                            <View style={styles.emptyFriendsList}>
+                                <MaterialIcons name="person-add" size={40} color={colors.textSubtle} />
+                                <Text style={styles.emptyFriendsTitle}>No friends yet</Text>
+                                <Text style={styles.emptyFriendsText}>Tap the + button above to add friends and start messaging</Text>
+                            </View>
+                        ) : (
+                            (friends || []).map((friendId, index) => {
+                                const isActive = selectedFriendId === friendId;
+                                const name = getFriendName(friendId);
+                                return (
+                                    <TouchableOpacity
+                                        key={friendId}
+                                        style={[styles.friendItem, isActive && styles.friendItemActive]}
+                                        onPress={() => { setSelectedFriendId(friendId); if (isMobile) setMobileShowContent(true); }}
+                                    >
+                                        <UserAvatar
+                                            uri={getAvatarUrl(friendId)}
+                                            name={getFriendName(friendId)}
+                                            style={styles.friendAvatar}
+                                        />
+                                        <Text style={[styles.friendName, isActive && styles.friendNameActive]}>{name}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })
+                        )}
                     </ScrollView>
 
                     {/* User Profile */}
@@ -1212,14 +1255,21 @@ export default function DirectMessagesScreen() {
                         </View>
                     </View>
                 </View>
+                )}
 
-                {/* Chat Area */}
-                <View style={styles.chatArea}>
+                {/* Chat Area - full width on mobile, shown when viewing content */}
+                {(!isMobile || mobileShowContent) && (
+                <View style={[styles.chatArea, isMobile && styles.chatAreaMobile]}>
                     {selectedFriendId ? (
                         <>
                             {/* Chat Header */}
                             <View style={styles.chatHeader}>
                                 <View style={styles.chatHeaderLeft}>
+                                    {isMobile && (
+                                        <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
+                                            <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                        </TouchableOpacity>
+                                    )}
                                     <UserAvatar
                                         uri={getAvatarUrl(selectedFriendId)}
                                         name={selectedFriendName}
@@ -1484,9 +1534,10 @@ export default function DirectMessagesScreen() {
                         </View>
                     )}
                 </View>
+                )}
 
-                {/* Profile Sidebar */}
-                {selectedFriendId && (
+                {/* Profile Sidebar - hidden on mobile */}
+                {!isMobile && selectedFriendId && (
                     <View style={styles.profileSidebar}>
                         <View style={styles.profileHeaderBanner}>
                             {/* Decorative shapes */}
@@ -2797,5 +2848,99 @@ const createStyles = (colors: any) =>
             fontSize: 14,
             fontWeight: '600',
             color: '#FFFFFF',
+        },
+        // Mobile responsive styles
+        topNavMobile: {
+            paddingHorizontal: 8,
+            justifyContent: 'center',
+        },
+        navTabsMobile: {
+            marginLeft: 0,
+            gap: 16,
+            paddingHorizontal: 4,
+        },
+        friendsSidebarMobile: {
+            width: '100%',
+            borderRightWidth: 0,
+        },
+        chatAreaMobile: {
+            width: '100%',
+        },
+        mobileTopBar: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surfaceMuted,
+        },
+        mobileTopBarLeft: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            flex: 1,
+        },
+        mobileTopBarLogo: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+        },
+        mobileTopBarLogoPlaceholder: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: '#1E3A8A',
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        mobileTopBarLogoText: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: '#FFFFFF',
+        },
+        mobileTopBarTitle: {
+            fontSize: 15,
+            fontWeight: '600',
+            color: colors.text,
+            flex: 1,
+        },
+        mobileTopBarRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        mobileTopBarBtn: {
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            backgroundColor: colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        mobileBackButton: {
+            marginRight: 8,
+            padding: 4,
+        },
+        emptyFriendsList: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 40,
+            paddingHorizontal: 20,
+            gap: 8,
+        },
+        emptyFriendsTitle: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: colors.text,
+            marginTop: 8,
+        },
+        emptyFriendsText: {
+            fontSize: 13,
+            color: colors.textMuted,
+            textAlign: 'center',
+            lineHeight: 18,
         },
     });
