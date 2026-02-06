@@ -29,6 +29,7 @@ import { useAgoraCall } from '../../../hooks';
 import { useCallContext } from '../../../contexts/CallContext';
 import { CallModalDefault as CallModal } from '../../../components';
 import { diagnoseCallState } from '../../../lib/callTestUtils';
+import { useWebSocketContext } from '../../../contexts/WebSocketContext';
 
 type Subgrid = {
     _id: string;
@@ -231,6 +232,9 @@ const DirectMessagesScreen = () => {
 
     // Get call context for managing calls
     const { incomingCall, clearIncomingCall, markCallConnected } = useCallContext();
+
+    // WebSocket for real-time messages
+    const { isConnected, joinRoom, leaveRoom, subscribe } = useWebSocketContext();
 
     // Agora call hook - memoize callbacks to prevent unnecessary re-renders
     const onCallEnded = useCallback((callId: string, reason: string) => {
@@ -504,10 +508,75 @@ const DirectMessagesScreen = () => {
         // Initial fetch
         loadMessages();
 
-        // Auto-refresh every 5 seconds for real-time sync
-        const interval = setInterval(loadMessages, 5000);
+        // Keep polling as fallback only if WebSocket is not connected
+        // The WebSocket subscription below handles real-time updates when connected
+        const interval = setInterval(() => {
+            if (!isConnected) {
+                loadMessages();
+            }
+        }, 5000);
         return () => clearInterval(interval);
-    }, [subgridId, activePeerId]);
+    }, [subgridId, activePeerId, isConnected]);
+
+    // WebSocket subscription for real-time DM updates
+    // Use refs to avoid stale closures
+    const userIdRef = useRef(userId);
+    const activePeerIdRef = useRef(activePeerId);
+    useEffect(() => { userIdRef.current = userId; }, [userId]);
+    useEffect(() => { activePeerIdRef.current = activePeerId; }, [activePeerId]);
+
+    useEffect(() => {
+        if (!isConnected || !userId || !activePeerId) {
+            console.log('[DM Web] Skipping WebSocket subscription - missing:', { isConnected, userId: !!userId, activePeerId: !!activePeerId });
+            return;
+        }
+
+        // Create consistent DM room ID (sorted user IDs)
+        const sortedIds = [String(userId), String(activePeerId)].sort();
+        const dmRoomId = `${sortedIds[0]}_${sortedIds[1]}`;
+
+        console.log('[DM Web] Joining DM room:', dmRoomId);
+        joinRoom('dm', dmRoomId);
+
+        // Subscribe to new messages
+        const unsubNewMessage = subscribe('new_message', (data: any) => {
+            console.log('[DM Web] new_message event received:', data?.roomType, data?.roomId);
+            if (data.roomType === 'dm' && data.message) {
+                const msgSenderId = String(data.message?.senderId || '');
+                const msgRecipientId = String(data.message?.recipientId || '');
+                const myUserId = String(userIdRef.current || '');
+                const peerId = String(activePeerIdRef.current || '');
+
+                // Check if this message belongs to this conversation
+                const isForThisConversation =
+                    (msgSenderId === myUserId && msgRecipientId === peerId) ||
+                    (msgSenderId === peerId && msgRecipientId === myUserId);
+
+                if (isForThisConversation) {
+                    setMessages((prev) => {
+                        // Avoid duplicates
+                        if (prev.some((m) => m._id === data.message._id)) {
+                            return prev;
+                        }
+                        return [...prev, data.message];
+                    });
+                }
+            }
+        });
+
+        // Subscribe to message deletions
+        const unsubMessageDeleted = subscribe('message_deleted', (data: any) => {
+            if (data.roomType === 'dm' && data.messageId) {
+                setMessages((prev) => prev.filter((m) => m._id !== data.messageId));
+            }
+        });
+
+        return () => {
+            leaveRoom('dm', dmRoomId);
+            unsubNewMessage();
+            unsubMessageDeleted();
+        };
+    }, [isConnected, userId, activePeerId, joinRoom, leaveRoom, subscribe]);
 
     const friendSet = useMemo(() => new Set(friends), [friends]);
     const blockedSet = useMemo(() => new Set(blockedIds), [blockedIds]);
@@ -763,16 +832,36 @@ const DirectMessagesScreen = () => {
                 kind: 'text',
                 attachments: uploadedAttachments,
             });
-            const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`);
-            const newMessages = response?.data || [];
-            setMessages(newMessages);
 
-            // Update last message for this conversation
-            if (newMessages.length > 0) {
+            // Use optimistic update if WebSocket is connected (backend will broadcast the message back)
+            // Otherwise fall back to refetching
+            if (isConnected && sendResult?.data) {
+                const sentMessage = sendResult.data;
+                setMessages((prev) => {
+                    // Avoid duplicates (WebSocket might deliver it first)
+                    if (prev.some((m) => m._id === sentMessage._id)) {
+                        return prev;
+                    }
+                    return [...prev, sentMessage];
+                });
+                // Update last message for this conversation
                 setLastMessages(prev => ({
                     ...prev,
-                    [activePeerId]: newMessages[0]
+                    [activePeerId]: sentMessage
                 }));
+            } else {
+                // Fallback: refetch messages
+                const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`);
+                const newMessages = response?.data || [];
+                setMessages(newMessages);
+
+                // Update last message for this conversation
+                if (newMessages.length > 0) {
+                    setLastMessages(prev => ({
+                        ...prev,
+                        [activePeerId]: newMessages[0]
+                    }));
+                }
             }
         } catch (err: any) {
             setError(err.message || 'Failed to send message.');

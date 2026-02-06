@@ -7,6 +7,7 @@ import { ThemeProvider, useTheme } from '../lib/theme';
 import { initAuth } from '../lib/api';
 import { WebSocketProvider } from '../contexts/WebSocketContext';
 import { CallProvider } from '../contexts/CallContext';
+import { NotificationProvider } from '../contexts/NotificationContext';
 import IncomingCallOverlay from '../components/IncomingCallOverlay';
 
 const RootStack = () => {
@@ -71,10 +72,12 @@ export default function RootLayout() {
     return (
         <ThemeProvider>
             <WebSocketProvider>
-                <CallProvider>
-                    <RootStack />
-                    <IncomingCallOverlay />
-                </CallProvider>
+                <NotificationProvider>
+                    <CallProvider>
+                        <RootStack />
+                        <IncomingCallOverlay />
+                    </CallProvider>
+                </NotificationProvider>
             </WebSocketProvider>
         </ThemeProvider>
     );

@@ -6,6 +6,8 @@
  */
 
 const EventEmitter = require('events');
+const User = require('../models/User');
+const pushNotificationService = require('./pushNotificationService');
 
 // Import websocketService lazily to avoid circular dependency
 let websocketService = null;
@@ -136,7 +138,7 @@ class CallSignalingService extends EventEmitter {
      * Notify callee of incoming call
      * @param {object} callData - Call information
      */
-    notifyIncomingCall(callData) {
+    async notifyIncomingCall(callData) {
         const { callId, calleeId, callerId, callerName, callerAvatar, callType, channelName, token, uid, appId } = callData;
 
         // Log for debugging
@@ -172,6 +174,53 @@ class CallSignalingService extends EventEmitter {
         });
 
         console.log('[CallSignaling] Notification delivered:', delivered);
+
+        // If not delivered via SSE/WebSocket, send push notification
+        if (!delivered) {
+            console.log('[CallSignaling] User offline, sending push notification');
+            try {
+                const callee = await User.findById(calleeId).select('pushTokens notificationPreferences');
+                if (callee?.pushTokens?.length > 0) {
+                    // Check if user wants call notifications
+                    if (callee.notificationPreferences?.calls !== false) {
+                        const notifications = callee.pushTokens.map((tokenInfo) => ({
+                            to: tokenInfo.token,
+                            title: `Incoming ${callType} call`,
+                            body: `${callerName} is calling you`,
+                            data: {
+                                type: 'call',
+                                callId,
+                                callerId,
+                                callerName,
+                                callType,
+                                channelName,
+                                token,
+                                uid,
+                                appId,
+                            },
+                            channelId: 'calls',
+                            sound: 'default',
+                        }));
+
+                        const results = await pushNotificationService.sendBulkNotifications(notifications);
+                        console.log('[CallSignaling] Push notifications sent:', results.map(r => r.status));
+
+                        // Clean up invalid tokens
+                        const invalidTokens = results
+                            .filter(r => r.status === 'error' && (r.message?.includes('DeviceNotRegistered') || r.message?.includes('InvalidCredentials')))
+                            .map(r => r.token);
+
+                        if (invalidTokens.length > 0) {
+                            await User.findByIdAndUpdate(calleeId, {
+                                $pull: { pushTokens: { token: { $in: invalidTokens } } }
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('[CallSignaling] Push notification error:', err.message);
+            }
+        }
 
         return delivered;
     }

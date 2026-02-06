@@ -318,10 +318,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         multiline
                         maxLength={2000}
                         editable={!disabled}
+                        returnKeyType="send"
+                        blurOnSubmit={false}
+                        onSubmitEditing={() => {
+                            if (hasContent) {
+                                handleSend();
+                            }
+                        }}
                     />
 
-                    {/* Image attachment */}
-                    {onAttachImage && (
+                    {/* Image attachment - hide on mobile to make room for send button */}
+                    {onAttachImage && Platform.OS === 'web' && (
                         <TouchableOpacity
                             style={styles.inputIconBtn}
                             onPress={onAttachImage}
@@ -330,26 +337,49 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                             <MaterialIcons name="image" size={22} color={colors.textMuted} />
                         </TouchableOpacity>
                     )}
+
+                    {/* Send button inside input wrapper for mobile - always visible */}
+                    {Platform.OS !== 'web' && (
+                        <TouchableOpacity
+                            style={[
+                                styles.inlineSendButton,
+                                { backgroundColor: hasContent ? colors.primary : colors.surfaceMuted }
+                            ]}
+                            onPress={handleSend}
+                            disabled={disabled || !hasContent}
+                        >
+                            <MaterialIcons
+                                name="send"
+                                size={20}
+                                color={hasContent ? '#FFFFFF' : colors.textMuted}
+                            />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
-                {/* Send or Mic button */}
-                {hasContent ? (
-                    <TouchableOpacity
-                        style={[styles.sendButton, { backgroundColor: colors.primary }]}
-                        onPress={handleSend}
-                        disabled={disabled}
-                    >
-                        <MaterialIcons name="send" size={20} color="#FFFFFF" />
-                    </TouchableOpacity>
-                ) : enableVoiceRecording && Platform.OS !== 'web' ? (
-                    <TouchableOpacity
-                        style={[styles.iconButton, { backgroundColor: colors.surfaceMuted }]}
-                        onPress={startRecording}
-                        disabled={disabled}
-                    >
-                        <MaterialIcons name="mic" size={24} color={colors.textMuted} />
-                    </TouchableOpacity>
-                ) : null}
+                {/* Send or Mic button - only show on web or when recording on mobile */}
+                {Platform.OS === 'web' ? (
+                    hasContent ? (
+                        <TouchableOpacity
+                            style={[styles.sendButton, { backgroundColor: colors.primary }]}
+                            onPress={handleSend}
+                            disabled={disabled}
+                        >
+                            <MaterialIcons name="send" size={20} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    ) : null
+                ) : (
+                    /* Mobile: show mic button only when no content */
+                    !hasContent && enableVoiceRecording ? (
+                        <TouchableOpacity
+                            style={[styles.iconButton, { backgroundColor: colors.surfaceMuted }]}
+                            onPress={startRecording}
+                            disabled={disabled}
+                        >
+                            <MaterialIcons name="mic" size={24} color={colors.textMuted} />
+                        </TouchableOpacity>
+                    ) : null
+                )}
             </View>
 
             {/* Emoji picker modal */}
@@ -444,6 +474,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             borderRadius: 22,
             justifyContent: 'center',
             alignItems: 'center',
+        },
+        inlineSendButton: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginRight: 4,
+            marginBottom: 6,
         },
         // Attachment preview
         attachmentPreview: {

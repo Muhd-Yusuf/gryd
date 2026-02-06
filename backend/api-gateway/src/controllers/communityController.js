@@ -14,6 +14,7 @@ const { defineModels } = require('../services/tenantModels');
 const { generateInviteToken, hashInviteToken, signEmbedToken } = require('../utils/tokenUtils');
 const { sendInviteEmail, sendChannelInviteEmail } = require('../services/emailService');
 const websocketService = require('../services/websocketService');
+const pushNotificationService = require('../services/pushNotificationService');
 const logger = require('../utils/logger');
 const {
     getTenantMembership,
@@ -76,6 +77,58 @@ const touchMemberActivity = async (tenantId, subgridId, userId) => {
         { $set: { lastActiveAt: new Date() } },
         { new: true }
     );
+};
+
+/**
+ * Send push notification to user if they're offline
+ * Checks user's notification preferences and push tokens
+ */
+const sendPushToOfflineUser = async (userId, notificationType, notificationData) => {
+    try {
+        // Check if user is online via WebSocket
+        if (websocketService.isUserOnline(userId)) {
+            console.log(`[Push] User ${userId} is online, skipping push notification`);
+            return;
+        }
+
+        // Get user with push tokens and preferences
+        const user = await User.findById(userId).select('pushTokens notificationPreferences firstName lastName');
+        if (!user || !user.pushTokens || user.pushTokens.length === 0) {
+            console.log(`[Push] User ${userId} has no push tokens`);
+            return;
+        }
+
+        // Check notification preferences
+        const prefs = user.notificationPreferences || {};
+        if (notificationType === 'message' && prefs.messages === false) return;
+        if (notificationType === 'dm' && prefs.dms === false) return;
+        if (notificationType === 'call' && prefs.calls === false) return;
+        if (notificationType === 'mention' && prefs.mentions === false) return;
+        if (notificationType === 'invite' && prefs.invites === false) return;
+
+        // Send to all registered tokens
+        const notifications = user.pushTokens.map((tokenInfo) => ({
+            to: tokenInfo.token,
+            ...notificationData,
+        }));
+
+        const results = await pushNotificationService.sendBulkNotifications(notifications);
+        console.log(`[Push] Sent ${results.length} push notifications to user ${userId}:`, results.map(r => r.status));
+
+        // Clean up invalid tokens
+        const invalidTokens = results
+            .filter(r => r.status === 'error' && (r.message?.includes('DeviceNotRegistered') || r.message?.includes('InvalidCredentials')))
+            .map(r => r.token);
+
+        if (invalidTokens.length > 0) {
+            console.log(`[Push] Removing ${invalidTokens.length} invalid tokens for user ${userId}`);
+            await User.findByIdAndUpdate(userId, {
+                $pull: { pushTokens: { token: { $in: invalidTokens } } }
+            });
+        }
+    } catch (error) {
+        console.error(`[Push] Failed to send push notification to user ${userId}:`, error.message);
+    }
 };
 
 const isBlockedPair = async (subgridId, userId, peerId) => {
@@ -2125,6 +2178,44 @@ exports.createMessage = async (req, res) => {
             channelId,
         });
 
+        // Send push notifications to offline members in the channel (async, don't block response)
+        (async () => {
+            try {
+                // Get channel info for notification
+                const channel = await Channel.findById(channelId);
+                if (!channel) return;
+
+                // Get sender info
+                const sender = await User.findById(authorId);
+                const senderName = sender ? `${sender.firstName} ${sender.lastName}`.trim() : 'Someone';
+
+                // Get all members of the subgrid who might be in this channel
+                const members = await SubgridMembership.find({
+                    subgridId,
+                    status: 'active',
+                    userId: { $ne: authorId }, // Exclude sender
+                }).select('userId');
+
+                // Send push notification to each offline member
+                for (const member of members) {
+                    sendPushToOfflineUser(member.userId, 'message', {
+                        title: `${senderName} in #${channel.name}`,
+                        body: filteredBody.length > 100 ? filteredBody.substring(0, 100) + '...' : filteredBody,
+                        data: {
+                            type: 'message',
+                            subgridId,
+                            channelId,
+                            messageId: String(message._id),
+                            senderId: authorId,
+                        },
+                        channelId: 'messages',
+                    });
+                }
+            } catch (err) {
+                console.error('[createMessage] Push notification error:', err.message);
+            }
+        })();
+
         return res.status(201).json({ success: true, data: message });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to create message', error: error.message });
@@ -3161,15 +3252,43 @@ exports.createDirectMessage = async (req, res) => {
         await touchMemberActivity(subgrid.tenantId, subgridId, senderId);
 
         // Emit WebSocket event for real-time sync to both sender and recipient
-        const dmRoomId = [senderId, recipientId].sort().join('_');
+        // IMPORTANT: Use String() to ensure consistent room ID format across web and mobile
+        const dmRoomId = [String(senderId), String(recipientId)].sort().join('_');
+        console.log('[createDirectMessage] Emitting to DM room:', dmRoomId, 'sender:', String(senderId), 'recipient:', String(recipientId));
         websocketService.emitNewMessage('dm', dmRoomId, message);
-        // Also send directly to recipient for immediate notification
-        websocketService.sendToUser(recipientId, 'new_message', {
+        // Also send directly to BOTH sender and recipient for immediate notification
+        // This ensures both parties see the message even if they haven't joined the DM room yet
+        const dmEventData = {
             roomType: 'dm',
             roomId: dmRoomId,
             message,
             timestamp: new Date().toISOString(),
-        });
+        };
+        console.log('[createDirectMessage] Sending to user rooms: user:', String(senderId), 'and user:', String(recipientId));
+        websocketService.sendToUser(String(recipientId), 'new_message', dmEventData);
+        websocketService.sendToUser(String(senderId), 'new_message', dmEventData);
+
+        // Send push notification to recipient if offline (async, don't block response)
+        (async () => {
+            try {
+                const sender = await User.findById(senderId);
+                const senderName = sender ? `${sender.firstName} ${sender.lastName}`.trim() : 'Someone';
+
+                sendPushToOfflineUser(recipientId, 'dm', {
+                    title: senderName,
+                    body: filteredBody.length > 100 ? filteredBody.substring(0, 100) + '...' : filteredBody,
+                    data: {
+                        type: 'dm',
+                        subgridId,
+                        senderId,
+                        messageId: String(message._id),
+                    },
+                    channelId: 'messages',
+                });
+            } catch (err) {
+                console.error('[createDirectMessage] Push notification error:', err.message);
+            }
+        })();
 
         return res.status(201).json({ success: true, data: message });
     } catch (error) {

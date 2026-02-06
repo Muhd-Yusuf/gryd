@@ -5,6 +5,8 @@
  */
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { io, Socket } from 'socket.io-client';
 import { getApiBaseUrl, getUserId, getTenantId, resolveUserId, resolveTenantId } from '../lib/api';
 import { ConnectionStatus, WebSocketEvents } from '../hooks/useWebSocket';
@@ -54,10 +56,37 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             return;
         }
 
+        console.log('[WebSocket] Connecting with userId:', userId, 'tenantId:', tenantId);
         setStatus('connecting');
 
-        const baseUrl = getApiBaseUrl();
-        const wsUrl = baseUrl.replace(/\/api$/, '');
+        // Dynamically resolve WebSocket URL, especially important for mobile
+        let wsUrl: string;
+        if (Platform.OS !== 'web') {
+            // For native apps, get the dev machine's IP from Expo
+            const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
+            console.log('[WebSocket] Native platform, hostUri:', hostUri);
+            if (hostUri) {
+                const host = String(hostUri).split(':')[0];
+                if (host && host !== 'localhost') {
+                    wsUrl = `http://${host}:4000`;
+                    console.log('[WebSocket] Using hostUri-based URL:', wsUrl);
+                } else {
+                    const baseUrl = getApiBaseUrl();
+                    wsUrl = baseUrl.replace(/\/api$/, '');
+                    console.log('[WebSocket] Using API base URL:', wsUrl);
+                }
+            } else {
+                const baseUrl = getApiBaseUrl();
+                wsUrl = baseUrl.replace(/\/api$/, '');
+                console.log('[WebSocket] No hostUri, using API base URL:', wsUrl);
+            }
+        } else {
+            const baseUrl = getApiBaseUrl();
+            wsUrl = baseUrl.replace(/\/api$/, '');
+            console.log('[WebSocket] Web platform, using:', wsUrl);
+        }
+
+        console.log('[WebSocket] Connecting to:', wsUrl);
 
         socketRef.current = io(wsUrl, {
             reconnection: true,
@@ -71,20 +100,27 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         const socket = socketRef.current;
 
         socket.on('connect', () => {
-            console.log('[WebSocket] Connected:', socket.id);
+            console.log('[WebSocket] Socket connected:', socket.id, '- sending authentication...');
+            // Don't set connected yet - wait for authentication
+            socket.emit('authenticate', { userId, tenantId });
+        });
+
+        socket.on('authenticated', (data) => {
+            console.log('[WebSocket] Authenticated successfully:', data);
+            // NOW we're fully connected and authenticated
             setStatus('connected');
 
-            socket.emit('authenticate', { userId, tenantId });
-
-            // Rejoin rooms
+            // Rejoin rooms after authentication is complete
             joinedRoomsRef.current.forEach((room) => {
                 const [roomType, roomId] = room.split(':');
+                console.log(`[WebSocket] Rejoining room after auth: ${room}`);
                 socket.emit('join_room', { roomType, roomId });
             });
         });
 
-        socket.on('authenticated', (data) => {
-            console.log('[WebSocket] Authenticated:', data);
+        socket.on('auth_error', (data) => {
+            console.error('[WebSocket] Authentication failed:', data);
+            setStatus('error');
         });
 
         socket.on('disconnect', (reason) => {
@@ -93,8 +129,24 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         });
 
         socket.on('connect_error', (error) => {
-            console.error('[WebSocket] Connection error:', error.message);
+            console.error('[WebSocket] Connection error:', error.message, 'URL was:', wsUrl);
             setStatus('error');
+        });
+
+        socket.on('reconnect', (attemptNumber) => {
+            console.log('[WebSocket] Reconnected after', attemptNumber, 'attempts');
+            // Re-authenticate after reconnection - the 'connect' handler will also fire
+            // but we emit authenticate here as well to ensure it happens
+            socket.emit('authenticate', { userId, tenantId });
+        });
+
+        socket.on('reconnect_attempt', (attemptNumber) => {
+            console.log('[WebSocket] Reconnection attempt:', attemptNumber);
+        });
+
+        // Listen for room_joined confirmation from server
+        socket.on('room_joined', (data) => {
+            console.log('[WebSocket] Room joined confirmed by server:', data?.roomType, data?.roomId);
         });
 
         // Forward all events to registered listeners
@@ -110,7 +162,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
         eventTypes.forEach((eventType) => {
             socket.on(eventType, (data: any) => {
+                console.log(`[WebSocket] Event received: ${eventType}`, data?.roomType, data?.roomId);
                 const handlers = listenersRef.current.get(eventType);
+                console.log(`[WebSocket] Handlers for ${eventType}:`, handlers?.size || 0);
                 if (handlers) {
                     handlers.forEach((handler) => handler(data));
                 }
@@ -128,12 +182,19 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     }, []);
 
     const joinRoom = useCallback((roomType: string, roomId: string) => {
-        if (!socketRef.current?.connected) return;
-
         const fullRoomId = `${roomType}:${roomId}`;
+
+        // Always track the room we want to join
         if (!joinedRoomsRef.current.has(fullRoomId)) {
-            socketRef.current.emit('join_room', { roomType, roomId });
             joinedRoomsRef.current.add(fullRoomId);
+        }
+
+        // If socket is connected, emit join_room immediately
+        if (socketRef.current?.connected) {
+            console.log(`[WebSocket] Joining room: ${fullRoomId}`);
+            socketRef.current.emit('join_room', { roomType, roomId });
+        } else {
+            console.log(`[WebSocket] Socket not connected, room ${fullRoomId} will be joined on connect`);
         }
     }, []);
 

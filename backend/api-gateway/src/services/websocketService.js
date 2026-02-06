@@ -77,27 +77,31 @@ class WebSocketService extends EventEmitter {
             return;
         }
 
-        // Store user-socket mapping
-        this.socketUsers.set(socket.id, userId);
+        // Normalize userId to string to ensure consistent lookups
+        const normalizedUserId = String(userId);
+        const normalizedTenantId = tenantId ? String(tenantId) : null;
 
-        if (!this.userSockets.has(userId)) {
-            this.userSockets.set(userId, new Set());
+        // Store user-socket mapping
+        this.socketUsers.set(socket.id, normalizedUserId);
+
+        if (!this.userSockets.has(normalizedUserId)) {
+            this.userSockets.set(normalizedUserId, new Set());
         }
-        this.userSockets.get(userId).add(socket.id);
+        this.userSockets.get(normalizedUserId).add(socket.id);
 
         // Join user's personal room for direct notifications
-        socket.join(`user:${userId}`);
+        socket.join(`user:${normalizedUserId}`);
 
         // Join tenant room if provided
-        if (tenantId) {
-            socket.join(`tenant:${tenantId}`);
+        if (normalizedTenantId) {
+            socket.join(`tenant:${normalizedTenantId}`);
         }
 
-        socket.emit('authenticated', { userId, socketId: socket.id });
-        console.log(`[WebSocket] User ${userId} authenticated on socket ${socket.id}`);
+        socket.emit('authenticated', { userId: normalizedUserId, socketId: socket.id });
+        console.log(`[WebSocket] User ${normalizedUserId} authenticated on socket ${socket.id}`);
 
         // Emit user online event
-        this.emit('user_online', { userId });
+        this.emit('user_online', { userId: normalizedUserId });
     }
 
     /**
@@ -238,7 +242,10 @@ class WebSocketService extends EventEmitter {
      * Send event to a specific user (all their connected devices)
      */
     sendToUser(userId, event, data) {
-        const roomId = `user:${userId}`;
+        const normalizedUserId = String(userId);
+        const roomId = `user:${normalizedUserId}`;
+        const isOnline = this.isUserOnline(normalizedUserId);
+        console.log(`[WebSocket] sendToUser: ${roomId}, event: ${event}, userOnline: ${isOnline}`);
         this.io.to(roomId).emit(event, data);
     }
 
@@ -247,6 +254,8 @@ class WebSocketService extends EventEmitter {
      */
     sendToRoom(roomType, roomId, event, data) {
         const fullRoomId = `${roomType}:${roomId}`;
+        const membersInRoom = this.roomMembers.get(fullRoomId);
+        console.log(`[WebSocket] sendToRoom: ${fullRoomId}, event: ${event}, members: ${membersInRoom ? membersInRoom.size : 0}`);
         this.io.to(fullRoomId).emit(event, data);
     }
 
