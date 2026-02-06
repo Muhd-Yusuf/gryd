@@ -889,6 +889,30 @@ const DirectMessageChatScreen = () => {
         }
     };
 
+    const handleDeleteMessage = async (messageId: string) => {
+        if (!subgridId) return;
+        const confirmDelete = Platform.OS === 'web'
+            ? window.confirm('Delete this message? This action cannot be undone.')
+            : await new Promise<boolean>((resolve) => {
+                Alert.alert(
+                    'Delete message',
+                    'Delete this message? This action cannot be undone.',
+                    [
+                        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                        { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+                    ]
+                );
+            });
+        if (!confirmDelete) return;
+        try {
+            await communityDelete(`/subgrids/${subgridId}/direct-messages/${messageId}`);
+            setMessages((prev) => prev.filter((m) => m._id !== messageId));
+        } catch (error: any) {
+            console.error('Failed to delete message:', error);
+            setError(error.message || 'Failed to delete message');
+        }
+    };
+
     const handleBack = () => {
         if (navigation.canGoBack()) {
             router.back();
@@ -1093,6 +1117,15 @@ const DirectMessageChatScreen = () => {
 
                                     return (
                                         <View key={message._id} style={[styles.messageRow, isSelf && styles.messageRowSelf]}>
+                                            {/* Delete button for own messages - on left side */}
+                                            {isSelf && (
+                                                <TouchableOpacity
+                                                    style={styles.messageDeleteBtn}
+                                                    onPress={() => handleDeleteMessage(message._id)}
+                                                >
+                                                    <MaterialIcons name="delete-outline" size={18} color={colors.error || '#EF4444'} />
+                                                </TouchableOpacity>
+                                            )}
                                             {!isSelf && (
                                                 <UserAvatar
                                                     uri={friendAvatar}
@@ -1382,7 +1415,8 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         callHistoryTime: { fontSize: 12, color: colors.textMuted },
         callHistoryAction: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
         messageRow: { flexDirection: 'row', marginBottom: 12, gap: 8, alignItems: 'flex-end', paddingRight: 60 },
-        messageRowSelf: { flexDirection: 'row-reverse', paddingRight: 0, paddingLeft: 60 },
+        messageRowSelf: { flexDirection: 'row-reverse', paddingRight: 0, paddingLeft: 40 },
+        messageDeleteBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', opacity: 0.7 },
         messageAvatar: { width: 32, height: 32, borderRadius: 16 },
         messageBubble: { padding: 12, borderRadius: 16, flexShrink: 1 },
         messageBubbleSelf: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
