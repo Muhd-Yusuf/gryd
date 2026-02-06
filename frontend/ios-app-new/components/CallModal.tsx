@@ -21,7 +21,7 @@ import {
     Platform,
 } from 'react-native';
 
-import { MaterialIcons } from '@expo/vector-icons';
+import { Phone, Video, VideoOff, Mic, MicOff, PhoneOff, Volume2, VolumeX, SwitchCamera } from 'lucide-react-native';
 // NOTE: react-native-agora is NOT imported here to keep this compatible with Expo Go
 // Video rendering is disabled in this stub version
 import { useTheme } from '../lib/theme';
@@ -122,10 +122,14 @@ export const CallModal: React.FC<CallModalProps> = ({
                     </View>
                     <View style={styles.incomingActions}>
                         <TouchableOpacity style={styles.declineButton} onPress={onDecline}>
-                            <MaterialIcons name="call-end" size={32} color="#FFFFFF" />
+                            <PhoneOff size={32} color="#FFFFFF" />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.answerButton} onPress={onAnswer}>
-                            <MaterialIcons name={incomingCall?.callType === 'video' ? 'videocam' : 'call'} size={32} color="#FFFFFF" />
+                            {incomingCall?.callType === 'video' ? (
+                                <Video size={32} color="#FFFFFF" />
+                            ) : (
+                                <Phone size={32} color="#FFFFFF" />
+                            )}
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -159,7 +163,7 @@ export const CallModal: React.FC<CallModalProps> = ({
 
                         {/* Local video placeholder */}
                         <View style={[styles.localVideoContainer, styles.localVideoDisabled]}>
-                            <MaterialIcons name="videocam-off" size={32} color="#FFFFFF" />
+                            <VideoOff size={32} color="#FFFFFF" />
                         </View>
 
                         {/* Duration overlay */}
@@ -199,11 +203,11 @@ export const CallModal: React.FC<CallModalProps> = ({
                             style={[styles.controlButton, isMuted && styles.controlButtonActive]}
                             onPress={onToggleMute}
                         >
-                            <MaterialIcons
-                                name={isMuted ? 'mic-off' : 'mic'}
-                                size={28}
-                                color={isMuted ? '#EF4444' : '#FFFFFF'}
-                            />
+                            {isMuted ? (
+                                <MicOff size={28} color="#EF4444" />
+                            ) : (
+                                <Mic size={28} color="#FFFFFF" />
+                            )}
                         </TouchableOpacity>
 
                         {/* Video toggle (only for video calls) */}
@@ -212,17 +216,17 @@ export const CallModal: React.FC<CallModalProps> = ({
                                 style={[styles.controlButton, !isVideoEnabled && styles.controlButtonActive]}
                                 onPress={onToggleVideo}
                             >
-                                <MaterialIcons
-                                    name={isVideoEnabled ? 'videocam' : 'videocam-off'}
-                                    size={28}
-                                    color={!isVideoEnabled ? '#EF4444' : '#FFFFFF'}
-                                />
+                                {isVideoEnabled ? (
+                                    <Video size={28} color="#FFFFFF" />
+                                ) : (
+                                    <VideoOff size={28} color="#EF4444" />
+                                )}
                             </TouchableOpacity>
                         )}
 
                         {/* End call button */}
                         <TouchableOpacity style={styles.endCallButton} onPress={onHangup}>
-                            <MaterialIcons name="call-end" size={32} color="#FFFFFF" />
+                            <PhoneOff size={32} color="#FFFFFF" />
                         </TouchableOpacity>
 
                         {/* Speaker button (audio calls) */}
@@ -231,18 +235,18 @@ export const CallModal: React.FC<CallModalProps> = ({
                                 style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
                                 onPress={onToggleSpeaker}
                             >
-                                <MaterialIcons
-                                    name={isSpeakerOn ? 'volume-up' : 'volume-off'}
-                                    size={28}
-                                    color="#FFFFFF"
-                                />
+                                {isSpeakerOn ? (
+                                    <Volume2 size={28} color="#FFFFFF" />
+                                ) : (
+                                    <VolumeX size={28} color="#FFFFFF" />
+                                )}
                             </TouchableOpacity>
                         )}
 
                         {/* Switch camera (video calls) */}
                         {isVideoCall && (
                             <TouchableOpacity style={styles.controlButton} onPress={onSwitchCamera}>
-                                <MaterialIcons name="flip-camera-ios" size={28} color="#FFFFFF" />
+                                <SwitchCamera size={28} color="#FFFFFF" />
                             </TouchableOpacity>
                         )}
                     </View>

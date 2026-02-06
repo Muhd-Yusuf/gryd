@@ -3254,14 +3254,24 @@ exports.createDirectMessage = async (req, res) => {
         // Emit WebSocket event for real-time sync to both sender and recipient
         // IMPORTANT: Use String() to ensure consistent room ID format across web and mobile
         const dmRoomId = [String(senderId), String(recipientId)].sort().join('_');
-        console.log('[createDirectMessage] Emitting to DM room:', dmRoomId, 'sender:', String(senderId), 'recipient:', String(recipientId));
-        websocketService.emitNewMessage('dm', dmRoomId, message);
+
+        // Convert Mongoose document to plain object with stringified IDs for WebSocket
+        const messageForWs = {
+            ...message.toObject(),
+            _id: String(message._id),
+            senderId: String(message.senderId),
+            recipientId: String(message.recipientId),
+            subgridId: String(message.subgridId),
+        };
+
+        console.log('[createDirectMessage] Emitting to DM room:', dmRoomId, 'messageForWs:', JSON.stringify({ senderId: messageForWs.senderId, recipientId: messageForWs.recipientId }));
+        websocketService.emitNewMessage('dm', dmRoomId, messageForWs);
         // Also send directly to BOTH sender and recipient for immediate notification
         // This ensures both parties see the message even if they haven't joined the DM room yet
         const dmEventData = {
             roomType: 'dm',
             roomId: dmRoomId,
-            message,
+            message: messageForWs,
             timestamp: new Date().toISOString(),
         };
         console.log('[createDirectMessage] Sending to user rooms: user:', String(senderId), 'and user:', String(recipientId));

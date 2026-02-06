@@ -12,7 +12,35 @@ import {
     ActivityIndicator,
     Platform,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import {
+    LayoutDashboard,
+    Users,
+    Shield,
+    Settings,
+    LogOut,
+    Search,
+    Bell,
+    Sun,
+    Moon,
+    MessageSquare,
+    DollarSign,
+    MoreHorizontal,
+    ChevronDown,
+    Download,
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    ArrowLeft,
+    Copy,
+    Plus,
+    MoreVertical,
+    X,
+    UserPlus,
+    Eye,
+    PauseCircle,
+    PlayCircle,
+    Trash2,
+} from 'lucide-react-native';
 import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import {
@@ -780,7 +808,7 @@ const SuperAdminDashboard = () => {
                     style={[styles.navItem, activeNav === 'overview' && styles.navItemActive]}
                     onPress={() => { setActiveNav('overview'); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons name="dashboard" size={20} color={activeNav === 'overview' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
+                    <LayoutDashboard size={20} color={activeNav === 'overview' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
                     <Text style={[styles.navItemText, activeNav === 'overview' && styles.navItemTextActive]}>Overview</Text>
                 </TouchableOpacity>
 
@@ -788,7 +816,7 @@ const SuperAdminDashboard = () => {
                     style={[styles.navItem, activeNav === 'customers' && styles.navItemActive]}
                     onPress={() => { setActiveNav('customers'); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons name="people" size={20} color={activeNav === 'customers' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
+                    <Users size={20} color={activeNav === 'customers' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
                     <Text style={[styles.navItemText, activeNav === 'customers' && styles.navItemTextActive]}>Customers</Text>
                 </TouchableOpacity>
 
@@ -796,7 +824,7 @@ const SuperAdminDashboard = () => {
                     style={[styles.navItem, activeNav === 'moderation' && styles.navItemActive]}
                     onPress={() => { setActiveNav('moderation'); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons name="security" size={20} color={activeNav === 'moderation' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
+                    <Shield size={20} color={activeNav === 'moderation' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
                     <Text style={[styles.navItemText, activeNav === 'moderation' && styles.navItemTextActive]}>Moderations & Safety</Text>
                 </TouchableOpacity>
 
@@ -804,7 +832,7 @@ const SuperAdminDashboard = () => {
                     style={[styles.navItem, activeNav === 'configuration' && styles.navItemActive]}
                     onPress={() => { setActiveNav('configuration'); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons name="settings" size={20} color={activeNav === 'configuration' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
+                    <Settings size={20} color={activeNav === 'configuration' ? colors.sidebarActiveText : colors.sidebarTextMuted} />
                     <Text style={[styles.navItemText, activeNav === 'configuration' && styles.navItemTextActive]}>Configuration</Text>
                 </TouchableOpacity>
             </View>
@@ -812,7 +840,7 @@ const SuperAdminDashboard = () => {
             {/* Logout */}
             <View style={styles.sidebarFooter}>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                    <MaterialIcons name="logout" size={20} color={colors.sidebarTextMuted} />
+                    <LogOut size={20} color={colors.sidebarTextMuted} />
                     <Text style={styles.logoutText}>Logout</Text>
                 </TouchableOpacity>
             </View>
@@ -823,7 +851,7 @@ const SuperAdminDashboard = () => {
     const renderTopBar = () => (
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
             <View style={[styles.searchContainer, isMobile && styles.searchContainerMobile]}>
-                <MaterialIcons name="search" size={20} color={colors.textMuted} />
+                <Search size={20} color={colors.textMuted} />
                 <TextInput
                     style={styles.searchInput}
                     placeholder="Search anything here"
@@ -836,15 +864,15 @@ const SuperAdminDashboard = () => {
             <View style={styles.topBarRight}>
                 <View style={styles.topBarIconGroup}>
                     <TouchableOpacity style={styles.topBarIconButton}>
-                        <MaterialIcons name="notifications-none" size={20} color={colors.textMuted} />
+                        <Bell size={20} color={colors.textMuted} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.topBarIconButton} onPress={toggleTheme}>
-                        <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={20} color={colors.textMuted} />
+                        {mode === 'dark' ? <Sun size={20} color={colors.textMuted} /> : <Moon size={20} color={colors.textMuted} />}
                     </TouchableOpacity>
                     {/* Logout button for mobile */}
                     {isMobile && (
                         <TouchableOpacity style={styles.topBarIconButton} onPress={handleLogout}>
-                            <MaterialIcons name="logout" size={20} color={colors.error || '#EF4444'} />
+                            <LogOut size={20} color={colors.error || '#EF4444'} />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -873,7 +901,7 @@ const SuperAdminDashboard = () => {
             <View style={[styles.statsGrid, isMobile && styles.statsGridMobile]}>
                 <View style={styles.statCard}>
                     <View style={[styles.statIcon, { backgroundColor: '#dbeafe' }]}>
-                        <MaterialIcons name="groups" size={22} color="#3b82f6" />
+                        <Users size={22} color="#3b82f6" />
                     </View>
                     <View style={styles.statInfo}>
                         <Text style={styles.statLabel}>All Customers</Text>
@@ -883,7 +911,7 @@ const SuperAdminDashboard = () => {
 
                 <View style={styles.statCard}>
                     <View style={[styles.statIcon, { backgroundColor: '#fce7f3' }]}>
-                        <MaterialIcons name="forum" size={22} color="#ec4899" />
+                        <MessageSquare size={22} color="#ec4899" />
                     </View>
                     <View style={styles.statInfo}>
                         <Text style={styles.statLabel}>Active Channels</Text>
@@ -893,7 +921,7 @@ const SuperAdminDashboard = () => {
 
                 <View style={styles.statCard}>
                     <View style={[styles.statIcon, { backgroundColor: '#ede9fe' }]}>
-                        <MaterialIcons name="groups" size={22} color="#8b5cf6" />
+                        <Users size={22} color="#8b5cf6" />
                     </View>
                     <View style={styles.statInfo}>
                         <Text style={styles.statLabel}>Total Members</Text>
@@ -903,7 +931,7 @@ const SuperAdminDashboard = () => {
 
                 <View style={styles.statCard}>
                     <View style={[styles.statIcon, { backgroundColor: '#22c55e' }]}>
-                        <MaterialIcons name="attach-money" size={22} color="#fff" />
+                        <DollarSign size={22} color="#fff" />
                     </View>
                     <View style={styles.statInfo}>
                         <Text style={styles.statLabel}>Active Subscription</Text>
@@ -938,7 +966,7 @@ const SuperAdminDashboard = () => {
                                         style={styles.actionMenuButton}
                                         onPress={(e) => handleOpenActionMenu(e, customer)}
                                     >
-                                        <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
+                                        <MoreHorizontal size={20} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 </View>
                                 <View style={styles.mobileCardRow}>
@@ -1001,7 +1029,7 @@ const SuperAdminDashboard = () => {
                                         style={styles.actionMenuButton}
                                         onPress={(e) => handleOpenActionMenu(e, customer)}
                                     >
-                                        <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
+                                        <MoreHorizontal size={20} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 </View>
                             </TouchableOpacity>
@@ -1021,7 +1049,7 @@ const SuperAdminDashboard = () => {
                                 onPress={() => setGrowthDropdownOpen((prev) => !prev)}
                             >
                                 <Text style={styles.chartDropdownText}>{growthRange} Days</Text>
-                                <MaterialIcons name="expand-more" size={18} color={colors.text} />
+                                <ChevronDown size={18} color={colors.text} />
                             </TouchableOpacity>
                             {growthDropdownOpen && (
                                 <View style={styles.chartDropdownMenu}>
@@ -1091,7 +1119,7 @@ const SuperAdminDashboard = () => {
             <View style={[styles.customerStatsGrid, isMobile && styles.customerStatsGridMobile]}>
                 <View style={styles.customerStatCard}>
                     <View style={[styles.customerStatIcon, { backgroundColor: '#e0f2fe' }]}>
-                        <MaterialIcons name="group" size={24} color="#0284c7" />
+                        <Users size={24} color="#0284c7" />
                     </View>
                     <View style={styles.customerStatInfo}>
                         <Text style={styles.customerStatLabel}>All Customers</Text>
@@ -1101,7 +1129,7 @@ const SuperAdminDashboard = () => {
 
                 <View style={styles.customerStatCard}>
                     <View style={[styles.customerStatIcon, { backgroundColor: '#fce7f3' }]}>
-                        <MaterialIcons name="group" size={24} color="#db2777" />
+                        <Users size={24} color="#db2777" />
                     </View>
                     <View style={styles.customerStatInfo}>
                         <Text style={styles.customerStatLabel}>Active Customers</Text>
@@ -1117,7 +1145,7 @@ const SuperAdminDashboard = () => {
 
                     <View style={[styles.tableControls, isMobile && styles.tableControlsMobile]}>
                         <View style={styles.tableSearchContainer}>
-                            <MaterialIcons name="search" size={18} color={colors.textMuted} />
+                            <Search size={18} color={colors.textMuted} />
                             <TextInput
                                 style={styles.tableSearchInput}
                                 placeholder="Search Customer..."
@@ -1129,11 +1157,11 @@ const SuperAdminDashboard = () => {
 
                         <TouchableOpacity style={styles.filterDropdown}>
                             <Text style={styles.filterDropdownText}>All</Text>
-                            <MaterialIcons name="expand-more" size={20} color={colors.text} />
+                            <ChevronDown size={20} color={colors.text} />
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.exportButton}>
-                            <MaterialIcons name="file-download" size={18} color={colors.text} />
+                            <Download size={18} color={colors.text} />
                             <Text style={styles.exportButtonText}>Export CSV</Text>
                         </TouchableOpacity>
                     </View>
@@ -1156,7 +1184,7 @@ const SuperAdminDashboard = () => {
                                         style={styles.actionMenuButton}
                                         onPress={(e) => { e.stopPropagation(); handleOpenActionMenu(e, customer); }}
                                     >
-                                        <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
+                                        <MoreHorizontal size={20} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 </View>
                                 <View style={styles.mobileCardRow}>
@@ -1180,7 +1208,7 @@ const SuperAdminDashboard = () => {
 
                         {customers.length === 0 && (
                             <View style={styles.emptyState}>
-                                <MaterialIcons name="people" size={48} color={colors.textMuted} />
+                                <Users size={48} color={colors.textMuted} />
                                 <Text style={styles.emptyStateText}>No customers found</Text>
                             </View>
                         )}
@@ -1206,7 +1234,7 @@ const SuperAdminDashboard = () => {
                                         onPress={(e) => { e.stopPropagation(); toggleCustomerSelection(customer._id); }}
                                     >
                                         {selectedCustomers.includes(customer._id) && (
-                                            <MaterialIcons name="check" size={14} color="#fff" />
+                                            <Check size={14} color="#fff" />
                                         )}
                                     </TouchableOpacity>
                                 </View>
@@ -1229,7 +1257,7 @@ const SuperAdminDashboard = () => {
                                         style={styles.actionMenuButton}
                                         onPress={(e) => handleOpenActionMenu(e, customer)}
                                     >
-                                        <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
+                                        <MoreHorizontal size={20} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 </View>
                             </TouchableOpacity>
@@ -1237,7 +1265,7 @@ const SuperAdminDashboard = () => {
 
                         {customers.length === 0 && (
                             <View style={styles.emptyState}>
-                                <MaterialIcons name="people" size={48} color={colors.textMuted} />
+                                <Users size={48} color={colors.textMuted} />
                                 <Text style={styles.emptyStateText}>No customers found</Text>
                             </View>
                         )}
@@ -1254,7 +1282,7 @@ const SuperAdminDashboard = () => {
                         <Text style={styles.paginationLabel}>Rows per page:</Text>
                         <TouchableOpacity style={styles.rowsDropdown}>
                             <Text style={styles.rowsDropdownText}>{rowsPerPage}</Text>
-                            <MaterialIcons name="expand-more" size={16} color={colors.text} />
+                            <ChevronDown size={16} color={colors.text} />
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -1262,14 +1290,14 @@ const SuperAdminDashboard = () => {
                             onPress={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                             disabled={currentPage === 1}
                         >
-                            <MaterialIcons name="chevron-left" size={20} color={currentPage === 1 ? colors.textMuted : colors.text} />
+                            <ChevronLeft size={20} color={currentPage === 1 ? colors.textMuted : colors.text} />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.paginationButton, styles.paginationButtonActive]}
                             onPress={() => setCurrentPage(prev => prev + 1)}
                             disabled={currentPage * rowsPerPage >= customersTotal}
                         >
-                            <MaterialIcons name="chevron-right" size={20} color="#fff" />
+                            <ChevronRight size={20} color="#fff" />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -1287,7 +1315,7 @@ const SuperAdminDashboard = () => {
                 <View style={[styles.customerDetailHeader, isMobile && styles.customerDetailHeaderMobile]}>
                     <View style={styles.customerDetailTitleRow}>
                         <TouchableOpacity style={styles.backButton} onPress={handleBackToCustomers}>
-                            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+                            <ArrowLeft size={24} color={colors.text} />
                         </TouchableOpacity>
                         <Text style={styles.customerDetailTitle}>Customer Details</Text>
                     </View>
@@ -1358,7 +1386,7 @@ const SuperAdminDashboard = () => {
                                         {customerDetailData.customer?.inviteCode || 'N/A'}
                                     </Text>
                                     <TouchableOpacity style={styles.copyCodeButton}>
-                                        <MaterialIcons name="content-copy" size={18} color={colors.primary} />
+                                        <Copy size={18} color={colors.primary} />
                                     </TouchableOpacity>
                                 </View>
                                 <Text style={styles.inviteCodeHint}>
@@ -1605,13 +1633,13 @@ const SuperAdminDashboard = () => {
                             </View>
                             <View style={styles.teamHeaderActions}>
                                 <TouchableOpacity style={styles.teamSettingsButton}>
-                                    <MaterialIcons name="settings" size={20} color={colors.text} />
+                                    <Settings size={20} color={colors.text} />
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={styles.addTeamMemberButton}
                                     onPress={() => setInviteModalOpen(true)}
                                 >
-                                    <MaterialIcons name="add" size={20} color="#fff" />
+                                    <Plus size={20} color="#fff" />
                                     <Text style={styles.addTeamMemberButtonText}>Add Team member</Text>
                                 </TouchableOpacity>
                             </View>
@@ -1637,7 +1665,7 @@ const SuperAdminDashboard = () => {
                                                     </View>
                                                 </View>
                                                 <TouchableOpacity style={styles.teamActionButton}>
-                                                    <MaterialIcons name="more-vert" size={20} color={colors.textMuted} />
+                                                    <MoreVertical size={20} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                             </View>
                                             <View style={styles.mobileCardRow}>
@@ -1657,7 +1685,7 @@ const SuperAdminDashboard = () => {
 
                                 {teamMembers.length === 0 && (
                                     <View style={styles.emptyState}>
-                                        <MaterialIcons name="people" size={48} color={colors.textMuted} />
+                                        <Users size={48} color={colors.textMuted} />
                                         <Text style={styles.emptyStateText}>No team members yet</Text>
                                     </View>
                                 )}
@@ -1700,7 +1728,7 @@ const SuperAdminDashboard = () => {
                                                 </View>
                                             </View>
                                             <TouchableOpacity style={styles.teamActionButton}>
-                                                <MaterialIcons name="more-vert" size={20} color={colors.textMuted} />
+                                                <MoreVertical size={20} color={colors.textMuted} />
                                             </TouchableOpacity>
                                         </View>
                                     );
@@ -1708,7 +1736,7 @@ const SuperAdminDashboard = () => {
 
                                 {teamMembers.length === 0 && (
                                     <View style={styles.emptyState}>
-                                        <MaterialIcons name="people" size={48} color={colors.textMuted} />
+                                        <Users size={48} color={colors.textMuted} />
                                         <Text style={styles.emptyStateText}>No team members yet</Text>
                                     </View>
                                 )}
@@ -1817,7 +1845,7 @@ const SuperAdminDashboard = () => {
                     <View style={styles.addCustomerHeader}>
                         <Text style={styles.addCustomerTitle}>Add Customer</Text>
                         <TouchableOpacity onPress={() => setAddCustomerModalOpen(false)}>
-                            <MaterialIcons name="close" size={24} color={colors.textMuted} />
+                            <X size={24} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
 
@@ -1880,7 +1908,7 @@ const SuperAdminDashboard = () => {
                     <View style={styles.confirmModalHeader}>
                         <Text style={styles.confirmModalTitle}>Suspend Account</Text>
                         <TouchableOpacity onPress={() => setSuspendModalOpen(false)}>
-                            <MaterialIcons name="close" size={24} color={colors.textMuted} />
+                            <X size={24} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
 
@@ -1893,7 +1921,7 @@ const SuperAdminDashboard = () => {
                         onPress={() => setSuspendConfirmChecked(!suspendConfirmChecked)}
                     >
                         <View style={[styles.confirmCheckbox, suspendConfirmChecked && styles.confirmCheckboxChecked]}>
-                            {suspendConfirmChecked && <MaterialIcons name="check" size={16} color="#16a34a" />}
+                            {suspendConfirmChecked && <Check size={16} color="#16a34a" />}
                         </View>
                         <Text style={styles.confirmCheckboxText}>Yes, I want to Suspend this Account</Text>
                     </TouchableOpacity>
@@ -1935,7 +1963,7 @@ const SuperAdminDashboard = () => {
                     <View style={styles.confirmModalHeader}>
                         <Text style={styles.confirmModalTitle}>Delete Account</Text>
                         <TouchableOpacity onPress={() => setDeleteModalOpen(false)}>
-                            <MaterialIcons name="close" size={24} color={colors.textMuted} />
+                            <X size={24} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
 
@@ -1948,7 +1976,7 @@ const SuperAdminDashboard = () => {
                         onPress={() => setDeleteConfirmChecked(!deleteConfirmChecked)}
                     >
                         <View style={[styles.confirmCheckbox, deleteConfirmChecked && styles.confirmCheckboxChecked]}>
-                            {deleteConfirmChecked && <MaterialIcons name="check" size={16} color="#16a34a" />}
+                            {deleteConfirmChecked && <Check size={16} color="#16a34a" />}
                         </View>
                         <Text style={styles.confirmCheckboxText}>Yes, I want to Delete this Account</Text>
                     </TouchableOpacity>
@@ -1992,10 +2020,10 @@ const SuperAdminDashboard = () => {
                 <Pressable style={styles.inviteModal} onPress={(e) => e.stopPropagation()}>
                     <View style={styles.inviteModalHeader}>
                         <View style={styles.inviteIconContainer}>
-                            <MaterialIcons name="person-add" size={32} color="#22c55e" />
+                            <UserPlus size={32} color="#22c55e" />
                         </View>
                         <TouchableOpacity style={styles.inviteCloseButton} onPress={() => setInviteModalOpen(false)}>
-                            <MaterialIcons name="close" size={24} color={colors.textMuted} />
+                            <X size={24} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
 
@@ -2052,7 +2080,7 @@ const SuperAdminDashboard = () => {
                                     <Text style={styles.inviteRoleText}>
                                         {inviteRole === 'super_admin' ? 'Super Admin' : 'Admin'}
                                     </Text>
-                                    <MaterialIcons name="expand-more" size={20} color={colors.textMuted} />
+                                    <ChevronDown size={20} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 {inviteRoleDropdownOpen && (
                                     <View style={[styles.inviteRoleDropdownMenu, { position: 'absolute', top: 70, left: 0, right: 0, zIndex: 100 }]}>
@@ -2104,18 +2132,17 @@ const SuperAdminDashboard = () => {
     const renderMobileBottomNav = () => (
         <View style={[styles.mobileBottomNav, styles.mobileBottomNavSafe]}>
             {([
-                { key: 'overview', icon: 'dashboard', label: 'Overview' },
-                { key: 'customers', icon: 'people', label: 'Customers' },
-                { key: 'moderation', icon: 'security', label: 'Moderation' },
-                { key: 'configuration', icon: 'settings', label: 'Settings' },
-            ] as { key: NavItem; icon: string; label: string }[]).map((item) => (
+                { key: 'overview', Icon: LayoutDashboard, label: 'Overview' },
+                { key: 'customers', Icon: Users, label: 'Customers' },
+                { key: 'moderation', Icon: Shield, label: 'Moderation' },
+                { key: 'configuration', Icon: Settings, label: 'Settings' },
+            ] as { key: NavItem; Icon: any; label: string }[]).map((item) => (
                 <TouchableOpacity
                     key={item.key}
                     style={[styles.mobileNavItem, activeNav === item.key && styles.mobileNavItemActive]}
                     onPress={() => { setActiveNav(item.key); setViewingCustomer(null); }}
                 >
-                    <MaterialIcons
-                        name={item.icon as any}
+                    <item.Icon
                         size={22}
                         color={activeNav === item.key ? colors.primary : colors.textMuted}
                     />
@@ -2155,7 +2182,7 @@ const SuperAdminDashboard = () => {
                     <View style={styles.errorBanner}>
                         <Text style={styles.errorText}>{error}</Text>
                         <TouchableOpacity onPress={() => setError('')}>
-                            <MaterialIcons name="close" size={20} color="#fff" />
+                            <X size={20} color="#fff" />
                         </TouchableOpacity>
                     </View>
                 ) : null}
@@ -2189,7 +2216,7 @@ const SuperAdminDashboard = () => {
                                 style={styles.actionMenuItem}
                                 onPress={() => { handleViewCustomer(actionMenuCustomer); closeActionMenu(); }}
                             >
-                                <MaterialIcons name="visibility" size={18} color={colors.text} style={{ marginRight: 10 }} />
+                                <Eye size={18} color={colors.text} style={{ marginRight: 10 }} />
                                 <Text style={styles.actionMenuText}>View Customer</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -2203,12 +2230,11 @@ const SuperAdminDashboard = () => {
                                     closeActionMenu();
                                 }}
                             >
-                                <MaterialIcons
-                                    name={actionMenuCustomer.status === 'active' ? 'pause-circle-outline' : 'play-circle-outline'}
-                                    size={18}
-                                    color={colors.text}
-                                    style={{ marginRight: 10 }}
-                                />
+                                {actionMenuCustomer.status === 'active' ? (
+                                    <PauseCircle size={18} color={colors.text} style={{ marginRight: 10 }} />
+                                ) : (
+                                    <PlayCircle size={18} color={colors.text} style={{ marginRight: 10 }} />
+                                )}
                                 <Text style={styles.actionMenuText}>
                                     {actionMenuCustomer.status === 'active' ? 'Suspend Customer' : 'Activate Customer'}
                                 </Text>
@@ -2217,7 +2243,7 @@ const SuperAdminDashboard = () => {
                                 style={styles.actionMenuItem}
                                 onPress={() => { openDeleteModal(actionMenuCustomer._id); closeActionMenu(); }}
                             >
-                                <MaterialIcons name="delete-outline" size={18} color={colors.error} style={{ marginRight: 10 }} />
+                                <Trash2 size={18} color={colors.error} style={{ marginRight: 10 }} />
                                 <Text style={[styles.actionMenuText, { color: colors.error }]}>Delete Account</Text>
                             </TouchableOpacity>
                         </View>
@@ -2230,7 +2256,7 @@ const SuperAdminDashboard = () => {
                                     style={styles.actionMenuItem}
                                     onPress={() => { handleViewCustomer(actionMenuCustomer); closeActionMenu(); }}
                                 >
-                                    <MaterialIcons name="visibility" size={18} color={colors.text} style={{ marginRight: 10 }} />
+                                    <Eye size={18} color={colors.text} style={{ marginRight: 10 }} />
                                     <Text style={styles.actionMenuText}>View Customer</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -2244,12 +2270,11 @@ const SuperAdminDashboard = () => {
                                         closeActionMenu();
                                     }}
                                 >
-                                    <MaterialIcons
-                                        name={actionMenuCustomer.status === 'active' ? 'pause-circle-outline' : 'play-circle-outline'}
-                                        size={18}
-                                        color={colors.text}
-                                        style={{ marginRight: 10 }}
-                                    />
+                                    {actionMenuCustomer.status === 'active' ? (
+                                        <PauseCircle size={18} color={colors.text} style={{ marginRight: 10 }} />
+                                    ) : (
+                                        <PlayCircle size={18} color={colors.text} style={{ marginRight: 10 }} />
+                                    )}
                                     <Text style={styles.actionMenuText}>
                                         {actionMenuCustomer.status === 'active' ? 'Suspend Customer' : 'Activate Customer'}
                                     </Text>
@@ -2258,7 +2283,7 @@ const SuperAdminDashboard = () => {
                                     style={styles.actionMenuItem}
                                     onPress={() => { openDeleteModal(actionMenuCustomer._id); closeActionMenu(); }}
                                 >
-                                    <MaterialIcons name="delete-outline" size={18} color={colors.error} style={{ marginRight: 10 }} />
+                                    <Trash2 size={18} color={colors.error} style={{ marginRight: 10 }} />
                                     <Text style={[styles.actionMenuText, { color: colors.error }]}>Delete Account</Text>
                                 </TouchableOpacity>
                             </Pressable>

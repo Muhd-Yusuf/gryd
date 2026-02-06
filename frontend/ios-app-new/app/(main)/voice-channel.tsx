@@ -19,8 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Mic, MicOff, PhoneOff, Users, Volume2, Crown, Shield } from 'lucide-react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { ArrowLeft, Mic, MicOff, PhoneOff, Users, Volume2, Crown, Shield, Hand, UserPlus, UserMinus } from 'lucide-react-native';
 import { useTheme } from '../../lib/theme';
 import {
     getAuthUser,
@@ -468,7 +467,7 @@ const VoiceChannelScreen = () => {
                                                 style={styles.actionItem}
                                                 onPress={() => handleMuteParticipant(participant.userId, !participant.isMuted)}
                                             >
-                                                <MaterialIcons name={participant.isMuted ? 'mic' : 'mic-off'} size={16} color={colors.text} />
+                                                {participant.isMuted ? <Mic size={16} color={colors.text} /> : <MicOff size={16} color={colors.text} />}
                                                 <Text style={styles.actionText}>{participant.isMuted ? 'Unmute' : 'Mute'}</Text>
                                             </TouchableOpacity>
                                             {canRevokeSpeaker && participant.voiceRole !== 'host' && (
@@ -476,7 +475,7 @@ const VoiceChannelScreen = () => {
                                                     style={styles.actionItem}
                                                     onPress={() => handleRevokeSpeaker(participant.userId)}
                                                 >
-                                                    <MaterialIcons name="person-remove" size={16} color={colors.error} />
+                                                    <UserMinus size={16} color={colors.error} />
                                                     <Text style={[styles.actionText, { color: colors.error }]}>Remove Speaker</Text>
                                                 </TouchableOpacity>
                                             )}
@@ -498,7 +497,7 @@ const VoiceChannelScreen = () => {
                 {isHost && waveRequests.length > 0 && (
                     <View style={styles.waveSection}>
                         <View style={styles.sectionHeader}>
-                            <MaterialIcons name="pan-tool" size={16} color="#F59E0B" />
+                            <Hand size={16} color="#F59E0B" />
                             <Text style={styles.sectionTitle}>Requests to Speak ({waveRequests.length})</Text>
                         </View>
                         {waveRequests.map((request) => (
@@ -514,7 +513,7 @@ const VoiceChannelScreen = () => {
                                         style={styles.grantButton}
                                         onPress={() => handleGrantSpeaker(request.userId)}
                                     >
-                                        <MaterialIcons name="person-add" size={14} color="#FFFFFF" />
+                                        <UserPlus size={14} color="#FFFFFF" />
                                         <Text style={styles.grantButtonText}>Allow</Text>
                                     </TouchableOpacity>
                                 </View>
@@ -551,7 +550,7 @@ const VoiceChannelScreen = () => {
                                         />
                                         {hasRaisedHand && (
                                             <View style={styles.handRaisedBadge}>
-                                                <MaterialIcons name="pan-tool" size={8} color="#FFFFFF" />
+                                                <Hand size={8} color="#FFFFFF" />
                                             </View>
                                         )}
                                     </View>
@@ -566,14 +565,14 @@ const VoiceChannelScreen = () => {
                                                 style={styles.actionItem}
                                                 onPress={() => handleGrantSpeaker(participant.userId)}
                                             >
-                                                <MaterialIcons name="person-add" size={16} color={colors.primary} />
+                                                <UserPlus size={16} color={colors.primary} />
                                                 <Text style={[styles.actionText, { color: colors.primary }]}>Make Speaker</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity
                                                 style={styles.actionItem}
                                                 onPress={() => handleMuteParticipant(participant.userId, !participant.isMuted)}
                                             >
-                                                <MaterialIcons name={participant.isMuted ? 'mic' : 'mic-off'} size={16} color={colors.text} />
+                                                {participant.isMuted ? <Mic size={16} color={colors.text} /> : <MicOff size={16} color={colors.text} />}
                                                 <Text style={styles.actionText}>{participant.isMuted ? 'Unmute' : 'Mute'}</Text>
                                             </TouchableOpacity>
                                             <TouchableOpacity
@@ -606,7 +605,7 @@ const VoiceChannelScreen = () => {
                         style={[styles.controlButton, isHandRaised && styles.controlButtonActive]}
                         onPress={handleWaveToSpeak}
                     >
-                        <MaterialIcons name="pan-tool" size={24} color={isHandRaised ? '#F59E0B' : '#FFFFFF'} />
+                        <Hand size={24} color={isHandRaised ? '#F59E0B' : '#FFFFFF'} />
                     </TouchableOpacity>
                 )}
 

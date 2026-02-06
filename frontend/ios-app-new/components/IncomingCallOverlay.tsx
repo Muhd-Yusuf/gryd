@@ -12,7 +12,7 @@ import {
     Animated,
     Modal,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Phone, Video, PhoneOff } from 'lucide-react-native';
 import { useCallContextSafe } from '../contexts/CallContext';
 import { useTheme } from '../lib/theme';
 import UserAvatar from './UserAvatar';
@@ -85,11 +85,11 @@ const IncomingCallOverlay: React.FC = () => {
                                 { transform: [{ scale: pulseAnim }] },
                             ]}
                         >
-                            <MaterialIcons
-                                name={incomingCall.callType === 'video' ? 'videocam' : 'phone'}
-                                size={24}
-                                color="#22C55E"
-                            />
+                            {incomingCall.callType === 'video' ? (
+                                <Video size={24} color="#22C55E" />
+                            ) : (
+                                <Phone size={24} color="#22C55E" />
+                            )}
                         </Animated.View>
                     </View>
 
@@ -99,7 +99,7 @@ const IncomingCallOverlay: React.FC = () => {
                                 style={styles.declineBtn}
                                 onPress={declineCall}
                             >
-                                <MaterialIcons name="call-end" size={28} color="#FFFFFF" />
+                                <PhoneOff size={28} color="#FFFFFF" />
                             </TouchableOpacity>
                             <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
                                 Decline
@@ -111,11 +111,11 @@ const IncomingCallOverlay: React.FC = () => {
                                 style={styles.answerBtn}
                                 onPress={answerCall}
                             >
-                                <MaterialIcons
-                                    name={incomingCall.callType === 'video' ? 'videocam' : 'call'}
-                                    size={28}
-                                    color="#FFFFFF"
-                                />
+                                {incomingCall.callType === 'video' ? (
+                                    <Video size={28} color="#FFFFFF" />
+                                ) : (
+                                    <Phone size={28} color="#FFFFFF" />
+                                )}
                             </TouchableOpacity>
                             <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
                                 Answer

@@ -12,9 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sun, Moon, ArrowLeft } from 'lucide-react-native';
+import { Sun, Moon, ArrowLeft, Plus } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../../lib/theme';
 
 export default function ProfilePictureScreen() {
@@ -111,7 +110,7 @@ export default function ProfilePictureScreen() {
                 onPress={pickImage}
             >
                 <Text style={styles.addPhotoText}>Add photo</Text>
-                <MaterialIcons name="add" size={20} color={colors.primaryText} />
+                <Plus size={20} color={colors.primaryText} />
             </TouchableOpacity>
         </View>
     );

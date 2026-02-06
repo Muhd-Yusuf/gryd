@@ -12,7 +12,7 @@ import {
     Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import { ArrowLeft, ShieldCheck, Lock, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import { authSignupSuperAdmin, setAuthUser } from '../lib/api';
 
@@ -90,7 +90,7 @@ export default function SuperAdminSignupScreen() {
                             style={styles.backButton}
                             onPress={() => router.replace('/login')}
                         >
-                            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+                            <ArrowLeft size={24} color={colors.text} />
                         </TouchableOpacity>
                         <View style={styles.logoContainer}>
                             <Text style={styles.logoText}>THE GRYD</Text>
@@ -99,7 +99,7 @@ export default function SuperAdminSignupScreen() {
 
                     <View style={styles.formCard}>
                         <View style={styles.iconContainer}>
-                            <MaterialIcons name="admin-panel-settings" size={48} color="#3B82F6" />
+                            <ShieldCheck size={48} color="#3B82F6" />
                         </View>
 
                         <Text style={styles.formTitle}>Super Admin Signup</Text>
@@ -175,7 +175,7 @@ export default function SuperAdminSignupScreen() {
                                 secureTextEntry
                             />
                             <View style={styles.secretKeyHint}>
-                                <MaterialIcons name="lock" size={14} color={colors.textMuted} />
+                                <Lock size={14} color={colors.textMuted} />
                                 <Text style={styles.secretKeyHintText}>
                                     Contact your system administrator for the secret key
                                 </Text>
@@ -184,7 +184,7 @@ export default function SuperAdminSignupScreen() {
 
                         {!!error && (
                             <View style={styles.errorBanner}>
-                                <MaterialIcons name="error" size={18} color="#EF4444" />
+                                <AlertCircle size={18} color="#EF4444" />
                                 <Text style={styles.errorBannerText}>{error}</Text>
                             </View>
                         )}

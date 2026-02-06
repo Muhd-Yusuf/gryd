@@ -12,7 +12,7 @@ import {
     Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MessageCircle, Trophy, User, Sun, Moon, X } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
@@ -206,7 +206,7 @@ const TopContributorsScreen = () => {
     const railItems = [
         {
             id: 'messages',
-            icon: 'chat-bubble-outline' as const,
+            icon: MessageCircle,
             onPress: () =>
                 router.push({
                     pathname: '/(main)/direct-messages',
@@ -215,11 +215,11 @@ const TopContributorsScreen = () => {
         },
         {
             id: 'contributors',
-            icon: 'emoji-events' as const,
+            icon: Trophy,
         },
         {
             id: 'profile',
-            icon: 'person-outline' as const,
+            icon: User,
             onPress: () => router.push('/(main)/profile'),
         },
     ];
@@ -243,6 +243,7 @@ const TopContributorsScreen = () => {
                             </TouchableOpacity>
                             {railItems.map((item) => {
                                 const isActive = activeRail === item.id;
+                                const IconComponent = item.icon;
                                 return (
                                     <TouchableOpacity
                                         key={item.id}
@@ -252,21 +253,21 @@ const TopContributorsScreen = () => {
                                             item.onPress?.();
                                         }}
                                     >
-                                        <MaterialIcons name={item.icon} size={20} color={isActive ? colors.text : colors.textMuted} />
+                                        <IconComponent size={20} color={isActive ? colors.text : colors.textMuted} />
                                     </TouchableOpacity>
                                 );
                             })}
                             <View style={styles.railDivider} />
                             <TouchableOpacity style={styles.railButton} onPress={toggleTheme}>
-                                <MaterialIcons
-                                    name={mode === 'dark' ? 'light-mode' : 'dark-mode'}
-                                    size={20}
-                                    color={colors.textMuted}
-                                />
+                                {mode === 'dark' ? (
+                                    <Sun size={20} color={colors.textMuted} />
+                                ) : (
+                                    <Moon size={20} color={colors.textMuted} />
+                                )}
                             </TouchableOpacity>
                             <View style={{ flex: 1 }} />
                             <TouchableOpacity style={styles.exitButton} onPress={handleBack}>
-                                <MaterialIcons name="close" size={18} color="#FFFFFF" />
+                                <X size={18} color="#FFFFFF" />
                             </TouchableOpacity>
                         </View>
 

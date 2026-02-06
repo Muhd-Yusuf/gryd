@@ -18,7 +18,7 @@ import {
     Modal,
     Pressable,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Trash2, Send, File, X, Plus, Smile, Image, Mic } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { useTheme } from '../../lib/theme';
 
@@ -206,7 +206,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                             style={[styles.recordingBtn, { backgroundColor: colors.surfaceMuted }]}
                             onPress={() => stopRecording(false)}
                         >
-                            <MaterialIcons name="delete" size={24} color="#EF4444" />
+                            <Trash2 size={24} color="#EF4444" />
                         </TouchableOpacity>
 
                         {/* Waveform or indicator */}
@@ -244,7 +244,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                             style={[styles.recordingBtn, { backgroundColor: '#22C55E' }]}
                             onPress={() => stopRecording(true)}
                         >
-                            <MaterialIcons name="send" size={24} color="#FFFFFF" />
+                            <Send size={24} color="#FFFFFF" />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -268,7 +268,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                                 <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
                             ) : (
                                 <View style={[styles.attachmentFileThumb, { backgroundColor: colors.surfaceMuted }]}>
-                                    <MaterialIcons name="insert-drive-file" size={24} color={colors.textMuted} />
+                                    <File size={24} color={colors.textMuted} />
                                 </View>
                             )}
                             {onRemoveAttachment && (
@@ -276,7 +276,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                                     style={styles.attachmentRemove}
                                     onPress={() => onRemoveAttachment(index)}
                                 >
-                                    <MaterialIcons name="close" size={14} color="#FFFFFF" />
+                                    <X size={14} color="#FFFFFF" />
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -293,7 +293,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         onPress={onAttachFile || onAttachImage}
                         disabled={disabled}
                     >
-                        <MaterialIcons name="add" size={24} color={colors.textMuted} />
+                        <Plus size={24} color={colors.textMuted} />
                     </TouchableOpacity>
                 )}
 
@@ -305,7 +305,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         onPress={() => setShowEmojiPicker(true)}
                         disabled={disabled}
                     >
-                        <MaterialIcons name="emoji-emotions" size={22} color={colors.textMuted} />
+                        <Smile size={22} color={colors.textMuted} />
                     </TouchableOpacity>
 
                     {/* Text input */}
@@ -334,7 +334,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                             onPress={onAttachImage}
                             disabled={disabled}
                         >
-                            <MaterialIcons name="image" size={22} color={colors.textMuted} />
+                            <Image size={22} color={colors.textMuted} />
                         </TouchableOpacity>
                     )}
 
@@ -348,8 +348,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                             onPress={handleSend}
                             disabled={disabled || !hasContent}
                         >
-                            <MaterialIcons
-                                name="send"
+                            <Send
                                 size={20}
                                 color={hasContent ? '#FFFFFF' : colors.textMuted}
                             />
@@ -365,7 +364,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                             onPress={handleSend}
                             disabled={disabled}
                         >
-                            <MaterialIcons name="send" size={20} color="#FFFFFF" />
+                            <Send size={20} color="#FFFFFF" />
                         </TouchableOpacity>
                     ) : null
                 ) : (
@@ -376,7 +375,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                             onPress={startRecording}
                             disabled={disabled}
                         >
-                            <MaterialIcons name="mic" size={24} color={colors.textMuted} />
+                            <Mic size={24} color={colors.textMuted} />
                         </TouchableOpacity>
                     ) : null
                 )}
@@ -400,7 +399,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         <View style={styles.emojiHeader}>
                             <Text style={[styles.emojiTitle, { color: colors.text }]}>Emoji</Text>
                             <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                                <MaterialIcons name="close" size={24} color={colors.textMuted} />
+                                <X size={24} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.emojiScroll}>

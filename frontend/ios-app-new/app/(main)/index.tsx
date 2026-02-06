@@ -28,8 +28,24 @@ import {
     MessageCircle,
     Volume2,
     Repeat2,
+    Sun,
+    Moon,
+    X,
+    Calendar,
+    Megaphone,
+    Clock,
+    MapPin,
+    BadgeCheck,
+    File,
+    Trash2,
+    PlusCircle,
+    Paperclip,
+    Smile,
+    Mic,
+    Flag,
+    Trophy,
+    User,
 } from 'lucide-react-native';
-import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, initiateChannelCall, uploadFile, logout } from '../../lib/api';
 import { cacheUsers, getCachedSubgrids, cacheSubgrids, cacheFriends } from '../../lib/userCache';
@@ -133,6 +149,13 @@ const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
     partner: '#10B981',
     sponsor: '#F59E0B',
     investor: '#EC4899',
+};
+
+// Mapping icon names to Lucide components for rail buttons
+const RAIL_ICONS: Record<string, any> = {
+    'chat-bubble-outline': MessageCircle,
+    'emoji-events': Trophy,
+    'person-outline': User,
 };
 
 type UserProfile = {
@@ -1469,6 +1492,7 @@ const TenantCommunityScreen = () => {
                             </TouchableOpacity>
                             {railItems.map((item) => {
                                 const isActive = activeRail === item.id;
+                                const IconComponent = RAIL_ICONS[item.icon] || MessageCircle;
                                 return (
                                     <TouchableOpacity
                                         key={item.id}
@@ -1478,8 +1502,7 @@ const TenantCommunityScreen = () => {
                                             item.onPress?.();
                                         }}
                                     >
-                                        <MaterialIcons
-                                            name={item.icon}
+                                        <IconComponent
                                             size={20}
                                             color={isActive ? colors.text : colors.textMuted}
                                         />
@@ -1488,15 +1511,15 @@ const TenantCommunityScreen = () => {
                             })}
                             <View style={styles.railDivider} />
                             <TouchableOpacity style={styles.railButton} onPress={toggleTheme}>
-                                <MaterialIcons
-                                    name={mode === 'dark' ? 'light-mode' : 'dark-mode'}
-                                    size={20}
-                                    color={colors.textMuted}
-                                />
+                                {mode === 'dark' ? (
+                                    <Sun size={20} color={colors.textMuted} />
+                                ) : (
+                                    <Moon size={20} color={colors.textMuted} />
+                                )}
                             </TouchableOpacity>
                             <View style={{ flex: 1 }} />
                             <TouchableOpacity style={styles.exitButton} onPress={handleLogout}>
-                                <MaterialIcons name="close" size={18} color="#FFFFFF" />
+                                <X size={18} color="#FFFFFF" />
                             </TouchableOpacity>
                         </View>
 
@@ -1549,7 +1572,7 @@ const TenantCommunityScreen = () => {
                                         }
                                     }}
                                 >
-                                    <MaterialIcons name="event" size={16} color={showEventsView ? colors.text : colors.textMuted} />
+                                    <Calendar size={16} color={showEventsView ? colors.text : colors.textMuted} />
                                     <Text style={[styles.eventsButtonText, showEventsView && styles.eventsButtonTextActive]}>
                                         Events
                                     </Text>
@@ -1623,7 +1646,7 @@ const TenantCommunityScreen = () => {
                                 <>
                                     <View style={styles.centerHeader}>
                                         <View style={styles.eventsHeaderLeft}>
-                                            <MaterialIcons name="event" size={18} color={colors.textMuted} />
+                                            <Calendar size={18} color={colors.textMuted} />
                                             <Text style={styles.centerTitle}>Events & Announcements</Text>
                                         </View>
                                     </View>
@@ -1635,7 +1658,7 @@ const TenantCommunityScreen = () => {
                                         {events.length === 0 ? (
                                             <View style={styles.channelWelcome}>
                                                 <View style={styles.channelWelcomeIcon}>
-                                                    <MaterialIcons name="event" size={32} color={colors.textMuted} />
+                                                    <Calendar size={32} color={colors.textMuted} />
                                                 </View>
                                                 <Text style={styles.channelWelcomeTitle}>No Events Yet</Text>
                                                 <Text style={styles.channelWelcomeSubtitle}>
@@ -1650,11 +1673,11 @@ const TenantCommunityScreen = () => {
                                                             styles.eventTypeBadge,
                                                             event.eventType === 'announcement' ? styles.eventTypeBadgeAnnouncement : styles.eventTypeBadgeEvent
                                                         ]}>
-                                                            <MaterialIcons
-                                                                name={event.eventType === 'announcement' ? 'campaign' : 'event'}
-                                                                size={12}
-                                                                color="#FFFFFF"
-                                                            />
+                                                            {event.eventType === 'announcement' ? (
+                                                                <Megaphone size={12} color="#FFFFFF" />
+                                                            ) : (
+                                                                <Calendar size={12} color="#FFFFFF" />
+                                                            )}
                                                             <Text style={styles.eventTypeBadgeText}>
                                                                 {event.eventType === 'announcement' ? 'Announcement' : 'Event'}
                                                             </Text>
@@ -1667,7 +1690,7 @@ const TenantCommunityScreen = () => {
                                                     <View style={styles.eventMeta}>
                                                         {event.startDate && (
                                                             <View style={styles.eventMetaItem}>
-                                                                <MaterialIcons name="schedule" size={14} color={colors.textMuted} />
+                                                                <Clock size={14} color={colors.textMuted} />
                                                                 <Text style={styles.eventMetaText}>
                                                                     {new Date(event.startDate).toLocaleDateString('en-US', {
                                                                         weekday: 'short',
@@ -1682,7 +1705,7 @@ const TenantCommunityScreen = () => {
                                                         )}
                                                         {event.location && (
                                                             <View style={styles.eventMetaItem}>
-                                                                <MaterialIcons name="location-on" size={14} color={colors.textMuted} />
+                                                                <MapPin size={14} color={colors.textMuted} />
                                                                 <Text style={styles.eventMetaText}>{event.location}</Text>
                                                             </View>
                                                         )}
@@ -1767,7 +1790,7 @@ const TenantCommunityScreen = () => {
                                                         <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
                                                         {isMemberAdmin(item.authorId || item.senderId) && (
                                                             <View style={styles.verifiedBadge}>
-                                                                <MaterialIcons name="verified" size={14} color="#3B82F6" />
+                                                                <BadgeCheck size={14} color="#3B82F6" />
                                                             </View>
                                                         )}
                                                         {getMemberDisplayUsername(item.authorId || item.senderId) && (
@@ -1838,7 +1861,7 @@ const TenantCommunityScreen = () => {
                                                         if (attachment.type === 'file') {
                                                             return (
                                                                 <View key={`${item._id}-file-${idx}`} style={styles.fileBubble}>
-                                                                    <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                                                    <File size={20} color={colors.textMuted} />
                                                                     <Text style={styles.fileText} numberOfLines={1}>
                                                                         {attachment.label || 'File'}
                                                                     </Text>
@@ -1959,14 +1982,14 @@ const TenantCommunityScreen = () => {
                                                 <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
                                             ) : (
                                                 <View style={styles.attachmentFileIcon}>
-                                                    <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                                    <File size={20} color={colors.textMuted} />
                                                 </View>
                                             )}
                                             <TouchableOpacity
                                                 style={styles.attachmentRemove}
                                                 onPress={() => handleRemoveAttachment(idx)}
                                             >
-                                                <MaterialIcons name="close" size={12} color="#fff" />
+                                                <X size={12} color="#fff" />
                                             </TouchableOpacity>
                                         </View>
                                     ))}
@@ -1982,17 +2005,17 @@ const TenantCommunityScreen = () => {
                                     </View>
                                     <View style={styles.recordingActions}>
                                         <TouchableOpacity style={styles.cancelRecordingBtn} onPress={handleCancelRecording}>
-                                            <MaterialIcons name="delete" size={20} color="#EF4444" />
+                                            <Trash2 size={20} color="#EF4444" />
                                         </TouchableOpacity>
                                         <TouchableOpacity style={styles.stopRecordingBtn} onPress={handleStopRecording}>
-                                            <MaterialIcons name="send" size={18} color="#FFFFFF" />
+                                            <Send size={18} color="#FFFFFF" />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
                             ) : (
                                 <View style={styles.messageComposer}>
                                     <TouchableOpacity style={styles.composerIconBtn} onPress={handlePickImage}>
-                                        <MaterialIcons name="add-circle" size={22} color={colors.textMuted} />
+                                        <PlusCircle size={22} color={colors.textMuted} />
                                     </TouchableOpacity>
                                     <View style={styles.composerInputWrapper}>
                                         <TextInput
@@ -2005,13 +2028,13 @@ const TenantCommunityScreen = () => {
                                         />
                                         <View style={styles.composerActions}>
                                             <TouchableOpacity style={styles.composerIconBtn} onPress={handlePickFile}>
-                                                <MaterialIcons name="attach-file" size={20} color={colors.textMuted} />
+                                                <Paperclip size={20} color={colors.textMuted} />
                                             </TouchableOpacity>
                                             <TouchableOpacity style={styles.composerIconBtn} onPress={() => setShowEmojiPicker(true)}>
-                                                <MaterialIcons name="emoji-emotions" size={20} color={colors.textMuted} />
+                                                <Smile size={20} color={colors.textMuted} />
                                             </TouchableOpacity>
                                             <TouchableOpacity style={styles.composerIconBtn} onPress={handleStartRecording}>
-                                                <MaterialIcons name="mic" size={20} color={colors.textMuted} />
+                                                <Mic size={20} color={colors.textMuted} />
                                             </TouchableOpacity>
                                             {(channelDraft.trim() || attachments.length > 0) && (
                                                 <TouchableOpacity style={styles.sendButton} onPress={handleSendChannelMessage}>
@@ -2118,7 +2141,7 @@ const TenantCommunityScreen = () => {
                                     closeFeedMenu();
                                 }}
                             >
-                                <MaterialIcons name="delete" size={16} color="#EF4444" />
+                                <Trash2 size={16} color="#EF4444" />
                                 <Text style={[styles.floatingMenuItemText, { color: '#EF4444' }]}>Delete</Text>
                             </TouchableOpacity>
                         )}
@@ -2129,7 +2152,7 @@ const TenantCommunityScreen = () => {
                                 closeFeedMenu();
                             }}
                         >
-                            <MaterialIcons name="flag" size={16} color={colors.textMuted} />
+                            <Flag size={16} color={colors.textMuted} />
                             <Text style={styles.floatingMenuItemText}>Report</Text>
                         </TouchableOpacity>
                     </View>
@@ -2144,7 +2167,7 @@ const TenantCommunityScreen = () => {
                         <View style={styles.reportHeader}>
                             <Text style={styles.reportTitle}>Report content</Text>
                             <TouchableOpacity onPress={() => setReportModalOpen(false)}>
-                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                                <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <Text style={styles.reportSubtitle}>Select a reason for this report.</Text>
@@ -2198,7 +2221,7 @@ const TenantCommunityScreen = () => {
                         <View style={styles.reportHeader}>
                             <Text style={styles.reportTitle}>Delete {deleteTarget?.type === 'post' ? 'Post' : 'Message'}?</Text>
                             <TouchableOpacity onPress={() => setDeleteModalOpen(false)}>
-                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                                <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <Text style={styles.reportSubtitle}>
@@ -2228,7 +2251,7 @@ const TenantCommunityScreen = () => {
                         <View style={styles.commentModalHeader}>
                             <Text style={styles.commentModalTitle}>Comments</Text>
                             <TouchableOpacity onPress={() => setCommentModalOpen(false)}>
-                                <MaterialIcons name="close" size={24} color={colors.textMuted} />
+                                <X size={24} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
 
@@ -2252,7 +2275,7 @@ const TenantCommunityScreen = () => {
                                                 <Text style={styles.commentAuthor}>{getDisplayName(comment.authorId)}</Text>
                                                 {isMemberAdmin(comment.authorId) && (
                                                     <View style={styles.verifiedBadge}>
-                                                        <MaterialIcons name="verified" size={12} color="#3B82F6" />
+                                                        <BadgeCheck size={12} color="#3B82F6" />
                                                     </View>
                                                 )}
                                                 {getMemberDisplayUsername(comment.authorId) && (
@@ -2310,7 +2333,7 @@ const TenantCommunityScreen = () => {
                         <View style={styles.emojiModalHeader}>
                             <Text style={styles.emojiModalTitle}>Emoji</Text>
                             <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                                <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.emojiGrid}>

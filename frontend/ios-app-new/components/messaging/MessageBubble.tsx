@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     Platform,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Phone, Video, PhoneIncoming, PhoneOutgoing, ChevronRight, File, Trash2 } from 'lucide-react-native';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../UserAvatar';
 import VoiceMessagePlayer from '../VoiceMessagePlayer';
@@ -92,8 +92,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     // Render call history item
     if (isCallHistory || callType) {
         const isMissedOrDeclined = callStatus === 'missed' || callStatus === 'declined' || callStatus === 'cancelled';
-        const callIcon = callType === 'video' ? 'videocam' : 'phone';
-        const arrowIcon = isOutgoing ? 'call-made' : 'call-received';
+        const CallIcon = callType === 'video' ? Video : Phone;
+        const ArrowIcon = isOutgoing ? PhoneOutgoing : PhoneIncoming;
         const arrowColor = isMissedOrDeclined ? '#EF4444' : '#22C55E';
 
         let callLabel = callType === 'video' ? 'Video call' : 'Voice call';
@@ -109,11 +109,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     activeOpacity={0.7}
                 >
                     <View style={styles.callHistoryIconWrap}>
-                        <MaterialIcons name={callIcon} size={20} color={colors.primary} />
+                        <CallIcon size={20} color={colors.primary} />
                     </View>
                     <View style={styles.callHistoryInfo}>
                         <View style={styles.callHistoryRow}>
-                            <MaterialIcons name={arrowIcon} size={14} color={arrowColor} />
+                            <ArrowIcon size={14} color={arrowColor} />
                             <Text style={[styles.callHistoryLabel, { color: colors.text }]}>
                                 {callLabel}
                             </Text>
@@ -124,7 +124,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                                 : formatTime(timestamp)}
                         </Text>
                     </View>
-                    <MaterialIcons name="chevron-right" size={20} color={colors.textMuted} />
+                    <ChevronRight size={20} color={colors.textMuted} />
                 </TouchableOpacity>
             </View>
         );
@@ -175,8 +175,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                                     }
                                 }}
                             >
-                                <MaterialIcons
-                                    name="insert-drive-file"
+                                <File
                                     size={20}
                                     color={isSelf ? 'rgba(255,255,255,0.8)' : colors.textMuted}
                                 />
@@ -244,7 +243,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     style={styles.deleteButton}
                     onPress={() => onDelete(messageId)}
                 >
-                    <MaterialIcons name="delete-outline" size={16} color={colors.textMuted} />
+                    <Trash2 size={16} color={colors.textMuted} />
                 </TouchableOpacity>
             )}
         </View>

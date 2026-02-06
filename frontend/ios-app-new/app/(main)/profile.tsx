@@ -13,7 +13,7 @@ import {
     TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@expo/vector-icons';
+import { ArrowLeft, Sun, Moon, Camera, X, Check, AtSign, User, UserCircle, Mail, BadgeCheck, Building2, Users, LogOut, Edit2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
@@ -447,15 +447,15 @@ const ProfileScreen = () => {
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-                        <MaterialIcons name="arrow-back" size={24} color={colors.text} />
+                        <ArrowLeft size={24} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Profile</Text>
                     <TouchableOpacity style={styles.themeButton} onPress={toggleTheme}>
-                        <MaterialIcons
-                            name={mode === 'dark' ? 'light-mode' : 'dark-mode'}
-                            size={24}
-                            color={colors.text}
-                        />
+                        {mode === 'dark' ? (
+                            <Sun size={24} color={colors.text} />
+                        ) : (
+                            <Moon size={24} color={colors.text} />
+                        )}
                     </TouchableOpacity>
                 </View>
 
@@ -482,7 +482,7 @@ const ProfileScreen = () => {
                                 {savingBanner ? (
                                     <ActivityIndicator size="small" color="#FFFFFF" />
                                 ) : (
-                                    <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+                                    <Camera size={20} color="#FFFFFF" />
                                 )}
                             </View>
                         </TouchableOpacity>
@@ -500,7 +500,7 @@ const ProfileScreen = () => {
                                     {saving ? (
                                         <ActivityIndicator size="small" color="#FFFFFF" />
                                     ) : (
-                                        <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+                                        <Camera size={20} color="#FFFFFF" />
                                     )}
                                 </View>
                             </TouchableOpacity>
@@ -511,7 +511,7 @@ const ProfileScreen = () => {
                                         onPress={handleCancelAvatar}
                                         disabled={saving}
                                     >
-                                        <MaterialIcons name="close" size={16} color={colors.text} />
+                                        <X size={16} color={colors.text} />
                                         <Text style={styles.cancelAvatarText}>Cancel</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
@@ -523,7 +523,7 @@ const ProfileScreen = () => {
                                             <ActivityIndicator size="small" color="#FFFFFF" />
                                         ) : (
                                             <>
-                                                <MaterialIcons name="check" size={16} color="#FFFFFF" />
+                                                <Check size={16} color="#FFFFFF" />
                                                 <Text style={styles.saveAvatarText}>Save</Text>
                                             </>
                                         )}
@@ -542,7 +542,7 @@ const ProfileScreen = () => {
                                     onPress={handleCancelBanner}
                                     disabled={savingBanner}
                                 >
-                                    <MaterialIcons name="close" size={14} color={colors.text} />
+                                    <X size={14} color={colors.text} />
                                     <Text style={styles.cancelBannerText}>Cancel</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -554,7 +554,7 @@ const ProfileScreen = () => {
                                         <ActivityIndicator size="small" color="#FFFFFF" />
                                     ) : (
                                         <>
-                                            <MaterialIcons name="check" size={14} color="#FFFFFF" />
+                                            <Check size={14} color="#FFFFFF" />
                                             <Text style={styles.saveBannerText}>Save Banner</Text>
                                         </>
                                     )}
@@ -595,7 +595,7 @@ const ProfileScreen = () => {
                         <View style={styles.infoCard}>
                             {/* Username Field */}
                             <View style={styles.infoRow}>
-                                <MaterialIcons name="alternate-email" size={20} color={colors.textMuted} />
+                                <AtSign size={20} color={colors.textMuted} />
                                 <View style={styles.infoContent}>
                                     <Text style={styles.infoLabel}>Username</Text>
                                     {editingUsername ? (
@@ -645,14 +645,14 @@ const ProfileScreen = () => {
                                             <Text style={styles.infoValue}>
                                                 {user?.username ? `@${user.username}` : 'Not set - tap to add'}
                                             </Text>
-                                            <MaterialIcons name="edit" size={16} color={colors.primary} />
+                                            <Edit2 size={16} color={colors.primary} />
                                         </TouchableOpacity>
                                     )}
                                 </View>
                             </View>
                             <View style={styles.divider} />
                             <View style={styles.infoRow}>
-                                <MaterialIcons name="person" size={20} color={colors.textMuted} />
+                                <User size={20} color={colors.textMuted} />
                                 <View style={styles.infoContent}>
                                     <Text style={styles.infoLabel}>First Name</Text>
                                     <Text style={styles.infoValue}>{user?.firstName || 'Not set'}</Text>
@@ -660,7 +660,7 @@ const ProfileScreen = () => {
                             </View>
                             <View style={styles.divider} />
                             <View style={styles.infoRow}>
-                                <MaterialIcons name="person-outline" size={20} color={colors.textMuted} />
+                                <UserCircle size={20} color={colors.textMuted} />
                                 <View style={styles.infoContent}>
                                     <Text style={styles.infoLabel}>Last Name</Text>
                                     <Text style={styles.infoValue}>{user?.lastName || 'Not set'}</Text>
@@ -668,7 +668,7 @@ const ProfileScreen = () => {
                             </View>
                             <View style={styles.divider} />
                             <View style={styles.infoRow}>
-                                <MaterialIcons name="email" size={20} color={colors.textMuted} />
+                                <Mail size={20} color={colors.textMuted} />
                                 <View style={styles.infoContent}>
                                     <Text style={styles.infoLabel}>Email</Text>
                                     <Text style={styles.infoValue}>{user?.email}</Text>
@@ -676,7 +676,7 @@ const ProfileScreen = () => {
                             </View>
                             <View style={styles.divider} />
                             <View style={styles.infoRow}>
-                                <MaterialIcons name="badge" size={20} color={colors.textMuted} />
+                                <BadgeCheck size={20} color={colors.textMuted} />
                                 <View style={styles.infoContent}>
                                     <Text style={styles.infoLabel}>User ID</Text>
                                     <Text style={styles.infoValueMono}>{user?.userId}</Text>
@@ -686,7 +686,7 @@ const ProfileScreen = () => {
                                 <>
                                     <View style={styles.divider} />
                                     <View style={styles.infoRow}>
-                                        <MaterialIcons name="business" size={20} color={colors.textMuted} />
+                                        <Building2 size={20} color={colors.textMuted} />
                                         <View style={styles.infoContent}>
                                             <Text style={styles.infoLabel}>Company</Text>
                                             <Text style={styles.infoValue}>{user.company}</Text>
@@ -709,7 +709,7 @@ const ProfileScreen = () => {
                                             {index > 0 && <View style={styles.divider} />}
                                             <View style={styles.membershipRow}>
                                                 <View style={styles.membershipIcon}>
-                                                    <MaterialIcons name="groups" size={20} color={colors.primary} />
+                                                    <Users size={20} color={colors.primary} />
                                                 </View>
                                                 <View style={styles.membershipInfo}>
                                                     <Text style={styles.membershipName}>{membership.subgridName}</Text>
@@ -730,7 +730,7 @@ const ProfileScreen = () => {
                     {/* Logout Section */}
                     <View style={styles.section}>
                         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                            <MaterialIcons name="logout" size={20} color="#EF4444" />
+                            <LogOut size={20} color="#EF4444" />
                             <Text style={styles.logoutText}>Log Out</Text>
                         </TouchableOpacity>
                     </View>

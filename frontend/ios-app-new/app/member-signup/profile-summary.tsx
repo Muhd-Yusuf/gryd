@@ -12,8 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sun, Moon, CheckCircle, ArrowLeft } from 'lucide-react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Sun, Moon, CheckCircle, ArrowLeft, Mail, Building2, Key, AlertCircle } from 'lucide-react-native';
 import { authSignupMember, setAuthUser, uploadFile } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 
@@ -164,7 +163,7 @@ export default function ProfileSummaryScreen() {
         <View style={styles.infoSection}>
             <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                    <MaterialIcons name="email" size={20} color={colors.textMuted} />
+                    <Mail size={20} color={colors.textMuted} />
                 </View>
                 <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Email</Text>
@@ -174,7 +173,7 @@ export default function ProfileSummaryScreen() {
 
             <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                    <MaterialIcons name="business" size={20} color={colors.textMuted} />
+                    <Building2 size={20} color={colors.textMuted} />
                 </View>
                 <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Server</Text>
@@ -184,7 +183,7 @@ export default function ProfileSummaryScreen() {
 
             <View style={styles.infoRow}>
                 <View style={styles.infoIcon}>
-                    <MaterialIcons name="vpn-key" size={20} color={colors.textMuted} />
+                    <Key size={20} color={colors.textMuted} />
                 </View>
                 <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Server Code</Text>
@@ -287,7 +286,7 @@ export default function ProfileSummaryScreen() {
 
                         {!!error && (
                             <View style={mobileStyles.errorContainer}>
-                                <MaterialIcons name="error" size={18} color={colors.error} />
+                                <AlertCircle size={18} color={colors.error} />
                                 <Text style={mobileStyles.errorText}>{error}</Text>
                             </View>
                         )}
@@ -370,7 +369,7 @@ export default function ProfileSummaryScreen() {
 
                         {!!error && (
                             <View style={webStyles.errorContainer}>
-                                <MaterialIcons name="error" size={16} color={colors.error} />
+                                <AlertCircle size={16} color={colors.error} />
                                 <Text style={webStyles.errorText}>{error}</Text>
                             </View>
                         )}

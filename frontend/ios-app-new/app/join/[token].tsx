@@ -14,7 +14,7 @@ import {
     Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import { AlertCircle, UserPlus, Building2 } from 'lucide-react-native';
 import { useTheme } from '../../lib/theme';
 import { communityGet, communityPost, authSignup, authLogin, setAuthUser } from '../../lib/api';
 
@@ -239,7 +239,7 @@ export default function JoinInviteScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.errorContainer}>
-                    <MaterialIcons name="error-outline" size={64} color="#EF4444" />
+                    <AlertCircle size={64} color="#EF4444" />
                     <Text style={styles.errorTitle}>Invalid Invite</Text>
                     <Text style={styles.errorMessage}>{error || 'This invite link is invalid or has expired.'}</Text>
                     <TouchableOpacity style={styles.homeButton} onPress={() => router.replace('/')}>
@@ -271,7 +271,7 @@ export default function JoinInviteScreen() {
                     {/* Invite Card */}
                     <View style={styles.inviteCard}>
                         <View style={styles.inviteIconWrap}>
-                            <MaterialIcons name="group-add" size={40} color="#3B82F6" />
+                            <UserPlus size={40} color="#3B82F6" />
                         </View>
                         <Text style={styles.inviteTitle}>You're Invited!</Text>
                         <Text style={styles.inviteSubtitle}>
@@ -280,7 +280,7 @@ export default function JoinInviteScreen() {
                                 : 'You have been invited to join'}
                         </Text>
                         <View style={styles.communityBadge}>
-                            <MaterialIcons name="business" size={20} color="#3B82F6" />
+                            <Building2 size={20} color="#3B82F6" />
                             <Text style={styles.communityName}>{inviteDetails?.subgridName}</Text>
                         </View>
                     </View>
@@ -374,7 +374,7 @@ export default function JoinInviteScreen() {
 
                         {!!error && (
                             <View style={styles.errorBanner}>
-                                <MaterialIcons name="error" size={18} color="#EF4444" />
+                                <AlertCircle size={18} color="#EF4444" />
                                 <Text style={styles.errorBannerText}>{error}</Text>
                             </View>
                         )}

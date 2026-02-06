@@ -14,7 +14,79 @@ import {
     Alert,
     ActivityIndicator,
 } from 'react-native';
-import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+    UserPlus,
+    Plus,
+    FolderPlus,
+    Settings,
+    Bell,
+    Shield,
+    Hash,
+    MessageSquare,
+    Trophy,
+    Sun,
+    Moon,
+    X,
+    Calendar,
+    Trash2,
+    Lock,
+    Mic,
+    ChevronDown,
+    Check,
+    Headphones,
+    ArrowLeft,
+    Pin,
+    Users,
+    Search,
+    SearchX,
+    Edit,
+    BadgeCheck,
+    MoreHorizontal,
+    Repeat,
+    PlayCircle,
+    FileText,
+    MessageCircle,
+    Heart,
+    Square,
+    PlusCircle,
+    Paperclip,
+    Smile,
+    Send,
+    Award,
+    Megaphone,
+    Clock,
+    MapPin,
+    Copy,
+    ChevronLeft,
+    ChevronRight,
+    Building2,
+    Eye,
+    Volume2,
+    VolumeX,
+    UserMinus,
+    MoreVertical,
+    Link,
+    Ban,
+    AlertTriangle,
+    Play,
+    Globe,
+    Flag,
+    MicOff,
+    Video,
+    VideoOff,
+    PhoneOff,
+    CheckCircle,
+    Mail,
+    ShieldCheck,
+    Info,
+    User,
+    ArrowUp,
+    ArrowDown,
+    FilterX,
+    CalendarPlus,
+    File,
+    XCircle,
+} from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -2267,49 +2339,49 @@ const CreditUnionAdminScreen = () => {
                 onPress={() => { setServerMenuOpen(false); setInviteModalOpen(true); }}
             >
                 <Text style={styles.dropdownText}>Invite member</Text>
-                <MaterialIcons name="person-add" size={18} color={colors.textMuted} />
+                <UserPlus size={18} color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity
                 style={styles.dropdownItem}
                 onPress={() => { setServerMenuOpen(false); setCreateChannelModalOpen(true); }}
             >
                 <Text style={styles.dropdownText}>Create Channel</Text>
-                <MaterialIcons name="add" size={18} color={colors.textMuted} />
+                <Plus size={18} color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity
                 style={styles.dropdownItem}
                 onPress={() => { setServerMenuOpen(false); setCreateCategoryModalOpen(true); }}
             >
                 <Text style={styles.dropdownText}>Create Category</Text>
-                <MaterialIcons name="create-new-folder" size={18} color={colors.textMuted} />
+                <FolderPlus size={18} color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity
                 style={styles.dropdownItem}
                 onPress={() => { setServerMenuOpen(false); setCreateEventModalOpen(true); }}
             >
                 <Text style={styles.dropdownText}>Create Event</Text>
-                <MaterialCommunityIcons name="calendar-plus" size={18} color={colors.textMuted} />
+                <CalendarPlus size={18} color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity
                 style={styles.dropdownItem}
                 onPress={() => { setServerMenuOpen(false); setServerSettingsModalOpen(true); }}
             >
                 <Text style={styles.dropdownText}>Server Settings</Text>
-                <MaterialIcons name="settings" size={18} color={colors.textMuted} />
+                <Settings size={18} color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity
                 style={styles.dropdownItem}
                 onPress={() => { setServerMenuOpen(false); setNotificationSettingsModalOpen(true); }}
             >
                 <Text style={styles.dropdownText}>Notification Settings</Text>
-                <MaterialIcons name="notifications" size={18} color={colors.textMuted} />
+                <Bell size={18} color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity
                 style={styles.dropdownItem}
                 onPress={() => { setServerMenuOpen(false); setPrivacySettingsModalOpen(true); }}
             >
                 <Text style={styles.dropdownText}>Privacy Settings</Text>
-                <MaterialIcons name="shield" size={18} color={colors.textMuted} />
+                <Shield size={18} color={colors.textMuted} />
             </TouchableOpacity>
         </View>
     );
@@ -2335,7 +2407,7 @@ const CreditUnionAdminScreen = () => {
                     onPress={() => setInviteModalOpen(true)}
                 >
                     <Text style={styles.welcomeActionText}>Invite your friends</Text>
-                    <MaterialIcons name="add" size={18} color={colors.textMuted} />
+                    <Plus size={18} color={colors.textMuted} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -2343,7 +2415,7 @@ const CreditUnionAdminScreen = () => {
                     onPress={() => setServerSettingsModalOpen(true)}
                 >
                     <Text style={styles.welcomeActionText}>Personalize your server with an icon</Text>
-                    <MaterialIcons name="add" size={18} color={colors.textMuted} />
+                    <Plus size={18} color={colors.textMuted} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -2351,7 +2423,7 @@ const CreditUnionAdminScreen = () => {
                     onPress={() => setCreateChannelModalOpen(true)}
                 >
                     <Text style={styles.welcomeActionText}>Send your first message</Text>
-                    <MaterialIcons name="add" size={18} color={colors.textMuted} />
+                    <Plus size={18} color={colors.textMuted} />
                 </TouchableOpacity>
             </View>
         </View>
@@ -2364,7 +2436,7 @@ const CreditUnionAdminScreen = () => {
             <View style={[styles.topNav, isMobile && styles.topNavMobile]}>
                 {!isMobile && (
                 <View style={styles.topNavLeft}>
-                    <MaterialIcons name="tag" size={24} color={colors.text} />
+                    <Hash size={24} color={colors.text} />
                     <Text style={styles.logoText}>THE GRYD</Text>
                 </View>
                 )}
@@ -2397,21 +2469,21 @@ const CreditUnionAdminScreen = () => {
                         ) : null}
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.railButton} onPress={() => router.push('/admin/messages')}>
-                        <MaterialIcons name="message" size={18} color={colors.textMuted} />
+                        <MessageSquare size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                     <View style={{ flex: 1 }} />
                     <TouchableOpacity style={styles.railButton} onPress={() => router.push('/admin/contributors')}>
-                        <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
+                        <Trophy size={18} color={colors.textMuted} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.railButton} onPress={toggleTheme}>
                         {mode === 'dark' ? (
-                            <MaterialIcons name="light-mode" size={18} color={colors.textMuted} />
+                            <Sun size={18} color={colors.textMuted} />
                         ) : (
-                            <MaterialIcons name="dark-mode" size={18} color={colors.textMuted} />
+                            <Moon size={18} color={colors.textMuted} />
                         )}
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.exitButton} onPress={handleLogout}>
-                        <MaterialIcons name="close" size={18} color="#FFFFFF" />
+                        <X size={18} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
                 )}
@@ -2438,13 +2510,13 @@ const CreditUnionAdminScreen = () => {
                             </View>
                             <View style={styles.mobileTopBarRight}>
                                 <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
-                                    <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={18} color={colors.textMuted} />
+                                    {mode === 'dark' ? <Sun size={18} color={colors.textMuted} /> : <Moon size={18} color={colors.textMuted} />}
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.mobileTopBarBtn} onPress={() => setServerSettingsModalOpen(true)}>
-                                    <MaterialIcons name="settings" size={18} color={colors.textMuted} />
+                                    <Settings size={18} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.mobileExitButton} onPress={handleLogout}>
-                                    <MaterialIcons name="close" size={16} color="#FFFFFF" />
+                                    <X size={16} color="#FFFFFF" />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -2459,11 +2531,11 @@ const CreditUnionAdminScreen = () => {
                                     </ScrollView>
                                 </View>
                                 <TouchableOpacity onPress={() => setServerSettingsModalOpen(true)} style={{ marginLeft: 4 }}>
-                                    <MaterialIcons name="settings" size={16} color={colors.textMuted} />
+                                    <Settings size={16} color={colors.textMuted} />
                                 </TouchableOpacity>
                             </View>
                             <TouchableOpacity onPress={() => setServerMenuOpen(!serverMenuOpen)}>
-                                <MaterialIcons name="person-add" size={16} color={colors.textMuted} />
+                                <UserPlus size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         {serverMenuOpen && <ServerMenuDropdown />}
@@ -2475,13 +2547,13 @@ const CreditUnionAdminScreen = () => {
                             style={[styles.eventsButton, showEventsView && styles.eventsButtonActive]}
                             onPress={() => { setShowEventsView(!showEventsView); if (isMobile) setMobileShowContent(true); }}
                         >
-                            <MaterialIcons name="event" size={16} color={showEventsView ? colors.text : colors.textMuted} />
+                            <Calendar size={16} color={showEventsView ? colors.text : colors.textMuted} />
                             <Text style={[styles.eventsText, showEventsView && styles.eventsTextActive]}>Events</Text>
                             <TouchableOpacity
                                 style={{ marginLeft: 'auto' }}
                                 onPress={(e) => { e.stopPropagation(); setCreateEventModalOpen(true); }}
                             >
-                                <MaterialIcons name="add" size={16} color={colors.textMuted} />
+                                <Plus size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </TouchableOpacity>
 
@@ -2495,8 +2567,7 @@ const CreditUnionAdminScreen = () => {
                                             style={styles.channelGroupToggle}
                                             onPress={() => setCollapsedGroups((prev) => ({ ...prev, [group.groupId]: !prev[group.groupId] }))}
                                         >
-                                            <MaterialIcons
-                                                name="expand-more"
+                                            <ChevronDown
                                                 size={12}
                                                 color={colors.textMuted}
                                                 style={!isOpen ? { transform: [{ rotate: '-90deg' }] } : undefined}
@@ -2506,13 +2577,13 @@ const CreditUnionAdminScreen = () => {
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                             {!group.groupId.startsWith('__') && (
                                                 <TouchableOpacity onPress={() => handleDeleteCategory(group.groupId, group.groupName)}>
-                                                    <MaterialIcons name="delete-outline" size={14} color={colors.textMuted} />
+                                                    <Trash2 size={14} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                             )}
                                             <TouchableOpacity onPress={() => {
                                                 setCreateChannelModalOpen(true);
                                             }}>
-                                                <MaterialIcons name="add" size={16} color={colors.textMuted} />
+                                                <Plus size={16} color={colors.textMuted} />
                                             </TouchableOpacity>
                                         </View>
                                     </View>
@@ -2532,11 +2603,13 @@ const CreditUnionAdminScreen = () => {
                                                     if (isMobile) setMobileShowContent(true);
                                                 }}
                                             >
-                                                <MaterialIcons
-                                                    name={isVoice ? 'headphones' : (channel.visibility === 'admin' ? 'lock' : 'tag')}
-                                                    size={16}
-                                                    color={isActive ? colors.text : colors.textMuted}
-                                                />
+                                                {isVoice ? (
+                                                    <Headphones size={16} color={isActive ? colors.text : colors.textMuted} />
+                                                ) : channel.visibility === 'admin' ? (
+                                                    <Lock size={16} color={isActive ? colors.text : colors.textMuted} />
+                                                ) : (
+                                                    <Hash size={16} color={isActive ? colors.text : colors.textMuted} />
+                                                )}
                                                 <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
                                                     <Text style={[styles.channelName, isActive && styles.channelNameActive]} numberOfLines={1} ellipsizeMode="tail">
                                                         {channel.name || 'untitled'}
@@ -2548,7 +2621,7 @@ const CreditUnionAdminScreen = () => {
                                                             onPress={(e) => { e.stopPropagation(); setInviteModalOpen(true); }}
                                                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                                         >
-                                                            <MaterialIcons name="person-add" size={14} color={colors.textMuted} />
+                                                            <UserPlus size={14} color={colors.textMuted} />
                                                         </TouchableOpacity>
                                                         <TouchableOpacity
                                                             onPress={(e) => {
@@ -2557,7 +2630,7 @@ const CreditUnionAdminScreen = () => {
                                                             }}
                                                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                                         >
-                                                            <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                                            <Settings size={14} color={colors.textMuted} />
                                                         </TouchableOpacity>
                                                     </View>
                                                 )}
@@ -2570,7 +2643,7 @@ const CreditUnionAdminScreen = () => {
                                                             }}
                                                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                                         >
-                                                            <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                                            <Settings size={14} color={colors.textMuted} />
                                                         </TouchableOpacity>
                                                     </View>
                                                 )}
@@ -2602,8 +2675,8 @@ const CreditUnionAdminScreen = () => {
                         <View style={styles.userActions}>
                             <View style={styles.dropdownWrapper}>
                                 <TouchableOpacity style={styles.userActionBtn} onPress={() => { setShowMicDropdown(!showMicDropdown); setShowHeadphoneDropdown(false); }}>
-                                    <MaterialIcons name="mic" size={14} color={colors.textMuted} />
-                                    <MaterialIcons name="expand-more" size={10} color={colors.textMuted} />
+                                    <Mic size={14} color={colors.textMuted} />
+                                    <ChevronDown size={10} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 {showMicDropdown && (
                                     <View style={styles.audioDropdown}>
@@ -2615,7 +2688,7 @@ const CreditUnionAdminScreen = () => {
                                                 onPress={() => { setSelectedMic(option); setShowMicDropdown(false); }}
                                             >
                                                 <Text style={[styles.audioDropdownText, selectedMic === option && styles.audioDropdownTextActive]}>{option}</Text>
-                                                {selectedMic === option && <MaterialIcons name="check" size={14} color="#22C55E" />}
+                                                {selectedMic === option && <Check size={14} color="#22C55E" />}
                                             </TouchableOpacity>
                                         ))}
                                     </View>
@@ -2623,8 +2696,8 @@ const CreditUnionAdminScreen = () => {
                             </View>
                             <View style={styles.dropdownWrapper}>
                                 <TouchableOpacity style={styles.userActionBtn} onPress={() => { setShowHeadphoneDropdown(!showHeadphoneDropdown); setShowMicDropdown(false); }}>
-                                    <MaterialIcons name="headphones" size={14} color={colors.textMuted} />
-                                    <MaterialIcons name="expand-more" size={10} color={colors.textMuted} />
+                                    <Headphones size={14} color={colors.textMuted} />
+                                    <ChevronDown size={10} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 {showHeadphoneDropdown && (
                                     <View style={styles.audioDropdown}>
@@ -2636,14 +2709,14 @@ const CreditUnionAdminScreen = () => {
                                                 onPress={() => { setSelectedHeadphone(option); setShowHeadphoneDropdown(false); }}
                                             >
                                                 <Text style={[styles.audioDropdownText, selectedHeadphone === option && styles.audioDropdownTextActive]}>{option}</Text>
-                                                {selectedHeadphone === option && <MaterialIcons name="check" size={14} color="#22C55E" />}
+                                                {selectedHeadphone === option && <Check size={14} color="#22C55E" />}
                                             </TouchableOpacity>
                                         ))}
                                     </View>
                                 )}
                             </View>
                             <TouchableOpacity onPress={() => setServerSettingsModalOpen(true)}>
-                                <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                <Settings size={14} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -2665,10 +2738,10 @@ const CreditUnionAdminScreen = () => {
                                 <View style={styles.contentHeaderLeft}>
                                     {isMobile && (
                                         <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
-                                            <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                            <ArrowLeft size={20} color={colors.text} />
                                         </TouchableOpacity>
                                     )}
-                                    <MaterialIcons name="event" size={18} color={colors.textMuted} />
+                                    <Calendar size={18} color={colors.textMuted} />
                                     <Text style={styles.contentTitle}>Events & Announcements</Text>
                                 </View>
                                 <View style={styles.contentHeaderRight}>
@@ -2676,7 +2749,7 @@ const CreditUnionAdminScreen = () => {
                                         style={styles.createEventHeaderBtn}
                                         onPress={() => setCreateEventModalOpen(true)}
                                     >
-                                        <MaterialIcons name="add" size={16} color="#FFFFFF" />
+                                        <Plus size={16} color="#FFFFFF" />
                                         <Text style={styles.createEventHeaderBtnText}>Create Event</Text>
                                     </TouchableOpacity>
                                 </View>
@@ -2689,7 +2762,7 @@ const CreditUnionAdminScreen = () => {
                                 {events.length === 0 ? (
                                     <View style={styles.welcomeCard}>
                                         <View style={styles.welcomeIcon}>
-                                            <MaterialIcons name="event" size={32} color={colors.textMuted} />
+                                            <Calendar size={32} color={colors.textMuted} />
                                         </View>
                                         <Text style={styles.welcomeTitle}>No Events Yet</Text>
                                         <Text style={styles.welcomeSubtitle}>Create your first event or announcement to keep members informed.</Text>
@@ -2697,7 +2770,7 @@ const CreditUnionAdminScreen = () => {
                                             style={styles.editChannelBtn}
                                             onPress={() => setCreateEventModalOpen(true)}
                                         >
-                                            <MaterialIcons name="add" size={14} color={colors.text} />
+                                            <Plus size={14} color={colors.text} />
                                             <Text style={styles.editChannelText}>Create Event</Text>
                                         </TouchableOpacity>
                                     </View>
@@ -2709,11 +2782,11 @@ const CreditUnionAdminScreen = () => {
                                                     styles.eventTypeBadge,
                                                     event.eventType === 'announcement' ? styles.eventTypeBadgeAnnouncement : styles.eventTypeBadgeEvent
                                                 ]}>
-                                                    <MaterialIcons
-                                                        name={event.eventType === 'announcement' ? 'campaign' : 'event'}
-                                                        size={12}
-                                                        color="#FFFFFF"
-                                                    />
+                                                    {event.eventType === 'announcement' ? (
+                                                        <Megaphone size={12} color="#FFFFFF" />
+                                                    ) : (
+                                                        <Calendar size={12} color="#FFFFFF" />
+                                                    )}
                                                     <Text style={styles.eventTypeBadgeText}>
                                                         {event.eventType === 'announcement' ? 'Announcement' : 'Event'}
                                                     </Text>
@@ -2722,7 +2795,7 @@ const CreditUnionAdminScreen = () => {
                                                     style={styles.eventDeleteBtn}
                                                     onPress={() => handleDeleteEvent(event._id)}
                                                 >
-                                                    <MaterialIcons name="delete" size={16} color={colors.dangerText} />
+                                                    <Trash2 size={16} color={colors.dangerText} />
                                                 </TouchableOpacity>
                                             </View>
                                             <Text style={styles.eventTitle}>{event.title}</Text>
@@ -2732,13 +2805,13 @@ const CreditUnionAdminScreen = () => {
                                             <View style={styles.eventMeta}>
                                                 {event.startDate && (
                                                     <View style={styles.eventMetaItem}>
-                                                        <MaterialIcons name="schedule" size={14} color={colors.textMuted} />
+                                                        <Clock size={14} color={colors.textMuted} />
                                                         <Text style={styles.eventMetaText}>{formatEventDate(event.startDate)}</Text>
                                                     </View>
                                                 )}
                                                 {event.location && (
                                                     <View style={styles.eventMetaItem}>
-                                                        <MaterialIcons name="location-on" size={14} color={colors.textMuted} />
+                                                        <MapPin size={14} color={colors.textMuted} />
                                                         <Text style={styles.eventMetaText}>{event.location}</Text>
                                                     </View>
                                                 )}
@@ -2768,22 +2841,22 @@ const CreditUnionAdminScreen = () => {
                         <View style={styles.contentHeaderLeft}>
                             {isMobile && (
                                 <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
-                                    <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                    <ArrowLeft size={20} color={colors.text} />
                                 </TouchableOpacity>
                             )}
-                            <MaterialIcons name={activeChannel?.visibility === 'admin' ? 'lock' : 'tag'} size={18} color={colors.textMuted} />
+                            {activeChannel?.visibility === 'admin' ? <Lock size={18} color={colors.textMuted} /> : <Hash size={18} color={colors.textMuted} />}
                             <Text style={styles.contentTitle}>{activeChannel?.name || 'general'}</Text>
                         </View>
                         <View style={styles.contentHeaderRight}>
                             <TouchableOpacity style={styles.headerIcon} onPress={() => setShowPinnedMessages(!showPinnedMessages)}>
-                                <MaterialIcons name="push-pin" size={18} color={showPinnedMessages ? colors.text : colors.textMuted} />
+                                <Pin size={18} color={showPinnedMessages ? colors.text : colors.textMuted} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.headerIcon} onPress={() => setNotificationSettingsModalOpen(true)}>
-                                <MaterialIcons name="notifications" size={18} color={colors.textMuted} />
+                                <Bell size={18} color={colors.textMuted} />
                             </TouchableOpacity>
                             {!isMobile && (
                             <TouchableOpacity style={styles.headerIcon} onPress={() => setShowMembersSidebar(!showMembersSidebar)}>
-                                <MaterialIcons name="group" size={18} color={showMembersSidebar ? colors.text : colors.textMuted} />
+                                <Users size={18} color={showMembersSidebar ? colors.text : colors.textMuted} />
                             </TouchableOpacity>
                             )}
                             {!isMobile && (
@@ -2797,10 +2870,10 @@ const CreditUnionAdminScreen = () => {
                                 />
                                 {feedSearchQuery ? (
                                     <TouchableOpacity onPress={() => setFeedSearchQuery('')}>
-                                        <MaterialIcons name="close" size={14} color={colors.textMuted} />
+                                        <X size={14} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 ) : (
-                                    <MaterialIcons name="search" size={14} color={colors.textMuted} />
+                                    <Search size={14} color={colors.textMuted} />
                                 )}
                             </View>
                             )}
@@ -2826,7 +2899,7 @@ const CreditUnionAdminScreen = () => {
                                 {feedItems.length === 0 && feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
                                         <View style={styles.welcomeIcon}>
-                                            <MaterialIcons name="search-off" size={32} color={colors.textMuted} />
+                                            <SearchX size={32} color={colors.textMuted} />
                                         </View>
                                         <Text style={styles.welcomeTitle}>No results found</Text>
                                         <Text style={styles.welcomeSubtitle}>No messages or posts match "{feedSearchQuery}"</Text>
@@ -2834,7 +2907,7 @@ const CreditUnionAdminScreen = () => {
                                             style={styles.editChannelBtn}
                                             onPress={() => setFeedSearchQuery('')}
                                         >
-                                            <MaterialIcons name="close" size={14} color={colors.text} />
+                                            <X size={14} color={colors.text} />
                                             <Text style={styles.editChannelText}>Clear search</Text>
                                         </TouchableOpacity>
                                     </View>
@@ -2842,7 +2915,7 @@ const CreditUnionAdminScreen = () => {
                                 {feedItems.length === 0 && !feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
                                         <View style={styles.welcomeIcon}>
-                                            <MaterialIcons name={activeChannel?.visibility === 'admin' ? 'lock' : 'tag'} size={32} color={colors.textMuted} />
+                                            {activeChannel?.visibility === 'admin' ? <Lock size={32} color={colors.textMuted} /> : <Hash size={32} color={colors.textMuted} />}
                                         </View>
                                         <Text style={styles.welcomeTitle}>Welcome to {activeChannel?.visibility === 'admin' ? '' : '#'}{activeChannel?.name || 'general'}</Text>
                                         <Text style={styles.welcomeSubtitle}>This is the start of the {activeChannel?.visibility === 'admin' ? '' : '#'}{activeChannel?.name || 'general'} channel.</Text>
@@ -2854,7 +2927,7 @@ const CreditUnionAdminScreen = () => {
                                                 }
                                             }}
                                         >
-                                            <MaterialIcons name="edit" size={14} color={colors.text} />
+                                            <Edit size={14} color={colors.text} />
                                             <Text style={styles.editChannelText}>Edit Channel</Text>
                                         </TouchableOpacity>
                                     </View>
@@ -2885,7 +2958,7 @@ const CreditUnionAdminScreen = () => {
                                                         <Text style={styles.postAuthor}>{authorName}</Text>
                                                         {isMemberAdmin(authorMember) && (
                                                             <View style={styles.verifiedBadge}>
-                                                                <MaterialIcons name="verified" size={14} color="#3B82F6" />
+                                                                <BadgeCheck size={14} color="#3B82F6" />
                                                             </View>
                                                         )}
                                                         <Text style={styles.postHandle}>
@@ -2906,7 +2979,7 @@ const CreditUnionAdminScreen = () => {
                                                 </View>
                                                 <View style={styles.itemMenuContainer}>
                                                     <TouchableOpacity onPress={(e) => handleOpenItemMenu(e, item, isPost)}>
-                                                        <MaterialIcons name="more-horiz" size={18} color={colors.textMuted} />
+                                                        <MoreHorizontal size={18} color={colors.textMuted} />
                                                     </TouchableOpacity>
                                                 </View>
                                             </View>
@@ -2930,7 +3003,7 @@ const CreditUnionAdminScreen = () => {
                                                             return (
                                                                 <View key={`${item._id}-reshare-${idx}`} style={styles.reshareCard}>
                                                                     <View style={styles.reshareHeader}>
-                                                                        <MaterialIcons name="repeat" size={14} color={colors.textMuted} />
+                                                                        <Repeat size={14} color={colors.textMuted} />
                                                                         <Text style={styles.reshareLabel}>Reshared</Text>
                                                                     </View>
                                                                     <View style={styles.reshareContent}>
@@ -3032,7 +3105,7 @@ const CreditUnionAdminScreen = () => {
                                                         if (isVideo) {
                                                             return (
                                                                 <View key={`${item._id}-att-${idx}`} style={styles.videoPlaceholder}>
-                                                                    <MaterialIcons name="play-circle-filled" size={48} color="#FFFFFF" />
+                                                                    <PlayCircle size={48} color="#FFFFFF" />
                                                                     <Text style={styles.videoLabel}>Video</Text>
                                                                 </View>
                                                             );
@@ -3056,7 +3129,7 @@ const CreditUnionAdminScreen = () => {
                                                         // Handle file attachments
                                                         return (
                                                             <View key={`${item._id}-att-${idx}`} style={styles.fileAttachment}>
-                                                                <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                                                <File size={20} color={colors.textMuted} />
                                                                 <Text style={styles.fileLabel} numberOfLines={1}>{att?.fileName || att?.label || 'File'}</Text>
                                                             </View>
                                                         );
@@ -3066,15 +3139,15 @@ const CreditUnionAdminScreen = () => {
                                             {/* Show reactions for all feed items (posts and messages) */}
                                             <View style={styles.postStats}>
                                                 <TouchableOpacity style={styles.statItem} onPress={() => handleCommentPress(item._id, isPost)}>
-                                                    <MaterialIcons name="chat-bubble" size={16} color={colors.textMuted} />
+                                                    <MessageCircle size={16} color={colors.textMuted} />
                                                     <Text style={styles.statText}>{commentCount}</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity style={styles.statItem} onPress={() => handleLikeItem(item._id, isPost)}>
-                                                    <MaterialIcons name="favorite" size={16} color={userLiked ? '#EF4444' : colors.textMuted} />
+                                                    <Heart size={16} color={userLiked ? '#EF4444' : colors.textMuted} />
                                                     <Text style={[styles.statText, userLiked && { color: '#EF4444' }]}>{likeCount}</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity style={styles.statItem} onPress={() => handleReshareItem(item._id, isPost)}>
-                                                    <MaterialIcons name="repeat" size={16} color={userReshared ? '#22C55E' : colors.textMuted} />
+                                                    <Repeat size={16} color={userReshared ? '#22C55E' : colors.textMuted} />
                                                     <Text style={[styles.statText, userReshared && { color: '#22C55E' }]}>{reshareCount}</Text>
                                                 </TouchableOpacity>
                                             </View>
@@ -3092,12 +3165,12 @@ const CreditUnionAdminScreen = () => {
                                                 <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} />
                                             ) : (
                                                 <View style={styles.attachmentFileIcon}>
-                                                    <MaterialIcons name="insert-drive-file" size={24} color={colors.textMuted} />
+                                                    <File size={24} color={colors.textMuted} />
                                                 </View>
                                             )}
                                             <Text style={styles.attachmentName} numberOfLines={1}>{attachment.name}</Text>
                                             <TouchableOpacity style={styles.attachmentRemove} onPress={() => handleRemoveAttachment(index)}>
-                                                <MaterialIcons name="close" size={16} color={colors.textMuted} />
+                                                <X size={16} color={colors.textMuted} />
                                             </TouchableOpacity>
                                         </View>
                                     ))}
@@ -3113,10 +3186,10 @@ const CreditUnionAdminScreen = () => {
                                     </View>
                                     <View style={styles.recordingActions}>
                                         <TouchableOpacity style={styles.recordingCancelBtn} onPress={handleCancelRecording}>
-                                            <MaterialIcons name="delete" size={20} color="#EF4444" />
+                                            <Trash2 size={20} color="#EF4444" />
                                         </TouchableOpacity>
                                         <TouchableOpacity style={styles.recordingStopBtn} onPress={handleStopRecording}>
-                                            <MaterialIcons name="stop" size={20} color="#FFFFFF" />
+                                            <Square size={20} color="#FFFFFF" />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -3125,7 +3198,7 @@ const CreditUnionAdminScreen = () => {
                                 <View style={styles.messageInputContainer}>
                                     <View style={styles.messageInputLeft}>
                                         <TouchableOpacity style={styles.inputIcon} onPress={handlePickImage}>
-                                            <MaterialIcons name="add-circle" size={22} color={colors.textMuted} />
+                                            <PlusCircle size={22} color={colors.textMuted} />
                                         </TouchableOpacity>
                                     </View>
                                     <View style={styles.messageInputMiddle}>
@@ -3139,17 +3212,17 @@ const CreditUnionAdminScreen = () => {
                                         />
                                         <View style={styles.messageInputActions}>
                                             <TouchableOpacity style={styles.inputActionIcon} onPress={handlePickFile}>
-                                                <MaterialIcons name="attach-file" size={20} color={colors.textMuted} />
+                                                <Paperclip size={20} color={colors.textMuted} />
                                             </TouchableOpacity>
                                             <TouchableOpacity style={styles.inputActionIcon} onPress={() => setShowEmojiPicker(true)}>
-                                                <MaterialIcons name="emoji-emotions" size={20} color={colors.textMuted} />
+                                                <Smile size={20} color={colors.textMuted} />
                                             </TouchableOpacity>
                                             <TouchableOpacity style={styles.inputActionIcon} onPress={handleStartRecording}>
-                                                <MaterialIcons name="mic" size={20} color={colors.textMuted} />
+                                                <Mic size={20} color={colors.textMuted} />
                                             </TouchableOpacity>
                                             {(messageDraft.trim() || attachments.length > 0) ? (
                                                 <TouchableOpacity style={styles.sendBtn} onPress={handleSendMessage}>
-                                                    <MaterialIcons name="send" size={18} color="#FFFFFF" />
+                                                    <Send size={18} color="#FFFFFF" />
                                                 </TouchableOpacity>
                                             ) : null}
                                         </View>
@@ -3195,7 +3268,7 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setCreateChannelModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Create Channel</Text>
 
@@ -3208,7 +3281,7 @@ const CreditUnionAdminScreen = () => {
                                 {newChannelType === 'text' && <View style={styles.radioInner} />}
                             </View>
                             <View style={styles.typeIcon}>
-                                <MaterialIcons name="tag" size={20} color={colors.textMuted} />
+                                <Hash size={20} color={colors.textMuted} />
                             </View>
                             <View style={styles.typeInfo}>
                                 <Text style={styles.typeTitle}>Text</Text>
@@ -3223,7 +3296,7 @@ const CreditUnionAdminScreen = () => {
                                 {newChannelType === 'voice' && <View style={styles.radioInner} />}
                             </View>
                             <View style={styles.typeIcon}>
-                                <MaterialIcons name="headphones" size={20} color={colors.textMuted} />
+                                <Headphones size={20} color={colors.textMuted} />
                             </View>
                             <View style={styles.typeInfo}>
                                 <Text style={styles.typeTitle}>Voice</Text>
@@ -3233,7 +3306,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>CHANNEL NAME</Text>
                         <View style={styles.inputRow}>
-                            <MaterialIcons name="tag" size={18} color={colors.textMuted} />
+                            <Hash size={18} color={colors.textMuted} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="new-channel"
@@ -3245,7 +3318,7 @@ const CreditUnionAdminScreen = () => {
 
                         <View style={styles.toggleRow}>
                             <View style={styles.toggleInfo}>
-                                <MaterialIcons name="lock" size={16} color={colors.textMuted} />
+                                <Lock size={16} color={colors.textMuted} />
                                 <View>
                                     <Text style={styles.toggleTitle}>Private Channel</Text>
                                     <Text style={styles.toggleDesc}>Only selected members can view</Text>
@@ -3313,7 +3386,7 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setEditChannelModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Edit Channel</Text>
 
@@ -3326,7 +3399,7 @@ const CreditUnionAdminScreen = () => {
                                 {editChannelType === 'text' && <View style={styles.radioInner} />}
                             </View>
                             <View style={styles.typeIcon}>
-                                <MaterialIcons name="tag" size={20} color={colors.textMuted} />
+                                <Hash size={20} color={colors.textMuted} />
                             </View>
                             <View style={styles.typeInfo}>
                                 <Text style={styles.typeTitle}>Text</Text>
@@ -3341,7 +3414,7 @@ const CreditUnionAdminScreen = () => {
                                 {editChannelType === 'voice' && <View style={styles.radioInner} />}
                             </View>
                             <View style={styles.typeIcon}>
-                                <MaterialIcons name="headphones" size={20} color={colors.textMuted} />
+                                <Headphones size={20} color={colors.textMuted} />
                             </View>
                             <View style={styles.typeInfo}>
                                 <Text style={styles.typeTitle}>Voice</Text>
@@ -3351,7 +3424,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>CHANNEL NAME</Text>
                         <View style={styles.inputRow}>
-                            <MaterialIcons name="tag" size={18} color={colors.textMuted} />
+                            <Hash size={18} color={colors.textMuted} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="channel-name"
@@ -3363,7 +3436,7 @@ const CreditUnionAdminScreen = () => {
 
                         <View style={styles.toggleRow}>
                             <View style={styles.toggleInfo}>
-                                <MaterialIcons name="lock" size={16} color={colors.textMuted} />
+                                <Lock size={16} color={colors.textMuted} />
                                 <View>
                                     <Text style={styles.toggleTitle}>Private Channel</Text>
                                     <Text style={styles.toggleDesc}>Only selected members can view</Text>
@@ -3445,7 +3518,7 @@ const CreditUnionAdminScreen = () => {
                                 if (selectedSettingsChannel) openEditChannelModal(selectedSettingsChannel);
                             }}
                         >
-                            <MaterialIcons name="edit" size={18} color="#9CA3AF" />
+                            <Edit size={18} color="#9CA3AF" />
                             <Text style={styles.channelSettingsText}>Edit Channel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -3457,7 +3530,7 @@ const CreditUnionAdminScreen = () => {
                                 }
                             }}
                         >
-                            <MaterialIcons name="delete" size={18} color="#EF4444" />
+                            <Trash2 size={18} color="#EF4444" />
                             <Text style={[styles.channelSettingsText, { color: '#EF4444' }]}>Delete Channel</Text>
                         </TouchableOpacity>
                         {selectedSettingsChannel?.visibility === 'admin' && (
@@ -3467,7 +3540,7 @@ const CreditUnionAdminScreen = () => {
                                     if (selectedSettingsChannel) openChannelMembersModal(selectedSettingsChannel);
                                 }}
                             >
-                                <MaterialIcons name="people" size={18} color="#9CA3AF" />
+                                <Users size={18} color="#9CA3AF" />
                                 <Text style={styles.channelSettingsText}>Manage Members</Text>
                             </TouchableOpacity>
                         )}
@@ -3477,7 +3550,7 @@ const CreditUnionAdminScreen = () => {
                                 if (selectedSettingsChannel) openChannelPermissionModal(selectedSettingsChannel);
                             }}
                         >
-                            <MaterialIcons name="settings" size={18} color="#9CA3AF" />
+                            <Settings size={18} color="#9CA3AF" />
                             <Text style={styles.channelSettingsText}>Channel Permission</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -3495,7 +3568,7 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.permissionModalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setChannelPermissionModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Channel Permission</Text>
 
@@ -3508,11 +3581,11 @@ const CreditUnionAdminScreen = () => {
                                         style={styles.permissionRow}
                                         onPress={() => toggleChannelPermission(option.key)}
                                     >
-                                        <MaterialIcons
-                                            name={isChecked ? 'check-box' : 'check-box-outline-blank'}
-                                            size={18}
-                                            color={isChecked ? colors.text : colors.textMuted}
-                                        />
+                                        {isChecked ? (
+                                            <Check size={18} color={colors.text} />
+                                        ) : (
+                                            <Square size={18} color={colors.textMuted} />
+                                        )}
                                         <Text style={styles.permissionLabel}>{option.label}</Text>
                                     </TouchableOpacity>
                                 );
@@ -3536,14 +3609,14 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setChannelMembersModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Manage Channel Members</Text>
                         <Text style={styles.modalSubtitle}>Add or remove members who can access this private channel</Text>
 
                         <Text style={styles.modalLabel}>ADD MEMBER</Text>
                         <View style={styles.inputRow}>
-                            <MaterialIcons name="search" size={18} color={colors.textMuted} />
+                            <Search size={18} color={colors.textMuted} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="Search members..."
@@ -3574,7 +3647,7 @@ const CreditUnionAdminScreen = () => {
                                             style={styles.permissionRow}
                                             onPress={() => handleAddChannelMember(memberId)}
                                         >
-                                            <MaterialIcons name="person-add" size={16} color={colors.primary} />
+                                            <UserPlus size={16} color={colors.primary} />
                                             <View style={{ flex: 1, marginLeft: 8 }}>
                                                 <Text style={styles.permissionLabel}>{getMemberName(m)}</Text>
                                                 {memberRole !== 'member' && (
@@ -3614,7 +3687,7 @@ const CreditUnionAdminScreen = () => {
                                                 )}
                                             </View>
                                             <TouchableOpacity onPress={() => handleRemoveChannelMember(memberId)}>
-                                                <MaterialIcons name="remove-circle" size={20} color="#EF4444" />
+                                                <XCircle size={20} color="#EF4444" />
                                             </TouchableOpacity>
                                         </View>
                                     );
@@ -3636,12 +3709,12 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setInviteModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <View style={styles.modalIconWrap}>
-                            <MaterialIcons name="badge" size={28} color="#8B5CF6" />
+                            <Award size={28} color="#8B5CF6" />
                             <View style={[styles.modalIconBadge, { backgroundColor: '#8B5CF6' }]}>
-                                <MaterialIcons name="add" size={10} color="#FFFFFF" />
+                                <Plus size={10} color="#FFFFFF" />
                             </View>
                         </View>
                         <Text style={styles.modalTitle}>Invite Stakeholder</Text>
@@ -3685,7 +3758,7 @@ const CreditUnionAdminScreen = () => {
                                         </View>
                                         {isSelected && (
                                             <View style={[styles.badgeCheckmark, { backgroundColor: badgeColors[badge] }]}>
-                                                <MaterialIcons name="check" size={10} color="#FFFFFF" />
+                                                <Check size={10} color="#FFFFFF" />
                                             </View>
                                         )}
                                     </TouchableOpacity>
@@ -3729,7 +3802,7 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setCreateCategoryModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Create Category</Text>
 
@@ -3743,12 +3816,12 @@ const CreditUnionAdminScreen = () => {
                                 onChangeText={setNewCategoryName}
                             />
                             <TouchableOpacity>
-                                <MaterialIcons name="emoji-emotions" size={20} color={colors.textMuted} />
+                                <Smile size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
 
                         <View style={styles.privateCategoryRow}>
-                            <MaterialIcons name="lock" size={18} color={colors.text} />
+                            <Lock size={18} color={colors.text} />
                             <Text style={styles.privateCategoryTitle}>Private Category</Text>
                             <TouchableOpacity
                                 style={[styles.toggle, isPrivateCategory && styles.toggleActive]}
@@ -3778,7 +3851,7 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setCreateEventModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>{newEventType === 'announcement' ? 'Create Announcement' : 'Create Event'}</Text>
 
@@ -3788,21 +3861,21 @@ const CreditUnionAdminScreen = () => {
                                 style={[styles.eventTypeOption, newEventType === 'event' && styles.eventTypeOptionActive]}
                                 onPress={() => setNewEventType('event')}
                             >
-                                <MaterialIcons name="event" size={18} color={newEventType === 'event' ? '#FFFFFF' : colors.textMuted} />
+                                <Calendar size={18} color={newEventType === 'event' ? '#FFFFFF' : colors.textMuted} />
                                 <Text style={[styles.eventTypeOptionText, newEventType === 'event' && styles.eventTypeOptionTextActive]}>Event</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.eventTypeOption, newEventType === 'announcement' && styles.eventTypeOptionActive]}
                                 onPress={() => setNewEventType('announcement')}
                             >
-                                <MaterialIcons name="campaign" size={18} color={newEventType === 'announcement' ? '#FFFFFF' : colors.textMuted} />
+                                <Megaphone size={18} color={newEventType === 'announcement' ? '#FFFFFF' : colors.textMuted} />
                                 <Text style={[styles.eventTypeOptionText, newEventType === 'announcement' && styles.eventTypeOptionTextActive]}>Announcement</Text>
                             </TouchableOpacity>
                         </View>
 
                         <Text style={styles.modalLabel}>{newEventType === 'announcement' ? 'ANNOUNCEMENT TITLE' : 'EVENT TITLE'}</Text>
                         <View style={styles.inputRow}>
-                            <MaterialIcons name={newEventType === 'announcement' ? 'campaign' : 'event'} size={18} color={colors.textMuted} />
+                            {newEventType === 'announcement' ? <Megaphone size={18} color={colors.textMuted} /> : <Calendar size={18} color={colors.textMuted} />}
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder={newEventType === 'announcement' ? 'Announcement Title' : 'Event Title'}
@@ -3825,7 +3898,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>{newEventType === 'announcement' ? 'DATE (Optional)' : 'DATE'}</Text>
                         <View style={styles.inputRow}>
-                            <MaterialIcons name="schedule" size={18} color={colors.textMuted} />
+                            <Clock size={18} color={colors.textMuted} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder={newEventType === 'announcement' ? 'YYYY-MM-DD HH:MM (optional)' : 'YYYY-MM-DD HH:MM'}
@@ -3839,7 +3912,7 @@ const CreditUnionAdminScreen = () => {
                             <>
                                 <Text style={styles.modalLabel}>LOCATION (Optional)</Text>
                                 <View style={styles.inputRow}>
-                                    <MaterialIcons name="location-on" size={18} color={colors.textMuted} />
+                                    <MapPin size={18} color={colors.textMuted} />
                                     <TextInput
                                         style={styles.modalInput}
                                         placeholder="Event location..."
@@ -3870,11 +3943,11 @@ const CreditUnionAdminScreen = () => {
                     {(!isMobile || !mobileShowSettingsContent) && (
                     <View style={[styles.settingsSidebar, isMobile && styles.settingsSidebarMobile]}>
                         <View style={styles.settingsSidebarHeader}>
-                            <MaterialIcons name="tag" size={16} color="#FFFFFF" />
+                            <Hash size={16} color="#FFFFFF" />
                             <Text style={styles.settingsSidebarTitle}>THE GRYD</Text>
                             {isMobile && (
                                 <TouchableOpacity style={styles.settingsMobileCloseBtn} onPress={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
-                                    <MaterialIcons name="close" size={20} color="#EF4444" />
+                                    <X size={20} color="#EF4444" />
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -3938,13 +4011,13 @@ const CreditUnionAdminScreen = () => {
                         <View style={styles.settingsContentHeader}>
                             {isMobile && (
                                 <TouchableOpacity onPress={() => setMobileShowSettingsContent(false)} style={styles.settingsMobileBackBtn}>
-                                    <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                    <ArrowLeft size={20} color={colors.text} />
                                 </TouchableOpacity>
                             )}
                             <Text style={styles.settingsContentTitle}>Server Settings</Text>
                             <TouchableOpacity style={styles.settingsCloseBtn} onPress={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
                                 <Text style={styles.settingsCloseBtnText}>Close</Text>
-                                <MaterialIcons name="close" size={18} color="#EF4444" />
+                                <X size={18} color="#EF4444" />
                             </TouchableOpacity>
                         </View>
 
@@ -4075,7 +4148,7 @@ const CreditUnionAdminScreen = () => {
                                                         setSuccessModalOpen(true);
                                                     }}
                                                 >
-                                                    <MaterialIcons name="content-copy" size={18} color={colors.primary} />
+                                                    <Copy size={18} color={colors.primary} />
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
@@ -4249,7 +4322,7 @@ const CreditUnionAdminScreen = () => {
                                                 <Text style={styles.settingsCardSubtitle}>Members in channel list</Text>
                                             </View>
                                             <View style={styles.membersSearchWrap}>
-                                                <MaterialIcons name="search" size={16} color={colors.textMuted} />
+                                                <Search size={16} color={colors.textMuted} />
                                                 <TextInput
                                                     style={styles.membersSearchInput}
                                                     placeholder="Search members..."
@@ -4322,7 +4395,7 @@ const CreditUnionAdminScreen = () => {
                                                                     setMemberActionModalOpen(true);
                                                                 }}
                                                             >
-                                                                <MaterialIcons name="more-horiz" size={16} color={colors.textMuted} />
+                                                                <MoreHorizontal size={16} color={colors.textMuted} />
                                                             </TouchableOpacity>
                                                         </View>
                                                     </TouchableOpacity>
@@ -4331,7 +4404,7 @@ const CreditUnionAdminScreen = () => {
 
                                             {filteredMembers.length === 0 && (
                                                 <View style={styles.emptyMembersList}>
-                                                    <MaterialIcons name="group" size={48} color={colors.textMuted} />
+                                                    <Users size={48} color={colors.textMuted} />
                                                     <Text style={styles.emptyMembersText}>No members yet</Text>
                                                     <Text style={styles.emptyMembersHint}>Invite people to join your server</Text>
                                                 </View>
@@ -4344,10 +4417,10 @@ const CreditUnionAdminScreen = () => {
                                             </Text>
                                             <View style={styles.membersFooterActions}>
                                                 <TouchableOpacity style={styles.memberActionBtn}>
-                                                    <MaterialIcons name="navigate-before" size={16} color={colors.textMuted} />
+                                                    <ChevronLeft size={16} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                                 <TouchableOpacity style={styles.memberActionBtn}>
-                                                    <MaterialIcons name="navigate-next" size={16} color={colors.textMuted} />
+                                                    <ChevronRight size={16} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
@@ -4363,7 +4436,7 @@ const CreditUnionAdminScreen = () => {
 
                                     <View style={styles.membersContainer}>
                                         <View style={styles.membersSearch}>
-                                            <MaterialIcons name="search" size={16} color={colors.textMuted} />
+                                            <Search size={16} color={colors.textMuted} />
                                             <TextInput
                                                 style={styles.membersSearchInput}
                                                 placeholder="Search stakeholders..."
@@ -4404,7 +4477,7 @@ const CreditUnionAdminScreen = () => {
                                                                 )}
                                                                 {company && (
                                                                     <Text style={styles.stakeholderCompany}>
-                                                                        <MaterialIcons name="business" size={12} color={colors.textMuted} /> {company}
+                                                                        <Building2 size={12} color={colors.textMuted} /> {company}
                                                                     </Text>
                                                                 )}
                                                                 <Text style={styles.stakeholderEmail}>{getMemberEmail(member)}</Text>
@@ -4430,21 +4503,21 @@ const CreditUnionAdminScreen = () => {
                                                                     setStakeholderDetailModalOpen(true);
                                                                 }}
                                                             >
-                                                                <MaterialIcons name="visibility" size={14} color="#FFFFFF" />
+                                                                <Eye size={14} color="#FFFFFF" />
                                                                 <Text style={styles.stakeholderActionBtnTextPrimary}>View Details</Text>
                                                             </TouchableOpacity>
                                                             <TouchableOpacity
                                                                 style={styles.stakeholderActionBtn}
                                                                 onPress={() => handleStakeholderAction(memberId, member.status === 'muted' ? 'unmute' : 'mute')}
                                                             >
-                                                                <MaterialIcons name={member.status === 'muted' ? 'volume-up' : 'volume-off'} size={14} color={colors.text} />
+                                                                {member.status === 'muted' ? <Volume2 size={14} color={colors.text} /> : <VolumeX size={14} color={colors.text} />}
                                                                 <Text style={styles.stakeholderActionBtnText}>{member.status === 'muted' ? 'Unmute' : 'Mute'}</Text>
                                                             </TouchableOpacity>
                                                             <TouchableOpacity
                                                                 style={[styles.stakeholderActionBtn, styles.stakeholderActionBtnDanger]}
                                                                 onPress={() => handleStakeholderAction(memberId, 'remove')}
                                                             >
-                                                                <MaterialIcons name="person-remove" size={14} color="#EF4444" />
+                                                                <UserMinus size={14} color="#EF4444" />
                                                                 <Text style={styles.stakeholderActionBtnTextDanger}>Remove</Text>
                                                             </TouchableOpacity>
                                                         </View>
@@ -4453,7 +4526,7 @@ const CreditUnionAdminScreen = () => {
                                             })}
                                             {filteredStakeholders.length === 0 && (
                                                 <View style={styles.emptyMembersList}>
-                                                    <MaterialIcons name="people-outline" size={48} color={colors.textMuted} />
+                                                    <Users size={48} color={colors.textMuted} />
                                                     <Text style={styles.emptyMembersText}>No stakeholders yet</Text>
                                                     <Text style={styles.emptyMembersHint}>Invite stakeholders to collaborate with your team</Text>
                                                 </View>
@@ -4470,7 +4543,7 @@ const CreditUnionAdminScreen = () => {
                                     <Text style={styles.settingsPanelDesc}>Create and manage server roles with specific permissions</Text>
 
                                     <TouchableOpacity style={styles.createRoleBtn}>
-                                        <MaterialIcons name="add" size={18} color="#FFFFFF" />
+                                        <Plus size={18} color="#FFFFFF" />
                                         <Text style={styles.createRoleBtnText}>Create Role</Text>
                                     </TouchableOpacity>
 
@@ -4480,7 +4553,7 @@ const CreditUnionAdminScreen = () => {
                                             <Text style={styles.roleName}>Admin</Text>
                                             <Text style={styles.roleMemberCount}>1 member</Text>
                                             <TouchableOpacity>
-                                                <MaterialIcons name="more-vert" size={18} color={colors.textMuted} />
+                                                <MoreVertical size={18} color={colors.textMuted} />
                                             </TouchableOpacity>
                                         </View>
                                         <View style={styles.roleItem}>
@@ -4488,7 +4561,7 @@ const CreditUnionAdminScreen = () => {
                                             <Text style={styles.roleName}>Moderator</Text>
                                             <Text style={styles.roleMemberCount}>0 members</Text>
                                             <TouchableOpacity>
-                                                <MaterialIcons name="more-vert" size={18} color={colors.textMuted} />
+                                                <MoreVertical size={18} color={colors.textMuted} />
                                             </TouchableOpacity>
                                         </View>
                                         <View style={styles.roleItem}>
@@ -4496,7 +4569,7 @@ const CreditUnionAdminScreen = () => {
                                             <Text style={styles.roleName}>@everyone</Text>
                                             <Text style={styles.roleMemberCount}>{members.length} members</Text>
                                             <TouchableOpacity>
-                                                <MaterialIcons name="more-vert" size={18} color={colors.textMuted} />
+                                                <MoreVertical size={18} color={colors.textMuted} />
                                             </TouchableOpacity>
                                         </View>
                                     </View>
@@ -4542,7 +4615,7 @@ const CreditUnionAdminScreen = () => {
                                                 </View>
                                             ) : (
                                                 <View style={styles.invitesListEmpty}>
-                                                    <MaterialIcons name="link" size={48} color={colors.textMuted} />
+                                                    <Link size={48} color={colors.textMuted} />
                                                     <Text style={styles.invitesEmptyText}>No active invites</Text>
                                                     <Text style={styles.invitesEmptyHint}>Create an invite link to share with others</Text>
                                                 </View>
@@ -4584,7 +4657,7 @@ const CreditUnionAdminScreen = () => {
 
                                             {moderationQueue.length === 0 ? (
                                                 <View style={styles.moderationEmpty}>
-                                                    <MaterialIcons name="shield" size={48} color={colors.textMuted} />
+                                                    <Shield size={48} color={colors.textMuted} />
                                                     <Text style={styles.moderationEmptyText}>No flagged content</Text>
                                                     <Text style={styles.moderationEmptyHint}>Reported items will appear here</Text>
                                                 </View>
@@ -4647,7 +4720,7 @@ const CreditUnionAdminScreen = () => {
                                                                         setModerationMenuOpen(moderationMenuOpen === item._id ? null : item._id)
                                                                     }
                                                                 >
-                                                                    <MaterialIcons name="more-horiz" size={16} color={colors.textMuted} />
+                                                                    <MoreHorizontal size={16} color={colors.textMuted} />
                                                                 </TouchableOpacity>
                                                                 {moderationMenuOpen === item._id && (
                                                                     <View style={styles.moderationMenuDropdown}>
@@ -4658,7 +4731,7 @@ const CreditUnionAdminScreen = () => {
                                                                                 openModerationDetail(item);
                                                                             }}
                                                                         >
-                                                                            <MaterialIcons name="visibility" size={14} color={colors.textMuted} />
+                                                                            <Eye size={14} color={colors.textMuted} />
                                                                             <Text style={styles.moderationMenuText}>View</Text>
                                                                         </TouchableOpacity>
                                                                         <TouchableOpacity
@@ -4668,7 +4741,7 @@ const CreditUnionAdminScreen = () => {
                                                                                 handleModerationAction(item, 'mute');
                                                                             }}
                                                                         >
-                                                                            <MaterialIcons name="block" size={14} color={colors.textMuted} />
+                                                                            <Ban size={14} color={colors.textMuted} />
                                                                             <Text style={styles.moderationMenuText}>Restrict User</Text>
                                                                         </TouchableOpacity>
                                                                         <TouchableOpacity
@@ -4678,7 +4751,7 @@ const CreditUnionAdminScreen = () => {
                                                                                 handleModerationAction(item, 'ban');
                                                                             }}
                                                                         >
-                                                                            <MaterialIcons name="person-remove" size={14} color={colors.textMuted} />
+                                                                            <UserMinus size={14} color={colors.textMuted} />
                                                                             <Text style={styles.moderationMenuText}>Remove User</Text>
                                                                         </TouchableOpacity>
                                                                         <TouchableOpacity
@@ -4688,7 +4761,7 @@ const CreditUnionAdminScreen = () => {
                                                                                 handleModerationAction(item, 'warn');
                                                                             }}
                                                                         >
-                                                                            <MaterialIcons name="warning" size={14} color={colors.textMuted} />
+                                                                            <AlertTriangle size={14} color={colors.textMuted} />
                                                                             <Text style={styles.moderationMenuText}>Warn User</Text>
                                                                         </TouchableOpacity>
                                                                     </View>
@@ -4706,10 +4779,10 @@ const CreditUnionAdminScreen = () => {
                                             </Text>
                                             <View style={styles.membersFooterActions}>
                                                 <TouchableOpacity style={styles.memberActionBtn}>
-                                                    <MaterialIcons name="navigate-before" size={16} color={colors.textMuted} />
+                                                    <ChevronLeft size={16} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                                 <TouchableOpacity style={styles.memberActionBtn}>
-                                                    <MaterialIcons name="navigate-next" size={16} color={colors.textMuted} />
+                                                    <ChevronRight size={16} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
@@ -4762,8 +4835,7 @@ const CreditUnionAdminScreen = () => {
                                                     ]}
                                                     onPress={() => setContentModerationAction('block')}
                                                 >
-                                                    <MaterialIcons
-                                                        name="block"
+                                                    <Ban
                                                         size={18}
                                                         color={contentModerationAction === 'block' ? '#fff' : colors.textMuted}
                                                     />
@@ -4783,8 +4855,7 @@ const CreditUnionAdminScreen = () => {
                                                     ]}
                                                     onPress={() => setContentModerationAction('flag')}
                                                 >
-                                                    <MaterialIcons
-                                                        name="flag"
+                                                    <Flag
                                                         size={18}
                                                         color={contentModerationAction === 'flag' ? '#fff' : colors.textMuted}
                                                     />
@@ -4804,8 +4875,7 @@ const CreditUnionAdminScreen = () => {
                                                     ]}
                                                     onPress={() => setContentModerationAction('censor')}
                                                 >
-                                                    <MaterialIcons
-                                                        name="visibility-off"
+                                                    <Eye
                                                         size={18}
                                                         color={contentModerationAction === 'censor' ? '#fff' : colors.textMuted}
                                                     />
@@ -4873,7 +4943,7 @@ const CreditUnionAdminScreen = () => {
                                                 onPress={addProhibitedWord}
                                                 disabled={contentModerationLoading || !newProhibitedWord.trim()}
                                             >
-                                                <MaterialIcons name="add" size={20} color="#fff" />
+                                                <Plus size={20} color="#fff" />
                                                 <Text style={styles.contentModerationAddBtnText}>Add</Text>
                                             </TouchableOpacity>
                                         </View>
@@ -4882,7 +4952,7 @@ const CreditUnionAdminScreen = () => {
                                         <View style={styles.contentModerationWordList}>
                                             {prohibitedWords.length === 0 ? (
                                                 <View style={styles.contentModerationEmpty}>
-                                                    <MaterialIcons name="filter-list-off" size={40} color={colors.textMuted} />
+                                                    <FilterX size={40} color={colors.textMuted} />
                                                     <Text style={styles.contentModerationEmptyText}>No prohibited words yet</Text>
                                                     <Text style={styles.contentModerationEmptyHint}>Add words above to start filtering content</Text>
                                                 </View>
@@ -4895,7 +4965,7 @@ const CreditUnionAdminScreen = () => {
                                                                 style={styles.contentModerationWordTagRemove}
                                                                 onPress={() => removeProhibitedWord(word)}
                                                             >
-                                                                <MaterialIcons name="close" size={14} color={colors.textMuted} />
+                                                                <X size={14} color={colors.textMuted} />
                                                             </TouchableOpacity>
                                                         </View>
                                                     ))}
@@ -4931,7 +5001,7 @@ const CreditUnionAdminScreen = () => {
                                                 onPress={testContentModeration}
                                                 disabled={contentModerationLoading || !contentModerationTestText.trim()}
                                             >
-                                                <MaterialIcons name="play-arrow" size={18} color="#fff" />
+                                                <Play size={18} color="#fff" />
                                                 <Text style={styles.contentModerationTestBtnText}>Test</Text>
                                             </TouchableOpacity>
                                         </View>
@@ -4944,11 +5014,11 @@ const CreditUnionAdminScreen = () => {
                                                     : styles.contentModerationTestResultAllowed
                                             ]}>
                                                 <View style={styles.contentModerationTestResultHeader}>
-                                                    <MaterialIcons
-                                                        name={contentModerationTestResult.isProhibited ? 'warning' : 'check-circle'}
-                                                        size={20}
-                                                        color={contentModerationTestResult.isProhibited ? '#DC2626' : '#16A34A'}
-                                                    />
+                                                    {contentModerationTestResult.isProhibited ? (
+                                                        <AlertTriangle size={20} color="#DC2626" />
+                                                    ) : (
+                                                        <CheckCircle size={20} color="#16A34A" />
+                                                    )}
                                                     <Text style={[
                                                         styles.contentModerationTestResultTitle,
                                                         { color: contentModerationTestResult.isProhibited ? '#DC2626' : '#16A34A' }
@@ -4988,13 +5058,13 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setCreateServerModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Create Server</Text>
 
                         <Text style={styles.modalLabel}>SERVER NAME</Text>
                         <View style={styles.inputRow}>
-                            <MaterialIcons name="tag" size={18} color={colors.textMuted} />
+                            <Hash size={18} color={colors.textMuted} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="Server name"
@@ -5021,14 +5091,14 @@ const CreditUnionAdminScreen = () => {
                                 style={[styles.visibilityOption, newServerVisibility === 'private' && styles.visibilityOptionActive]}
                                 onPress={() => setNewServerVisibility('private')}
                             >
-                                <MaterialIcons name="lock" size={16} color={newServerVisibility === 'private' ? '#FFFFFF' : colors.textMuted} />
+                                <Lock size={16} color={newServerVisibility === 'private' ? '#FFFFFF' : colors.textMuted} />
                                 <Text style={[styles.visibilityText, newServerVisibility === 'private' && styles.visibilityTextActive]}>Private</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.visibilityOption, newServerVisibility === 'public' && styles.visibilityOptionActive]}
                                 onPress={() => setNewServerVisibility('public')}
                             >
-                                <MaterialIcons name="public" size={16} color={newServerVisibility === 'public' ? '#FFFFFF' : colors.textMuted} />
+                                <Globe size={16} color={newServerVisibility === 'public' ? '#FFFFFF' : colors.textMuted} />
                                 <Text style={[styles.visibilityText, newServerVisibility === 'public' && styles.visibilityTextActive]}>Public</Text>
                             </TouchableOpacity>
                         </View>
@@ -5060,7 +5130,7 @@ const CreditUnionAdminScreen = () => {
                                 closeItemMenu();
                             }}
                         >
-                            <MaterialIcons name="flag" size={16} color={colors.textMuted} />
+                            <Flag size={16} color={colors.textMuted} />
                             <Text style={styles.floatingMenuItemText}>Report</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -5074,7 +5144,7 @@ const CreditUnionAdminScreen = () => {
                                 closeItemMenu();
                             }}
                         >
-                            <MaterialIcons name="delete" size={16} color="#EF4444" />
+                            <Trash2 size={16} color="#EF4444" />
                             <Text style={styles.floatingMenuItemTextDanger}>Delete</Text>
                         </TouchableOpacity>
                     </View>
@@ -5088,7 +5158,7 @@ const CreditUnionAdminScreen = () => {
                         <View style={styles.reportModalHeader}>
                             <Text style={styles.reportModalTitle}>Report content</Text>
                             <TouchableOpacity onPress={() => setReportModalOpen(false)}>
-                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                                <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <Text style={styles.reportModalSubtitle}>Select a reason for this report.</Text>
@@ -5142,14 +5212,14 @@ const CreditUnionAdminScreen = () => {
                         <View style={styles.commentModalHeader}>
                             <Text style={styles.commentModalTitle}>Comments</Text>
                             <TouchableOpacity onPress={() => setCommentModalOpen(false)}>
-                                <MaterialIcons name="close" size={24} color={colors.textMuted} />
+                                <X size={24} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
 
                         <ScrollView style={styles.commentList} contentContainerStyle={styles.commentListContent}>
                             {comments.length === 0 ? (
                                 <View style={styles.commentEmpty}>
-                                    <MaterialIcons name="chat-bubble-outline" size={32} color={colors.textMuted} />
+                                    <MessageCircle size={32} color={colors.textMuted} />
                                     <Text style={styles.commentEmptyText}>No comments yet</Text>
                                     <Text style={styles.commentEmptySubtext}>Be the first to comment!</Text>
                                 </View>
@@ -5168,7 +5238,7 @@ const CreditUnionAdminScreen = () => {
                                                     <Text style={styles.commentAuthor}>{getMemberDisplayName(commentMember)}</Text>
                                                     {isMemberAdmin(commentMember) && (
                                                         <View style={styles.verifiedBadgeSmall}>
-                                                            <MaterialIcons name="verified" size={12} color="#3B82F6" />
+                                                            <BadgeCheck size={12} color="#3B82F6" />
                                                         </View>
                                                     )}
                                                     {getMemberDisplayUsername(commentMember) && (
@@ -5208,7 +5278,7 @@ const CreditUnionAdminScreen = () => {
                                 {commentLoading ? (
                                     <Text style={styles.commentSendText}>...</Text>
                                 ) : (
-                                    <MaterialIcons name="send" size={18} color="#fff" />
+                                    <Send size={18} color="#fff" />
                                 )}
                             </TouchableOpacity>
                         </View>
@@ -5223,7 +5293,7 @@ const CreditUnionAdminScreen = () => {
                         <View style={styles.moderationDetailHeader}>
                             <Text style={styles.moderationDetailTitle}>Content Detail</Text>
                             <TouchableOpacity onPress={() => setModerationDetailOpen(false)}>
-                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                                <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <View style={styles.moderationDetailBody}>
@@ -5279,13 +5349,13 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setNotificationSettingsModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Notification Settings</Text>
 
                         <View style={styles.toggleRow}>
                             <View style={styles.toggleInfo}>
-                                <MaterialIcons name="notifications" size={16} color={colors.textMuted} />
+                                <Bell size={16} color={colors.textMuted} />
                                 <View>
                                     <Text style={styles.toggleTitle}>All Messages</Text>
                                     <Text style={styles.toggleDesc}>Get notified for every message</Text>
@@ -5301,7 +5371,7 @@ const CreditUnionAdminScreen = () => {
 
                         <View style={styles.toggleRow}>
                             <View style={styles.toggleInfo}>
-                                <MaterialIcons name="group" size={16} color={colors.textMuted} />
+                                <Users size={16} color={colors.textMuted} />
                                 <View>
                                     <Text style={styles.toggleTitle}>Mentions Only</Text>
                                     <Text style={styles.toggleDesc}>Only get notified when mentioned</Text>
@@ -5317,7 +5387,7 @@ const CreditUnionAdminScreen = () => {
 
                         <View style={styles.toggleRow}>
                             <View style={styles.toggleInfo}>
-                                <MaterialIcons name="event" size={16} color={colors.textMuted} />
+                                <Calendar size={16} color={colors.textMuted} />
                                 <View>
                                     <Text style={styles.toggleTitle}>Events</Text>
                                     <Text style={styles.toggleDesc}>Get notified about events</Text>
@@ -5343,13 +5413,13 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setPrivacySettingsModalOpen(false)}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Privacy Settings</Text>
 
                         <View style={styles.toggleRow}>
                             <View style={styles.toggleInfo}>
-                                <MaterialIcons name="message" size={16} color={colors.textMuted} />
+                                <MessageSquare size={16} color={colors.textMuted} />
                                 <View>
                                     <Text style={styles.toggleTitle}>Allow Direct Messages</Text>
                                     <Text style={styles.toggleDesc}>Let members send you DMs</Text>
@@ -5365,7 +5435,7 @@ const CreditUnionAdminScreen = () => {
 
                         <View style={styles.toggleRow}>
                             <View style={styles.toggleInfo}>
-                                <MaterialIcons name="shield" size={16} color={colors.textMuted} />
+                                <Shield size={16} color={colors.textMuted} />
                                 <View>
                                     <Text style={styles.toggleTitle}>Show Online Status</Text>
                                     <Text style={styles.toggleDesc}>Let others see when you're online</Text>
@@ -5393,7 +5463,7 @@ const CreditUnionAdminScreen = () => {
                         <View style={styles.emojiPickerHeader}>
                             <Text style={styles.emojiPickerTitle}>Emoji</Text>
                             <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                                <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.emojiGrid} showsVerticalScrollIndicator={false}>
@@ -5418,7 +5488,7 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.callModalOverlay}>
                     <View style={styles.callCard}>
                         <TouchableOpacity style={styles.callCloseButton} onPress={handleEndCall}>
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <Text style={styles.callTitle}>
                             {callType === 'video' ? 'Video Call' : 'Voice Call'} - {activeChannel?.name || 'general'}
@@ -5459,15 +5529,15 @@ const CreditUnionAdminScreen = () => {
 
                         <View style={styles.callActions}>
                             <TouchableOpacity style={styles.callActionButton} onPress={toggleMute}>
-                                {muted ? <MaterialIcons name="mic-off" size={20} color="#EF4444" /> : <MaterialIcons name="mic" size={20} color={colors.text} />}
+                                {muted ? <MicOff size={20} color="#EF4444" /> : <Mic size={20} color={colors.text} />}
                             </TouchableOpacity>
                             {callType === 'video' && (
                                 <TouchableOpacity style={styles.callActionButton} onPress={toggleCamera}>
-                                    {cameraOff ? <MaterialIcons name="videocam-off" size={20} color="#EF4444" /> : <MaterialIcons name="videocam" size={20} color={colors.text} />}
+                                    {cameraOff ? <VideoOff size={20} color="#EF4444" /> : <Video size={20} color={colors.text} />}
                                 </TouchableOpacity>
                             )}
                             <TouchableOpacity style={styles.endCallButton} onPress={handleEndCall}>
-                                <MaterialIcons name="call-end" size={20} color="#FFFFFF" />
+                                <PhoneOff size={20} color="#FFFFFF" />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -5479,7 +5549,7 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.successModalOverlay}>
                     <View style={styles.successModalContent}>
                         <View style={styles.successIconContainer}>
-                            <MaterialIcons name="check-circle" size={64} color="#22C55E" />
+                            <CheckCircle size={64} color="#22C55E" />
                         </View>
                         <Text style={styles.successModalTitle}>{successModalTitle}</Text>
                         <Text style={styles.successModalMessage}>{successModalMessage}</Text>
@@ -5504,7 +5574,7 @@ const CreditUnionAdminScreen = () => {
                                 setSelectedStakeholder(null);
                             }}
                         >
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         {selectedStakeholder && (() => {
                             const stakeholderBadge = selectedStakeholder.stakeholderBadge || selectedStakeholder.user?.stakeholderBadge;
@@ -5532,21 +5602,21 @@ const CreditUnionAdminScreen = () => {
 
                                     <View style={styles.stakeholderDetailSection}>
                                         <View style={styles.stakeholderDetailItem}>
-                                            <MaterialIcons name="email" size={16} color={colors.textMuted} />
+                                            <Mail size={16} color={colors.textMuted} />
                                             <Text style={styles.stakeholderDetailText}>{getMemberEmail(selectedStakeholder)}</Text>
                                         </View>
                                         {company && (
                                             <View style={styles.stakeholderDetailItem}>
-                                                <MaterialIcons name="business" size={16} color={colors.textMuted} />
+                                                <Building2 size={16} color={colors.textMuted} />
                                                 <Text style={styles.stakeholderDetailText}>{company}</Text>
                                             </View>
                                         )}
                                         <View style={styles.stakeholderDetailItem}>
-                                            <MaterialIcons name="verified-user" size={16} color={colors.textMuted} />
+                                            <ShieldCheck size={16} color={colors.textMuted} />
                                             <Text style={styles.stakeholderDetailText}>Role: {getMemberRoleLabel(selectedStakeholder.role)}</Text>
                                         </View>
                                         <View style={styles.stakeholderDetailItem}>
-                                            <MaterialIcons name="info" size={16} color={colors.textMuted} />
+                                            <Info size={16} color={colors.textMuted} />
                                             <Text style={styles.stakeholderDetailText}>Status: {getMemberStatusLabel(selectedStakeholder.status)}</Text>
                                         </View>
                                     </View>
@@ -5560,7 +5630,7 @@ const CreditUnionAdminScreen = () => {
                                                 setSelectedStakeholder(null);
                                             }}
                                         >
-                                            <MaterialIcons name={selectedStakeholder.status === 'muted' ? 'volume-up' : 'volume-off'} size={14} color={colors.text} />
+                                            {selectedStakeholder.status === 'muted' ? <Volume2 size={14} color={colors.text} /> : <VolumeX size={14} color={colors.text} />}
                                             <Text style={styles.stakeholderActionBtnText}>{selectedStakeholder.status === 'muted' ? 'Unmute' : 'Mute'}</Text>
                                         </TouchableOpacity>
                                         <TouchableOpacity
@@ -5571,7 +5641,7 @@ const CreditUnionAdminScreen = () => {
                                                 setSelectedStakeholder(null);
                                             }}
                                         >
-                                            <MaterialIcons name="person-remove" size={14} color="#EF4444" />
+                                            <UserMinus size={14} color="#EF4444" />
                                             <Text style={styles.stakeholderActionBtnTextDanger}>Remove</Text>
                                         </TouchableOpacity>
                                     </View>
@@ -5608,7 +5678,7 @@ const CreditUnionAdminScreen = () => {
                                             setMemberDetailModalOpen(true);
                                         }}
                                     >
-                                        <MaterialIcons name="person" size={18} color={colors.text} />
+                                        <User size={18} color={colors.text} />
                                         <Text style={styles.memberActionMenuText}>View Details</Text>
                                     </TouchableOpacity>
 
@@ -5618,7 +5688,7 @@ const CreditUnionAdminScreen = () => {
                                                 style={styles.memberActionMenuItem}
                                                 onPress={() => handleMemberAction(memberId, memberStatus === 'muted' ? 'unmute' : 'mute')}
                                             >
-                                                <MaterialIcons name={memberStatus === 'muted' ? 'volume-up' : 'volume-off'} size={18} color={colors.text} />
+                                                {memberStatus === 'muted' ? <Volume2 size={18} color={colors.text} /> : <VolumeX size={18} color={colors.text} />}
                                                 <Text style={styles.memberActionMenuText}>{memberStatus === 'muted' ? 'Unmute' : 'Mute'}</Text>
                                             </TouchableOpacity>
 
@@ -5626,7 +5696,7 @@ const CreditUnionAdminScreen = () => {
                                                 style={styles.memberActionMenuItem}
                                                 onPress={() => handleMemberAction(memberId, memberStatus === 'suspended' ? 'unsuspend' : 'suspend')}
                                             >
-                                                <MaterialIcons name={memberStatus === 'suspended' ? 'check-circle' : 'block'} size={18} color={memberStatus === 'suspended' ? colors.success : colors.warning} />
+                                                {memberStatus === 'suspended' ? <CheckCircle size={18} color={colors.success} /> : <Ban size={18} color={colors.warning} />}
                                                 <Text style={[styles.memberActionMenuText, { color: memberStatus === 'suspended' ? colors.success : colors.warning }]}>
                                                     {memberStatus === 'suspended' ? 'Unsuspend' : 'Suspend'}
                                                 </Text>
@@ -5637,7 +5707,7 @@ const CreditUnionAdminScreen = () => {
                                                     style={styles.memberActionMenuItem}
                                                     onPress={() => handleMemberAction(memberId, 'promote')}
                                                 >
-                                                    <MaterialIcons name="arrow-upward" size={18} color={colors.primary} />
+                                                    <ArrowUp size={18} color={colors.primary} />
                                                     <Text style={[styles.memberActionMenuText, { color: colors.primary }]}>Promote to Moderator</Text>
                                                 </TouchableOpacity>
                                             )}
@@ -5647,7 +5717,7 @@ const CreditUnionAdminScreen = () => {
                                                     style={styles.memberActionMenuItem}
                                                     onPress={() => handleMemberAction(memberId, 'demote')}
                                                 >
-                                                    <MaterialIcons name="arrow-downward" size={18} color={colors.warning} />
+                                                    <ArrowDown size={18} color={colors.warning} />
                                                     <Text style={[styles.memberActionMenuText, { color: colors.warning }]}>Demote to Member</Text>
                                                 </TouchableOpacity>
                                             )}
@@ -5658,7 +5728,7 @@ const CreditUnionAdminScreen = () => {
                                                 style={styles.memberActionMenuItem}
                                                 onPress={() => handleMemberAction(memberId, 'remove')}
                                             >
-                                                <MaterialIcons name="person-remove" size={18} color="#EF4444" />
+                                                <UserMinus size={18} color="#EF4444" />
                                                 <Text style={[styles.memberActionMenuText, { color: '#EF4444' }]}>Remove from Server</Text>
                                             </TouchableOpacity>
                                         </>
@@ -5685,7 +5755,7 @@ const CreditUnionAdminScreen = () => {
                                 setSelectedMember(null);
                             }}
                         >
-                            <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                            <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         {selectedMember && (() => {
                             const memberId = selectedMember.userId || selectedMember.user?._id || selectedMember._id;
@@ -5708,15 +5778,15 @@ const CreditUnionAdminScreen = () => {
 
                                     <View style={styles.memberDetailSection}>
                                         <View style={styles.memberDetailItem}>
-                                            <MaterialIcons name="email" size={16} color={colors.textMuted} />
+                                            <Mail size={16} color={colors.textMuted} />
                                             <Text style={styles.memberDetailText}>{email || 'No email'}</Text>
                                         </View>
                                         <View style={styles.memberDetailItem}>
-                                            <MaterialIcons name="verified-user" size={16} color={colors.textMuted} />
+                                            <ShieldCheck size={16} color={colors.textMuted} />
                                             <Text style={styles.memberDetailText}>Role: {getMemberRoleLabel(memberRole)}</Text>
                                         </View>
                                         <View style={styles.memberDetailItem}>
-                                            <MaterialIcons name="info" size={16} color={colors.textMuted} />
+                                            <Info size={16} color={colors.textMuted} />
                                             <View style={[styles.statusBadge, getMemberStatusStyle(memberStatus), { marginLeft: 0 }]}>
                                                 <Text style={[styles.statusBadgeText, getMemberStatusTextStyle(memberStatus)]}>
                                                     {getMemberStatusLabel(memberStatus)}
@@ -5725,7 +5795,7 @@ const CreditUnionAdminScreen = () => {
                                         </View>
                                         {joinedAt && (
                                             <View style={styles.memberDetailItem}>
-                                                <MaterialIcons name="event" size={16} color={colors.textMuted} />
+                                                <Calendar size={16} color={colors.textMuted} />
                                                 <Text style={styles.memberDetailText}>Joined: {new Date(joinedAt).toLocaleDateString()}</Text>
                                             </View>
                                         )}
@@ -5737,7 +5807,7 @@ const CreditUnionAdminScreen = () => {
                                                 style={styles.memberDetailActionBtn}
                                                 onPress={() => handleMemberAction(memberId, memberStatus === 'muted' ? 'unmute' : 'mute')}
                                             >
-                                                <MaterialIcons name={memberStatus === 'muted' ? 'volume-up' : 'volume-off'} size={16} color={colors.text} />
+                                                {memberStatus === 'muted' ? <Volume2 size={16} color={colors.text} /> : <VolumeX size={16} color={colors.text} />}
                                                 <Text style={styles.memberDetailActionText}>{memberStatus === 'muted' ? 'Unmute' : 'Mute'}</Text>
                                             </TouchableOpacity>
 
@@ -5745,7 +5815,7 @@ const CreditUnionAdminScreen = () => {
                                                 style={[styles.memberDetailActionBtn, memberStatus === 'suspended' ? styles.memberDetailActionBtnSuccess : styles.memberDetailActionBtnWarning]}
                                                 onPress={() => handleMemberAction(memberId, memberStatus === 'suspended' ? 'unsuspend' : 'suspend')}
                                             >
-                                                <MaterialIcons name={memberStatus === 'suspended' ? 'check-circle' : 'block'} size={16} color={memberStatus === 'suspended' ? '#10B981' : '#F59E0B'} />
+                                                {memberStatus === 'suspended' ? <CheckCircle size={16} color="#10B981" /> : <Ban size={16} color="#F59E0B" />}
                                                 <Text style={[styles.memberDetailActionText, { color: memberStatus === 'suspended' ? '#10B981' : '#F59E0B' }]}>
                                                     {memberStatus === 'suspended' ? 'Unsuspend' : 'Suspend'}
                                                 </Text>
@@ -5756,7 +5826,7 @@ const CreditUnionAdminScreen = () => {
                                                     style={[styles.memberDetailActionBtn, styles.memberDetailActionBtnPrimary]}
                                                     onPress={() => handleMemberAction(memberId, 'promote')}
                                                 >
-                                                    <MaterialIcons name="arrow-upward" size={16} color={colors.primary} />
+                                                    <ArrowUp size={16} color={colors.primary} />
                                                     <Text style={[styles.memberDetailActionText, { color: colors.primary }]}>Promote</Text>
                                                 </TouchableOpacity>
                                             )}
@@ -5766,7 +5836,7 @@ const CreditUnionAdminScreen = () => {
                                                     style={[styles.memberDetailActionBtn, styles.memberDetailActionBtnWarning]}
                                                     onPress={() => handleMemberAction(memberId, 'demote')}
                                                 >
-                                                    <MaterialIcons name="arrow-downward" size={16} color="#F59E0B" />
+                                                    <ArrowDown size={16} color="#F59E0B" />
                                                     <Text style={[styles.memberDetailActionText, { color: '#F59E0B' }]}>Demote</Text>
                                                 </TouchableOpacity>
                                             )}
@@ -5775,7 +5845,7 @@ const CreditUnionAdminScreen = () => {
                                                 style={[styles.memberDetailActionBtn, styles.memberDetailActionBtnDanger]}
                                                 onPress={() => handleMemberAction(memberId, 'remove')}
                                             >
-                                                <MaterialIcons name="person-remove" size={16} color="#EF4444" />
+                                                <UserMinus size={16} color="#EF4444" />
                                                 <Text style={[styles.memberDetailActionText, { color: '#EF4444' }]}>Remove</Text>
                                             </TouchableOpacity>
                                         </View>
@@ -5796,7 +5866,7 @@ const CreditUnionAdminScreen = () => {
                 <View style={styles.deleteModalOverlay}>
                     <View style={styles.deleteModalContent}>
                         <View style={styles.deleteIconContainer}>
-                            <MaterialIcons name="warning" size={56} color="#EF4444" />
+                            <AlertTriangle size={56} color="#EF4444" />
                         </View>
                         <Text style={styles.deleteModalTitle}>
                             Delete {deleteConfirmData?.type === 'channel' ? 'Channel' : deleteConfirmData?.type === 'post' ? 'Post' : 'Message'}?
@@ -5808,7 +5878,7 @@ const CreditUnionAdminScreen = () => {
                         </Text>
                         {deleteConfirmData?.name && (
                             <View style={styles.deleteItemPreview}>
-                                <MaterialIcons name={deleteConfirmData.type === 'channel' ? 'tag' : 'article'} size={16} color={colors.textMuted} />
+                                {deleteConfirmData.type === 'channel' ? <Hash size={16} color={colors.textMuted} /> : <FileText size={16} color={colors.textMuted} />}
                                 <Text style={styles.deleteItemName}>{deleteConfirmData.name}</Text>
                             </View>
                         )}
@@ -5826,7 +5896,7 @@ const CreditUnionAdminScreen = () => {
                                 style={styles.deleteModalConfirmBtn}
                                 onPress={executeDelete}
                             >
-                                <MaterialIcons name="delete" size={16} color="#FFFFFF" />
+                                <Trash2 size={16} color="#FFFFFF" />
                                 <Text style={styles.deleteModalConfirmText}>Delete</Text>
                             </TouchableOpacity>
                         </View>

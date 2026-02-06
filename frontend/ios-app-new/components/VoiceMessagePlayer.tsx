@@ -13,7 +13,7 @@ import {
     Platform,
     Animated,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Play, Pause } from 'lucide-react-native';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 
 interface VoiceMessagePlayerProps {
@@ -243,12 +243,10 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
             >
                 {isLoading ? (
                     <View style={styles.loadingDot} />
+                ) : isPlaying ? (
+                    <Pause size={compact ? 20 : 24} color={colors.primary} />
                 ) : (
-                    <MaterialIcons
-                        name={isPlaying ? 'pause' : 'play-arrow'}
-                        size={compact ? 20 : 24}
-                        color={colors.primary}
-                    />
+                    <Play size={compact ? 20 : 24} color={colors.primary} />
                 )}
             </TouchableOpacity>
 

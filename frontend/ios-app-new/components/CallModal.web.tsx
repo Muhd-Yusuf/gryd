@@ -14,7 +14,7 @@ import {
     Modal,
     TouchableOpacity,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Phone, Video, VideoOff, Mic, MicOff, PhoneOff, Volume2, VolumeX, SwitchCamera, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import { CallState, CallType, IncomingCall, CallSession } from '../hooks';
 import UserAvatar from './UserAvatar';
@@ -188,27 +188,27 @@ export const CallModal: React.FC<CallModalProps> = ({
                         />
                         <Text style={styles.incomingName}>{incomingCall?.callerName || peerName}</Text>
                         <View style={styles.pulseContainer}>
-                            <MaterialIcons
-                                name={incomingCall?.callType === 'video' ? 'videocam' : 'phone'}
-                                size={24}
-                                color="#22C55E"
-                            />
+                            {incomingCall?.callType === 'video' ? (
+                                <Video size={24} color="#22C55E" />
+                            ) : (
+                                <Phone size={24} color="#22C55E" />
+                            )}
                         </View>
                     </View>
                     <View style={styles.incomingActions}>
                         <View style={styles.actionButtonWrap}>
                             <TouchableOpacity style={styles.declineButton} onPress={onDecline}>
-                                <MaterialIcons name="call-end" size={32} color="#FFFFFF" />
+                                <PhoneOff size={32} color="#FFFFFF" />
                             </TouchableOpacity>
                             <Text style={styles.actionLabel}>Decline</Text>
                         </View>
                         <View style={styles.actionButtonWrap}>
                             <TouchableOpacity style={styles.answerButton} onPress={onAnswer}>
-                                <MaterialIcons
-                                    name={incomingCall?.callType === 'video' ? 'videocam' : 'call'}
-                                    size={32}
-                                    color="#FFFFFF"
-                                />
+                                {incomingCall?.callType === 'video' ? (
+                                    <Video size={32} color="#FFFFFF" />
+                                ) : (
+                                    <Phone size={32} color="#FFFFFF" />
+                                )}
                             </TouchableOpacity>
                             <Text style={styles.actionLabel}>Answer</Text>
                         </View>
@@ -280,18 +280,22 @@ export const CallModal: React.FC<CallModalProps> = ({
                             style={[styles.controlButton, isMuted && styles.controlButtonActive]}
                             onPress={onToggleMute}
                         >
-                            <MaterialIcons name={isMuted ? 'mic-off' : 'mic'} size={28} color={isMuted ? '#EF4444' : '#FFFFFF'} />
+                            {isMuted ? (
+                                <MicOff size={28} color="#EF4444" />
+                            ) : (
+                                <Mic size={28} color="#FFFFFF" />
+                            )}
                         </TouchableOpacity>
                         {isVideoCall && (
                             <TouchableOpacity
                                 style={[styles.controlButton, !isVideoEnabled && styles.controlButtonActive]}
                                 onPress={onToggleVideo}
                             >
-                                <MaterialIcons
-                                    name={isVideoEnabled ? 'videocam' : 'videocam-off'}
-                                    size={28}
-                                    color={isVideoEnabled ? '#FFFFFF' : '#EF4444'}
-                                />
+                                {isVideoEnabled ? (
+                                    <Video size={28} color="#FFFFFF" />
+                                ) : (
+                                    <VideoOff size={28} color="#EF4444" />
+                                )}
                             </TouchableOpacity>
                         )}
                         {!isVideoCall && (
@@ -299,23 +303,27 @@ export const CallModal: React.FC<CallModalProps> = ({
                                 style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
                                 onPress={onToggleSpeaker}
                             >
-                                <MaterialIcons name={isSpeakerOn ? 'volume-up' : 'volume-off'} size={28} color="#FFFFFF" />
+                                {isSpeakerOn ? (
+                                    <Volume2 size={28} color="#FFFFFF" />
+                                ) : (
+                                    <VolumeX size={28} color="#FFFFFF" />
+                                )}
                             </TouchableOpacity>
                         )}
                         {isVideoCall && (
                             <TouchableOpacity style={styles.controlButton} onPress={onSwitchCamera}>
-                                <MaterialIcons name="flip-camera-ios" size={28} color="#FFFFFF" />
+                                <SwitchCamera size={28} color="#FFFFFF" />
                             </TouchableOpacity>
                         )}
                     </View>
                     <TouchableOpacity style={styles.hangupButton} onPress={onHangup}>
-                        <MaterialIcons name="call-end" size={36} color="#FFFFFF" />
+                        <PhoneOff size={36} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
 
                 {error && (
                     <View style={styles.errorContainer}>
-                        <MaterialIcons name="error" size={20} color="#EF4444" />
+                        <AlertCircle size={20} color="#EF4444" />
                         <Text style={styles.errorText}>{error}</Text>
                     </View>
                 )}

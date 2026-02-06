@@ -10,7 +10,20 @@ import {
     useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import {
+    AlertCircle,
+    MessageSquare,
+    Award,
+    Sun,
+    Moon,
+    Mic,
+    ChevronDown,
+    Headphones,
+    Settings,
+    ArrowLeft,
+    UserPlus,
+    MoreHorizontal,
+} from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import {
     communityGet,
@@ -638,7 +651,7 @@ export default function TopContributorsScreen() {
     if (error) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
-                <MaterialIcons name="error-outline" size={48} color={colors.textMuted} />
+                <AlertCircle size={48} color={colors.textMuted} />
                 <Text style={{ color: colors.text, fontSize: 16, marginTop: 12, textAlign: 'center' }}>{error}</Text>
                 <TouchableOpacity
                     style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.primary, borderRadius: 8 }}
@@ -689,17 +702,17 @@ export default function TopContributorsScreen() {
                             ) : null}
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
-                            <MaterialIcons name="message" size={18} color={colors.textMuted} />
+                            <MessageSquare size={18} color={colors.textMuted} />
                         </TouchableOpacity>
                         <View style={{ flex: 1 }} />
                         <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
-                            <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
+                            <Award size={18} color={colors.textMuted} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
                             {mode === 'dark' ? (
-                                <MaterialIcons name="light-mode" size={18} color={colors.textMuted} />
+                                <Sun size={18} color={colors.textMuted} />
                             ) : (
-                                <MaterialIcons name="dark-mode" size={18} color={colors.textMuted} />
+                                <Moon size={18} color={colors.textMuted} />
                             )}
                         </TouchableOpacity>
                     </View>
@@ -725,7 +738,7 @@ export default function TopContributorsScreen() {
                             </View>
                             <View style={styles.mobileTopBarRight}>
                                 <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
-                                    <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={16} color={colors.text} />
+                                    {mode === 'dark' ? <Sun size={16} color={colors.text} /> : <Moon size={16} color={colors.text} />}
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -769,15 +782,15 @@ export default function TopContributorsScreen() {
                         </View>
                         <View style={styles.userActions}>
                             <TouchableOpacity style={styles.userActionBtn}>
-                                <MaterialIcons name="mic" size={14} color={colors.textMuted} />
-                                <MaterialIcons name="expand-more" size={10} color={colors.textMuted} />
+                                <Mic size={14} color={colors.textMuted} />
+                                <ChevronDown size={10} color={colors.textMuted} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.userActionBtn}>
-                                <MaterialIcons name="headphones" size={14} color={colors.textMuted} />
-                                <MaterialIcons name="expand-more" size={10} color={colors.textMuted} />
+                                <Headphones size={14} color={colors.textMuted} />
+                                <ChevronDown size={10} color={colors.textMuted} />
                             </TouchableOpacity>
                             <TouchableOpacity>
-                                <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                <Settings size={14} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -793,7 +806,7 @@ export default function TopContributorsScreen() {
                             {isMobile && (
                                 <View style={styles.mobileProfileHeader}>
                                     <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
-                                        <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                        <ArrowLeft size={20} color={colors.text} />
                                     </TouchableOpacity>
                                     <Text style={styles.mobileProfileHeaderTitle}>{getMemberName(selectedContributor.member)}</Text>
                                 </View>
@@ -816,10 +829,10 @@ export default function TopContributorsScreen() {
                                 {/* Header Icons */}
                                 <View style={styles.profileHeader}>
                                     <TouchableOpacity style={styles.profileHeaderIcon}>
-                                        <MaterialIcons name="person-add" size={18} color={colors.text} />
+                                        <UserPlus size={18} color={colors.text} />
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.profileHeaderIcon}>
-                                        <MaterialIcons name="more-horiz" size={18} color={colors.text} />
+                                        <MoreHorizontal size={18} color={colors.text} />
                                     </TouchableOpacity>
                                 </View>
                             </View>

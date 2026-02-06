@@ -14,8 +14,7 @@ import {
     Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@expo/vector-icons';
-import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X, Calendar, BadgeCheck, Megaphone, Clock, MapPin, PlayCircle, File, Flag } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, uploadFile, StakeholderBadge } from '../../lib/api';
@@ -1202,7 +1201,7 @@ const SubChannelScreen = () => {
                                 style={[styles.iconButton, showEventsView && styles.iconButtonActive]}
                                 onPress={() => setShowEventsView(!showEventsView)}
                             >
-                                <MaterialIcons name="event" size={16} color={showEventsView ? colors.primary : colors.textMuted} />
+                                <Calendar size={16} color={showEventsView ? colors.primary : colors.textMuted} />
                                 {events.length > 0 && !showEventsView && (
                                     <View style={styles.eventDot} />
                                 )}
@@ -1223,7 +1222,7 @@ const SubChannelScreen = () => {
                         >
                             {events.length === 0 ? (
                                 <View style={styles.emptyEventsContainer}>
-                                    <MaterialIcons name="event" size={48} color={colors.textMuted} />
+                                    <Calendar size={48} color={colors.textMuted} />
                                     <Text style={styles.emptyEventsTitle}>No Events Yet</Text>
                                     <Text style={styles.emptyEventsSubtitle}>
                                         Check back later for upcoming events and announcements.
@@ -1237,11 +1236,11 @@ const SubChannelScreen = () => {
                                                 styles.mobileEventTypeBadge,
                                                 event.eventType === 'announcement' ? styles.mobileEventTypeBadgeAnnouncement : styles.mobileEventTypeBadgeEvent
                                             ]}>
-                                                <MaterialIcons
-                                                    name={event.eventType === 'announcement' ? 'campaign' : 'event'}
-                                                    size={12}
-                                                    color="#FFFFFF"
-                                                />
+                                                {event.eventType === 'announcement' ? (
+                                                    <Megaphone size={12} color="#FFFFFF" />
+                                                ) : (
+                                                    <Calendar size={12} color="#FFFFFF" />
+                                                )}
                                                 <Text style={styles.mobileEventTypeBadgeText}>
                                                     {event.eventType === 'announcement' ? 'Announcement' : 'Event'}
                                                 </Text>
@@ -1254,7 +1253,7 @@ const SubChannelScreen = () => {
                                         <View style={styles.mobileEventMeta}>
                                             {event.startDate && (
                                                 <View style={styles.mobileEventMetaItem}>
-                                                    <MaterialIcons name="schedule" size={14} color={colors.textMuted} />
+                                                    <Clock size={14} color={colors.textMuted} />
                                                     <Text style={styles.mobileEventMetaText}>
                                                         {new Date(event.startDate).toLocaleDateString('en-US', {
                                                             weekday: 'short',
@@ -1268,7 +1267,7 @@ const SubChannelScreen = () => {
                                             )}
                                             {event.location && (
                                                 <View style={styles.mobileEventMetaItem}>
-                                                    <MaterialIcons name="location-on" size={14} color={colors.textMuted} />
+                                                    <MapPin size={14} color={colors.textMuted} />
                                                     <Text style={styles.mobileEventMetaText}>{event.location}</Text>
                                                 </View>
                                             )}
@@ -1324,7 +1323,7 @@ const SubChannelScreen = () => {
                                             <Text style={styles.feedAuthor}>{getDisplayName(item.authorId || item.senderId)}</Text>
                                             {isMemberAdmin(item.authorId || item.senderId) && (
                                                 <View style={styles.verifiedBadge}>
-                                                    <MaterialIcons name="verified" size={14} color="#3B82F6" />
+                                                    <BadgeCheck size={14} color="#3B82F6" />
                                                 </View>
                                             )}
                                             {getMemberDisplayUsername(item.authorId || item.senderId) && (
@@ -1384,7 +1383,7 @@ const SubChannelScreen = () => {
                                             if (attachment.type === 'video') {
                                                 return (
                                                     <View key={`${item._id}-video-${idx}`} style={styles.videoPlaceholder}>
-                                                        <MaterialIcons name="play-circle-filled" size={48} color="#FFFFFF" />
+                                                        <PlayCircle size={48} color="#FFFFFF" />
                                                         <Text style={styles.videoLabel}>Video</Text>
                                                     </View>
                                                 );
@@ -1392,7 +1391,7 @@ const SubChannelScreen = () => {
                                             if (attachment.type === 'file') {
                                                 return (
                                                     <View key={`${item._id}-file-${idx}`} style={styles.fileAttachment}>
-                                                        <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                                        <File size={20} color={colors.textMuted} />
                                                         <Text style={styles.fileLabel} numberOfLines={1}>{attachment.fileName || attachment.label || 'File'}</Text>
                                                     </View>
                                                 );
@@ -1506,7 +1505,7 @@ const SubChannelScreen = () => {
                                         <Image source={{ uri: att.uri }} style={styles.attachmentPreviewImage} />
                                     ) : (
                                         <View style={styles.attachmentPreviewFile}>
-                                            <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                            <File size={20} color={colors.textMuted} />
                                             <Text style={styles.attachmentPreviewFileName} numberOfLines={1}>{att.name}</Text>
                                         </View>
                                     )}
@@ -1659,7 +1658,7 @@ const SubChannelScreen = () => {
                                                 <Text style={styles.commentAuthor}>{getDisplayName(comment.authorId)}</Text>
                                                 {isMemberAdmin(comment.authorId) && (
                                                     <View style={styles.verifiedBadge}>
-                                                        <MaterialIcons name="verified" size={12} color="#3B82F6" />
+                                                        <BadgeCheck size={12} color="#3B82F6" />
                                                     </View>
                                                 )}
                                                 {getMemberDisplayUsername(comment.authorId) && (
@@ -1795,7 +1794,7 @@ const SubChannelScreen = () => {
                                 closeMenu();
                             }}
                         >
-                            <MaterialIcons name="flag" size={16} color={colors.textMuted} />
+                            <Flag size={16} color={colors.textMuted} />
                             <Text style={styles.floatingMenuItemText}>Report</Text>
                         </TouchableOpacity>
                         {menuItem.showDelete && (

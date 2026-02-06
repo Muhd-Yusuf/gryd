@@ -68,28 +68,58 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      * Get the Expo push token for this device
      */
     const getExpoPushToken = async (): Promise<string | null> => {
-        // Push notifications require a physical device
+        // Push notifications require a physical device (not simulator)
         if (!Device.isDevice) {
-            console.log('[Notifications] Push notifications require a physical device');
+            console.log('[Notifications] Push notifications require a physical device (not a simulator)');
             return null;
         }
 
         try {
-            // Get project ID for Expo
-            const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+            // Get project ID for Expo - check multiple sources
+            const projectId =
+                Constants.expoConfig?.extra?.eas?.projectId ||
+                Constants.easConfig?.projectId ||
+                Constants.expoConfig?.extra?.expoProjectId;
 
-            if (!projectId) {
-                console.warn('[Notifications] No Expo project ID found - push tokens may not work');
+            // Check if projectId is a placeholder
+            if (!projectId || projectId === 'your-project-id-here') {
+                console.warn('[Notifications] Invalid or missing Expo project ID. To enable push notifications:');
+                console.warn('1. Run: npx eas-cli init (or eas init)');
+                console.warn('2. Copy the projectId from eas.json or Expo dashboard');
+                console.warn('3. Update app.json extra.eas.projectId with your actual project ID');
+
+                // In Expo Go, we can try without projectId (uses the Expo Go project)
+                if (__DEV__) {
+                    console.log('[Notifications] Attempting to get token without projectId (Expo Go fallback)');
+                    try {
+                        const tokenData = await Notifications.getExpoPushTokenAsync();
+                        console.log('[Notifications] Got push token (Expo Go):', tokenData.data);
+                        return tokenData.data;
+                    } catch (fallbackError: any) {
+                        console.error('[Notifications] Expo Go fallback failed:', fallbackError.message);
+                        return null;
+                    }
+                }
+                return null;
             }
 
+            console.log('[Notifications] Using projectId:', projectId);
             const tokenData = await Notifications.getExpoPushTokenAsync({
-                projectId: projectId || undefined,
+                projectId,
             });
 
             console.log('[Notifications] Got push token:', tokenData.data);
             return tokenData.data;
-        } catch (error) {
-            console.error('[Notifications] Error getting push token:', error);
+        } catch (error: any) {
+            console.error('[Notifications] Error getting push token:', error.message);
+
+            // Common errors and their meanings
+            if (error.message?.includes('experienceId')) {
+                console.error('[Notifications] This error usually means the projectId is incorrect or missing.');
+            } else if (error.message?.includes('NOTIFICATIONS_PERMISSION_DENIED')) {
+                console.error('[Notifications] User denied notification permissions.');
+            }
+
             return null;
         }
     };
@@ -255,10 +285,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
         return () => {
             if (notificationListener.current) {
-                Notifications.removeNotificationSubscription(notificationListener.current);
+                notificationListener.current.remove();
             }
             if (responseListener.current) {
-                Notifications.removeNotificationSubscription(responseListener.current);
+                responseListener.current.remove();
             }
         };
     }, [handleNotificationResponse]);

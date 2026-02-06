@@ -15,7 +15,38 @@ import {
     useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import {
+    MessageSquare,
+    Award,
+    Sun,
+    Moon,
+    Plus,
+    UserPlus,
+    Mic,
+    ChevronDown,
+    Headphones,
+    Settings,
+    ArrowLeft,
+    Phone,
+    Video,
+    Pin,
+    Trash2,
+    File,
+    X,
+    Send,
+    PlusCircle,
+    Paperclip,
+    Smile,
+    MoreHorizontal,
+    Search,
+    Loader2,
+    PhoneOff,
+    PhoneMissed,
+    ArrowUpRight,
+    ArrowDownLeft,
+    PhoneIncoming,
+    PhoneOutgoing,
+} from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../lib/theme';
@@ -1277,17 +1308,17 @@ export default function DirectMessagesScreen() {
                             ) : null}
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
-                            <MaterialIcons name="message" size={18} color={colors.textMuted} />
+                            <MessageSquare size={18} color={colors.textMuted} />
                         </TouchableOpacity>
                         <View style={{ flex: 1 }} />
                         <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
-                            <MaterialIcons name="emoji-events" size={18} color={colors.textMuted} />
+                            <Award size={18} color={colors.textMuted} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
                             {mode === 'dark' ? (
-                                <MaterialIcons name="light-mode" size={18} color={colors.textMuted} />
+                                <Sun size={18} color={colors.textMuted} />
                             ) : (
-                                <MaterialIcons name="dark-mode" size={18} color={colors.textMuted} />
+                                <Moon size={18} color={colors.textMuted} />
                             )}
                         </TouchableOpacity>
                     </View>
@@ -1313,7 +1344,7 @@ export default function DirectMessagesScreen() {
                             </View>
                             <View style={styles.mobileTopBarRight}>
                                 <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
-                                    <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={16} color={colors.text} />
+                                    {mode === 'dark' ? <Sun size={16} color={colors.text} /> : <Moon size={16} color={colors.text} />}
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -1324,7 +1355,7 @@ export default function DirectMessagesScreen() {
                             <Text style={styles.sidebarTitle}>Direct message</Text>
                         </View>
                         <TouchableOpacity style={styles.sidebarHeaderIcon} onPress={() => setAddFriendOpen(true)}>
-                            <MaterialIcons name="add" size={16} color={colors.textMuted} />
+                            <Plus size={16} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
 
@@ -1332,7 +1363,7 @@ export default function DirectMessagesScreen() {
                     <ScrollView style={styles.friendsList} showsVerticalScrollIndicator={false}>
                         {(friends || []).length === 0 ? (
                             <View style={styles.emptyFriendsList}>
-                                <MaterialIcons name="person-add" size={40} color={colors.textSubtle} />
+                                <UserPlus size={40} color={colors.textSubtle} />
                                 <Text style={styles.emptyFriendsTitle}>No friends yet</Text>
                                 <Text style={styles.emptyFriendsText}>Tap the + button above to add friends and start messaging</Text>
                             </View>
@@ -1374,15 +1405,15 @@ export default function DirectMessagesScreen() {
                         </View>
                         <View style={styles.userActions}>
                             <TouchableOpacity style={styles.userActionBtn}>
-                                <MaterialIcons name="mic" size={14} color={colors.textMuted} />
-                                <MaterialIcons name="expand-more" size={10} color={colors.textMuted} />
+                                <Mic size={14} color={colors.textMuted} />
+                                <ChevronDown size={10} color={colors.textMuted} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.userActionBtn}>
-                                <MaterialIcons name="headphones" size={14} color={colors.textMuted} />
-                                <MaterialIcons name="expand-more" size={10} color={colors.textMuted} />
+                                <Headphones size={14} color={colors.textMuted} />
+                                <ChevronDown size={10} color={colors.textMuted} />
                             </TouchableOpacity>
                             <TouchableOpacity>
-                                <MaterialIcons name="settings" size={14} color={colors.textMuted} />
+                                <Settings size={14} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1399,7 +1430,7 @@ export default function DirectMessagesScreen() {
                                 <View style={styles.chatHeaderLeft}>
                                     {isMobile && (
                                         <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
-                                            <MaterialIcons name="arrow-back" size={20} color={colors.text} />
+                                            <ArrowLeft size={20} color={colors.text} />
                                         </TouchableOpacity>
                                     )}
                                     <UserAvatar
@@ -1411,13 +1442,13 @@ export default function DirectMessagesScreen() {
                                 </View>
                                 <View style={styles.chatHeaderIcons}>
                                     <TouchableOpacity style={styles.headerIcon} onPress={() => handleStartCall('audio')}>
-                                        <MaterialIcons name="phone" size={20} color={colors.textMuted} />
+                                        <Phone size={20} color={colors.textMuted} />
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.headerIcon} onPress={() => handleStartCall('video')}>
-                                        <MaterialIcons name="videocam" size={20} color={colors.textMuted} />
+                                        <Video size={20} color={colors.textMuted} />
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.headerIcon}>
-                                        <MaterialIcons name="push-pin" size={20} color={colors.textMuted} />
+                                        <Pin size={20} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -1478,8 +1509,8 @@ export default function DirectMessagesScreen() {
                                                     const isOutgoing = msg.isOutgoing || String(msg.senderId || '') === String(currentUserId || '');
                                                     const isMissed = msg.isMissed || msg.callStatus === 'missed';
                                                     const isDeclined = msg.isDeclined || msg.callStatus === 'declined';
-                                                    const callIcon = msg.callType === 'video' ? 'videocam' : 'phone';
-                                                    const arrowIcon = isOutgoing ? 'call-made' : 'call-received';
+                                                    const CallIcon = msg.callType === 'video' ? Video : Phone;
+                                                    const ArrowIcon = isOutgoing ? PhoneOutgoing : PhoneIncoming;
                                                     const arrowColor = isMissed || isDeclined ? '#EF4444' : '#22C55E';
 
                                                     let callLabel = msg.callType === 'video' ? 'Video call' : 'Voice call';
@@ -1492,11 +1523,11 @@ export default function DirectMessagesScreen() {
                                                     return (
                                                         <View key={msg._id} style={styles.callHistoryItem}>
                                                             <View style={[styles.callHistoryIcon, (isMissed || isDeclined) && styles.callHistoryIconMissed]}>
-                                                                <MaterialIcons name={callIcon} size={18} color={(isMissed || isDeclined) ? '#EF4444' : colors.primary} />
+                                                                <CallIcon size={18} color={(isMissed || isDeclined) ? '#EF4444' : colors.primary} />
                                                             </View>
                                                             <View style={styles.callHistoryInfo}>
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                                    <MaterialIcons name={arrowIcon} size={14} color={arrowColor} />
+                                                                    <ArrowIcon size={14} color={arrowColor} />
                                                                     <Text style={[styles.callHistoryType, (isMissed || isDeclined) && styles.callHistoryTypeMissed]}>
                                                                         {callLabel}
                                                                     </Text>
@@ -1509,7 +1540,7 @@ export default function DirectMessagesScreen() {
                                                                 style={styles.callHistoryAction}
                                                                 onPress={() => handleStartCall(msg.callType === 'video' ? 'video' : 'audio')}
                                                             >
-                                                                <MaterialIcons name={callIcon} size={20} color={colors.primary} />
+                                                                <CallIcon size={20} color={colors.primary} />
                                                             </TouchableOpacity>
                                                         </View>
                                                     );
@@ -1534,7 +1565,7 @@ export default function DirectMessagesScreen() {
                                                                 onPress={() => handleDeleteMessage(msg._id)}
                                                                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                                             >
-                                                                <MaterialIcons name="delete-outline" size={18} color={colors.error || '#EF4444'} />
+                                                                <Trash2 size={18} color={colors.error || '#EF4444'} />
                                                             </TouchableOpacity>
                                                         )}
                                                         {!isOwnMessage && (
@@ -1582,7 +1613,7 @@ export default function DirectMessagesScreen() {
                                                                 if (attachment.type === 'file') {
                                                                     return (
                                                                         <View key={`${msg._id}-file-${idx}`} style={styles.msgFileBubble}>
-                                                                            <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                                                            <File size={20} color={colors.textMuted} />
                                                                             <Text style={styles.msgFileText} numberOfLines={1}>{attachment.label || 'File'}</Text>
                                                                         </View>
                                                                     );
@@ -1610,12 +1641,12 @@ export default function DirectMessagesScreen() {
                                                     <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
                                                 ) : (
                                                     <View style={styles.attachmentFileIcon}>
-                                                        <MaterialIcons name="insert-drive-file" size={24} color={colors.textMuted} />
+                                                        <File size={24} color={colors.textMuted} />
                                                     </View>
                                                 )}
                                                 <Text style={styles.attachmentName} numberOfLines={1}>{attachment.name}</Text>
                                                 <TouchableOpacity style={styles.removeAttachmentBtn} onPress={() => handleRemoveAttachment(index)}>
-                                                    <MaterialIcons name="close" size={14} color="#FFFFFF" />
+                                                    <X size={14} color="#FFFFFF" />
                                                 </TouchableOpacity>
                                             </View>
                                         ))}
@@ -1631,17 +1662,17 @@ export default function DirectMessagesScreen() {
                                         </View>
                                         <View style={styles.recordingActions}>
                                             <TouchableOpacity style={styles.cancelRecordingBtn} onPress={handleCancelRecording}>
-                                                <MaterialIcons name="delete" size={20} color="#EF4444" />
+                                                <Trash2 size={20} color="#EF4444" />
                                             </TouchableOpacity>
                                             <TouchableOpacity style={styles.stopRecordingBtn} onPress={handleStopRecording}>
-                                                <MaterialIcons name="send" size={18} color="#FFFFFF" />
+                                                <Send size={18} color="#FFFFFF" />
                                             </TouchableOpacity>
                                         </View>
                                     </View>
                                 ) : (
                                     <View style={styles.inputRow}>
                                         <TouchableOpacity style={styles.inputAddBtn} onPress={handlePickFile}>
-                                            <MaterialIcons name="add-circle" size={22} color={colors.textMuted} />
+                                            <PlusCircle size={22} color={colors.textMuted} />
                                         </TouchableOpacity>
                                         <View style={styles.inputWrapper}>
                                             <TextInput
@@ -1654,17 +1685,17 @@ export default function DirectMessagesScreen() {
                                             />
                                             <View style={styles.inputActions}>
                                                 <TouchableOpacity style={styles.inputActionBtn} onPress={handlePickFile}>
-                                                    <MaterialIcons name="attach-file" size={20} color={colors.textMuted} />
+                                                    <Paperclip size={20} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                                 <TouchableOpacity style={styles.inputActionBtn} onPress={() => setShowEmojiPicker(true)}>
-                                                    <MaterialIcons name="emoji-emotions" size={20} color={colors.textMuted} />
+                                                    <Smile size={20} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                                 <TouchableOpacity style={styles.inputActionBtn} onPress={handleStartRecording}>
-                                                    <MaterialIcons name="mic" size={20} color={colors.textMuted} />
+                                                    <Mic size={20} color={colors.textMuted} />
                                                 </TouchableOpacity>
                                                 {newMessage.trim() || attachments.length > 0 ? (
                                                     <TouchableOpacity style={styles.inputSendBtn} onPress={handleSendMessage}>
-                                                        <MaterialIcons name="send" size={18} color="#FFFFFF" />
+                                                        <Send size={18} color="#FFFFFF" />
                                                     </TouchableOpacity>
                                                 ) : null}
                                             </View>
@@ -1698,7 +1729,7 @@ export default function DirectMessagesScreen() {
                             </View>
                             {/* More icon */}
                             <TouchableOpacity style={styles.moreIcon}>
-                                <MaterialIcons name="more-horiz" size={18} color={colors.text} />
+                                <MoreHorizontal size={18} color={colors.text} />
                             </TouchableOpacity>
                         </View>
                         <View style={styles.profileSidebarContent}>
@@ -1750,11 +1781,11 @@ export default function DirectMessagesScreen() {
                         <View style={styles.addFriendHeader}>
                             <Text style={styles.addFriendTitle}>Add Friends</Text>
                             <TouchableOpacity style={styles.addFriendClose} onPress={() => setAddFriendOpen(false)}>
-                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                                <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <View style={styles.addFriendSearch}>
-                            <MaterialIcons name="search" size={16} color={colors.textMuted} />
+                            <Search size={16} color={colors.textMuted} />
                             <TextInput
                                 style={styles.addFriendSearchInput}
                                 placeholder="Search members..."
@@ -1764,7 +1795,7 @@ export default function DirectMessagesScreen() {
                             />
                             {addFriendSearch.length > 0 && (
                                 <TouchableOpacity onPress={() => setAddFriendSearch('')}>
-                                    <MaterialIcons name="close" size={16} color={colors.textMuted} />
+                                    <X size={16} color={colors.textMuted} />
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -1790,11 +1821,11 @@ export default function DirectMessagesScreen() {
                                                 onPress={() => handleAddFriend(id)}
                                                 disabled={isAdding}
                                             >
-                                                <MaterialIcons
-                                                    name={isAdding ? 'hourglass-empty' : 'person-add'}
-                                                    size={18}
-                                                    color={isAdding ? colors.textMuted : colors.text}
-                                                />
+                                                {isAdding ? (
+                                                    <Loader2 size={18} color={colors.textMuted} />
+                                                ) : (
+                                                    <UserPlus size={18} color={colors.text} />
+                                                )}
                                             </TouchableOpacity>
                                         </View>
                                     );
@@ -1812,7 +1843,7 @@ export default function DirectMessagesScreen() {
                         <View style={styles.emojiPickerHeader}>
                             <Text style={styles.emojiPickerTitle}>Emoji</Text>
                             <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+                                <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                         <ScrollView style={styles.emojiGrid} showsVerticalScrollIndicator={false}>
@@ -1869,14 +1900,18 @@ export default function DirectMessagesScreen() {
                                 style={[styles.incomingCallButton, styles.declineButton]}
                                 onPress={handleDeclineCall}
                             >
-                                <MaterialIcons name="call-end" size={24} color="#FFFFFF" />
+                                <PhoneOff size={24} color="#FFFFFF" />
                                 <Text style={styles.incomingCallButtonText}>Decline</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.incomingCallButton, styles.acceptButton]}
                                 onPress={handleAcceptCall}
                             >
-                                <MaterialIcons name={incomingCall.callType === 'video' ? 'videocam' : 'call'} size={24} color="#FFFFFF" />
+                                {incomingCall.callType === 'video' ? (
+                                    <Video size={24} color="#FFFFFF" />
+                                ) : (
+                                    <Phone size={24} color="#FFFFFF" />
+                                )}
                                 <Text style={styles.incomingCallButtonText}>Accept</Text>
                             </TouchableOpacity>
                         </View>

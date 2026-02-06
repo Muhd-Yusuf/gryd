@@ -14,7 +14,7 @@ import {
     Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@expo/vector-icons';
+import { ArrowLeft, Phone, Video, Search, Trash2, File, Copy, Send, Smile, Paperclip, X, Mic, PhoneIncoming, PhoneOutgoing, PhoneMissed, ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -41,6 +41,7 @@ import { CallModalDefault as CallModal } from '../../../components';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 import { MessageBubble, MessageComposer } from '../../../components/messaging';
+import { useWebSocketContext } from '../../../contexts/WebSocketContext';
 
 type Subgrid = {
     _id: string;
@@ -299,6 +300,9 @@ const DirectMessageChatScreen = () => {
     // Get call context for managing calls
     const { incomingCall, clearIncomingCall, startActiveCall, markCallConnected, endCall: contextEndCall } = useCallContext();
 
+    // WebSocket for real-time messages
+    const { isConnected, joinRoom, leaveRoom, subscribe } = useWebSocketContext();
+
     // Load friend profile from cache immediately (instant display)
     useEffect(() => {
         if (!peerId) return;
@@ -507,6 +511,80 @@ const DirectMessageChatScreen = () => {
         loadMessages();
     }, [subgridId, peerId]);
 
+    // Use refs to avoid stale closures in WebSocket handlers
+    const currentUserIdRef = useRef(currentUserId);
+    const peerIdRef = useRef(peerId);
+    useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
+    useEffect(() => { peerIdRef.current = peerId; }, [peerId]);
+
+    // WebSocket subscription for real-time DM updates
+    useEffect(() => {
+        console.log('[DM Chat] WebSocket effect - isConnected:', isConnected, 'currentUserId:', currentUserId, 'peerId:', peerId);
+
+        if (!isConnected || !currentUserId || !peerId) {
+            console.log('[DM Chat] Skipping WebSocket subscription - missing:', { isConnected, currentUserId: !!currentUserId, peerId: !!peerId });
+            return;
+        }
+
+        // Create consistent DM room ID (sorted user IDs)
+        const sortedIds = [String(currentUserId), String(peerId)].sort();
+        const dmRoomId = `${sortedIds[0]}_${sortedIds[1]}`;
+
+        console.log('[DM Chat] Joining DM room:', dmRoomId);
+        joinRoom('dm', dmRoomId);
+
+        // Subscribe to new messages
+        const unsubNewMessage = subscribe('new_message', (data: any) => {
+            console.log('[DM Chat] new_message event received:', data?.roomType, data?.roomId);
+            if (data.roomType === 'dm' && data.message) {
+                const msgSenderId = String(data.message?.senderId || '');
+                const msgRecipientId = String(data.message?.recipientId || '');
+                const myUserId = String(currentUserIdRef.current || '');
+                const friendId = String(peerIdRef.current || '');
+
+                console.log('[DM Chat] Message details - sender:', msgSenderId, 'recipient:', msgRecipientId, 'me:', myUserId, 'friend:', friendId);
+
+                // Check if this message belongs to this conversation
+                const isForThisConversation =
+                    (msgSenderId === myUserId && msgRecipientId === friendId) ||
+                    (msgSenderId === friendId && msgRecipientId === myUserId);
+
+                if (isForThisConversation) {
+                    setMessages((prev) => {
+                        // Avoid duplicates
+                        if (prev.some((m) => m._id === data.message._id)) {
+                            console.log('[DM Chat] Duplicate message, skipping');
+                            return prev;
+                        }
+                        console.log('[DM Chat] Adding new message to state');
+                        // Also update cache
+                        const newMessages = [...prev, data.message];
+                        cacheMessages(friendId, newMessages);
+                        return newMessages;
+                    });
+                    // Scroll to bottom for new messages
+                    setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 100);
+                }
+            }
+        });
+
+        // Subscribe to message deletions
+        const unsubMessageDeleted = subscribe('message_deleted', (data: any) => {
+            if (data.roomType === 'dm' && data.messageId) {
+                setMessages((prev) => prev.filter((m) => m._id !== data.messageId));
+            }
+        });
+
+        return () => {
+            console.log('[DM Chat] Leaving DM room:', dmRoomId);
+            leaveRoom('dm', dmRoomId);
+            unsubNewMessage();
+            unsubMessageDeleted();
+        };
+    }, [isConnected, currentUserId, peerId, joinRoom, leaveRoom, subscribe]);
+
     const handleSend = async () => {
         if ((!draft.trim() && pendingAttachments.length === 0) || !subgridId || !peerId) return;
         const body = draft.trim();
@@ -536,13 +614,29 @@ const DirectMessageChatScreen = () => {
                 setUploading(false);
             }
 
-            await communityPost(`/subgrids/${subgridId}/direct-messages`, {
+            const sendResult = await communityPost(`/subgrids/${subgridId}/direct-messages`, {
                 recipientId: peerId,
                 body,
                 attachments: uploadedAttachments,
             });
-            const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${peerId}`);
-            setMessages(response?.data || []);
+
+            // Use optimistic update - add the sent message immediately
+            // WebSocket will also deliver it, but we handle duplicates
+            if (sendResult?.data) {
+                setMessages((prev) => {
+                    if (prev.some((m) => m._id === sendResult.data._id)) {
+                        return prev;
+                    }
+                    const newMessages = [...prev, sendResult.data];
+                    // Update cache
+                    cacheMessages(peerId, newMessages);
+                    return newMessages;
+                });
+                // Scroll to bottom
+                setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                }, 100);
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to send message.');
             setUploading(false);
@@ -975,7 +1069,7 @@ const DirectMessageChatScreen = () => {
                     {/* Header */}
                     <View style={styles.header}>
                         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-                            <MaterialIcons name="arrow-back" size={22} color={colors.text} />
+                            <ArrowLeft size={22} color={colors.text} />
                         </TouchableOpacity>
                         <View style={styles.headerAvatarWrap}>
                             <UserAvatar
@@ -1003,13 +1097,13 @@ const DirectMessageChatScreen = () => {
                         </View>
                         <View style={styles.headerActions}>
                             <TouchableOpacity style={styles.headerIcon} onPress={() => handleStartCall('audio')}>
-                                <MaterialIcons name="phone" size={20} color={colors.text} />
+                                <Phone size={20} color={colors.text} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.headerIcon} onPress={() => handleStartCall('video')}>
-                                <MaterialIcons name="videocam" size={20} color={colors.text} />
+                                <Video size={20} color={colors.text} />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.headerIcon}>
-                                <MaterialIcons name="search" size={20} color={colors.text} />
+                                <Search size={20} color={colors.text} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1078,11 +1172,12 @@ const DirectMessageChatScreen = () => {
                                         const isOutgoing = message.isOutgoing || message.senderId === currentUserId;
                                         const isMissed = message.isMissed || message.callStatus === 'missed';
                                         const isDeclined = message.isDeclined || message.callStatus === 'declined';
-                                        const callIcon = message.callType === 'video' ? 'videocam' : 'phone';
-                                        const arrowIcon = isOutgoing ? 'call-made' : 'call-received';
+                                        const isVideoCall = message.callType === 'video';
                                         const arrowColor = isMissed || isDeclined ? '#EF4444' : '#22C55E';
+                                        const CallIcon = isVideoCall ? Video : Phone;
+                                        const ArrowIcon = isMissed ? PhoneMissed : (isOutgoing ? ArrowUpRight : ArrowDownLeft);
 
-                                        let callLabel = message.callType === 'video' ? 'Video call' : 'Voice call';
+                                        let callLabel = isVideoCall ? 'Video call' : 'Voice call';
                                         if (isMissed) {
                                             callLabel = isOutgoing ? 'Cancelled' : 'Missed';
                                         } else if (isDeclined) {
@@ -1092,11 +1187,11 @@ const DirectMessageChatScreen = () => {
                                         return (
                                             <View key={message._id} style={styles.callHistoryItem}>
                                                 <View style={[styles.callHistoryIcon, (isMissed || isDeclined) && styles.callHistoryIconMissed]}>
-                                                    <MaterialIcons name={callIcon} size={18} color={(isMissed || isDeclined) ? '#EF4444' : colors.primary} />
+                                                    <CallIcon size={18} color={(isMissed || isDeclined) ? '#EF4444' : colors.primary} />
                                                 </View>
                                                 <View style={styles.callHistoryInfo}>
                                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                                        <MaterialIcons name={arrowIcon} size={14} color={arrowColor} />
+                                                        <ArrowIcon size={14} color={arrowColor} />
                                                         <Text style={[styles.callHistoryType, (isMissed || isDeclined) && styles.callHistoryTypeMissed]}>
                                                             {callLabel}
                                                         </Text>
@@ -1107,9 +1202,9 @@ const DirectMessageChatScreen = () => {
                                                 </View>
                                                 <TouchableOpacity
                                                     style={styles.callHistoryAction}
-                                                    onPress={() => handleStartCall(message.callType === 'video' ? 'video' : 'audio')}
+                                                    onPress={() => handleStartCall(isVideoCall ? 'video' : 'audio')}
                                                 >
-                                                    <MaterialIcons name={callIcon} size={20} color={colors.primary} />
+                                                    <CallIcon size={20} color={colors.primary} />
                                                 </TouchableOpacity>
                                             </View>
                                         );
@@ -1123,7 +1218,7 @@ const DirectMessageChatScreen = () => {
                                                     style={styles.messageDeleteBtn}
                                                     onPress={() => handleDeleteMessage(message._id)}
                                                 >
-                                                    <MaterialIcons name="delete-outline" size={18} color={colors.error || '#EF4444'} />
+                                                    <Trash2 size={18} color={colors.error || '#EF4444'} />
                                                 </TouchableOpacity>
                                             )}
                                             {!isSelf && (
@@ -1173,7 +1268,7 @@ const DirectMessageChatScreen = () => {
                                                     if (attachment.type === 'file') {
                                                         return (
                                                             <View key={`${message._id}-file-${idx}`} style={styles.fileBubble}>
-                                                                <MaterialIcons name="insert-drive-file" size={20} color={colors.textMuted} />
+                                                                <File size={20} color={colors.textMuted} />
                                                                 <Text style={styles.fileText} numberOfLines={1}>{attachment.label || 'File'}</Text>
                                                             </View>
                                                         );
@@ -1201,10 +1296,10 @@ const DirectMessageChatScreen = () => {
                         <View style={styles.recordingContainer}>
                             <View style={styles.recordingRow}>
                                 <TouchableOpacity style={styles.recordingCopy}>
-                                    <MaterialIcons name="content-copy" size={18} color={colors.textMuted} />
+                                    <Copy size={18} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.recordingCancel} onPress={handleCancelRecording}>
-                                    <MaterialIcons name="delete" size={18} color="#EF4444" />
+                                    <Trash2 size={18} color="#EF4444" />
                                 </TouchableOpacity>
                                 <View style={styles.recordingWaveform}>
                                     <Text style={styles.recordingTimer}>{formatRecordingTime(recordingTime)}</Text>
@@ -1226,7 +1321,7 @@ const DirectMessageChatScreen = () => {
                                     </View>
                                 </View>
                                 <TouchableOpacity style={styles.recordingSend} onPress={handleStopRecording}>
-                                    <MaterialIcons name="send" size={18} color="#FFFFFF" />
+                                    <Send size={18} color="#FFFFFF" />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -1234,7 +1329,7 @@ const DirectMessageChatScreen = () => {
                         <View style={styles.composerContainer}>
                             <View style={styles.composer}>
                                 <TouchableOpacity style={styles.composerIconLeft} onPress={() => setEmojiOpen(true)}>
-                                    <MaterialIcons name="emoji-emotions" size={22} color={colors.textMuted} />
+                                    <Smile size={22} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 <TextInput
                                     value={draft}
@@ -1245,7 +1340,7 @@ const DirectMessageChatScreen = () => {
                                     onSubmitEditing={handleSend}
                                 />
                                 <TouchableOpacity style={styles.composerIconRight} onPress={handleAttachPress}>
-                                    <MaterialIcons name="attach-file" size={22} color={colors.textMuted} />
+                                    <Paperclip size={22} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 {/* Pending attachment preview */}
                                 {pendingAttachments.length > 0 && (
@@ -1256,14 +1351,14 @@ const DirectMessageChatScreen = () => {
                                                     <Image source={{ uri: att.uri }} style={{ width: 32, height: 32, borderRadius: 4 }} />
                                                 ) : (
                                                     <View style={{ width: 32, height: 32, borderRadius: 4, backgroundColor: colors.cardBg, justifyContent: 'center', alignItems: 'center' }}>
-                                                        <MaterialIcons name="insert-drive-file" size={16} color={colors.textMuted} />
+                                                        <File size={16} color={colors.textMuted} />
                                                     </View>
                                                 )}
                                                 <TouchableOpacity
                                                     style={{ position: 'absolute', top: -4, right: -4, backgroundColor: colors.error, borderRadius: 8, width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}
                                                     onPress={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
                                                 >
-                                                    <MaterialIcons name="close" size={10} color="#fff" />
+                                                    <X size={10} color="#fff" />
                                                 </TouchableOpacity>
                                             </View>
                                         ))}
@@ -1272,11 +1367,11 @@ const DirectMessageChatScreen = () => {
                             </View>
                             {showSendButton ? (
                                 <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                                    <MaterialIcons name="send" size={22} color="#FFFFFF" />
+                                    <Send size={22} color="#FFFFFF" />
                                 </TouchableOpacity>
                             ) : (
                                 <TouchableOpacity style={styles.micButton} onPress={handleToggleRecording}>
-                                    <MaterialIcons name="mic" size={22} color={colors.textMuted} />
+                                    <Mic size={22} color={colors.textMuted} />
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -1310,7 +1405,7 @@ const DirectMessageChatScreen = () => {
                     <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setEmojiOpen(false)} />
                     <View style={styles.emojiPickerCard}>
                         <View style={styles.emojiSearchRow}>
-                            <MaterialIcons name="search" size={16} color={colors.textMuted} />
+                            <Search size={16} color={colors.textMuted} />
                             <TextInput
                                 value={emojiSearch}
                                 onChangeText={setEmojiSearch}
