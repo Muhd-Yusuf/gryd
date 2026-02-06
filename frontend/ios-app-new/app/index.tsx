@@ -15,7 +15,8 @@ export default function Index() {
             try {
                 const auth = await isAuthenticated();
                 if (!auth) {
-                    setRedirectTo(Platform.OS === 'web' ? '/login' : '/welcome');
+                    // Use unified login page for all platforms
+                    setRedirectTo('/login');
                     return;
                 }
 
@@ -29,7 +30,8 @@ export default function Index() {
                     setRedirectTo('/(main)');
                 }
             } catch {
-                setRedirectTo(Platform.OS === 'web' ? '/login' : '/welcome');
+                // Use unified login page for all platforms
+                setRedirectTo('/login');
             } finally {
                 setChecking(false);
             }

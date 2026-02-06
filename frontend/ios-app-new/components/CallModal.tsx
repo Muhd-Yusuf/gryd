@@ -1,13 +1,16 @@
 /**
- * Call Modal Component
+ * Call Modal Component - Expo Go Stub
  * Full-screen modal for voice/video calls
- * Note: This file is for native platforms. Web uses CallModal.web.tsx
+ *
+ * NOTE: This is a stub for Expo Go which doesn't support react-native-agora.
+ * For full native call support, use a development build (expo prebuild).
+ * Web uses CallModal.web.tsx with agora-rtc-sdk-ng.
  */
 
 // Debug log to track which file is being loaded
-console.log('[CallModal] Loading NATIVE implementation (CallModal.tsx)');
+console.log('[CallModal] Loading NATIVE STUB (CallModal.tsx) - Expo Go compatible');
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
     StyleSheet,
     View,
@@ -18,13 +21,9 @@ import {
     Platform,
 } from 'react-native';
 
-// Log warning if native file is loaded on web
-if (Platform.OS === 'web') {
-    console.warn('[CallModal] WARNING: Web platform is loading native CallModal! This will crash due to react-native-agora import.');
-}
-
 import { MaterialIcons } from '@expo/vector-icons';
-import { RtcSurfaceView, VideoSourceType } from 'react-native-agora';
+// NOTE: react-native-agora is NOT imported here to keep this compatible with Expo Go
+// Video rendering is disabled in this stub version
 import { useTheme } from '../lib/theme';
 import { CallState, CallType, IncomingCall, CallSession } from '../hooks';
 import UserAvatar from './UserAvatar';
@@ -141,49 +140,27 @@ export const CallModal: React.FC<CallModalProps> = ({
                 {/* Video Call Layout */}
                 {isVideoCall ? (
                     <View style={styles.videoContainer}>
-                        {/* Remote video (full screen) */}
-                        {remoteUsers.length > 0 && engine && RtcSurfaceView && VideoSourceType ? (
-                            <RtcSurfaceView
-                                style={styles.remoteVideo}
-                                canvas={{
-                                    uid: remoteUsers[0],
-                                    sourceType: VideoSourceType.VideoSourceRemote,
-                                }}
+                        {/* Video placeholder - Expo Go doesn't support native Agora video */}
+                        <View style={styles.videoPlaceholder}>
+                            <UserAvatar
+                                uri={peerAvatar}
+                                name={peerName}
+                                style={styles.videoPlaceholderAvatar}
                             />
-                        ) : (
-                            <View style={styles.videoPlaceholder}>
-                                <UserAvatar
-                                    uri={peerAvatar}
-                                    name={peerName}
-                                    style={styles.videoPlaceholderAvatar}
-                                />
-                                <Text style={styles.videoPlaceholderName}>{peerName}</Text>
-                                {isConnecting && <Text style={styles.connectingText}>{getStatusText()}</Text>}
-                                {Platform.OS === 'web' && isConnected && (
-                                    <Text style={styles.connectingText}>Video calls not supported on web</Text>
-                                )}
-                            </View>
-                        )}
+                            <Text style={styles.videoPlaceholderName}>{peerName}</Text>
+                            {isConnecting && <Text style={styles.connectingText}>{getStatusText()}</Text>}
+                            {isConnected && (
+                                <Text style={styles.connectingText}>Video requires a native build</Text>
+                            )}
+                            <Text style={[styles.connectingText, { marginTop: 8, fontSize: 12 }]}>
+                                Use web version for video calls in Expo Go
+                            </Text>
+                        </View>
 
-                        {/* Local video (picture-in-picture) */}
-                        {isVideoEnabled && engine && RtcSurfaceView && VideoSourceType ? (
-                            <View style={styles.localVideoContainer}>
-                                <RtcSurfaceView
-                                    style={styles.localVideo}
-                                    canvas={{
-                                        uid: 0,
-                                        sourceType: VideoSourceType.VideoSourceCamera,
-                                    }}
-                                />
-                                <TouchableOpacity style={styles.switchCameraButton} onPress={onSwitchCamera}>
-                                    <MaterialIcons name="flip-camera-ios" size={20} color="#FFFFFF" />
-                                </TouchableOpacity>
-                            </View>
-                        ) : (
-                            <View style={[styles.localVideoContainer, styles.localVideoDisabled]}>
-                                <MaterialIcons name="videocam-off" size={32} color="#FFFFFF" />
-                            </View>
-                        )}
+                        {/* Local video placeholder */}
+                        <View style={[styles.localVideoContainer, styles.localVideoDisabled]}>
+                            <MaterialIcons name="videocam-off" size={32} color="#FFFFFF" />
+                        </View>
 
                         {/* Duration overlay */}
                         {isConnected && (

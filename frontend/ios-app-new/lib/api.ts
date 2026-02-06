@@ -13,23 +13,48 @@ const withApiSuffix = (baseUrl: string) => {
 
 const resolveBaseUrl = () => {
     const explicit = process.env.EXPO_PUBLIC_API_BASE_URL;
-    if (explicit) {
-        return withApiSuffix(explicit);
-    }
+    console.log('[API] Platform:', Platform.OS);
+    console.log('[API] EXPO_PUBLIC_API_BASE_URL:', explicit);
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        return withApiSuffix(window.location.origin);
-    }
-
-    const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
-    if (hostUri) {
-        const host = String(hostUri).split(':')[0];
-        if (host) {
-            return `http://${host}:3000/api`;
+    // For native apps (iOS/Android), use Expo's hostUri to get the dev machine's IP
+    // This is necessary because "localhost" on mobile refers to the phone, not your computer
+    if (Platform.OS !== 'web') {
+        const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
+        console.log('[API] hostUri:', hostUri);
+        if (hostUri) {
+            const host = String(hostUri).split(':')[0];
+            if (host && host !== 'localhost') {
+                // Use the same host IP but port 4000 for backend
+                const url = `http://${host}:4000/api`;
+                console.log('[API] Using hostUri-based URL for native:', url);
+                return url;
+            }
+        }
+        // Fallback for native when hostUri not available
+        if (explicit) {
+            // Replace localhost with 10.0.2.2 for Android emulator or keep for iOS simulator
+            const url = withApiSuffix(explicit);
+            console.log('[API] Using explicit URL for native:', url);
+            return url;
         }
     }
 
-    return 'http://localhost:3000/api';
+    // For web, use explicit env var or window.location.origin
+    if (Platform.OS === 'web') {
+        if (explicit) {
+            const url = withApiSuffix(explicit);
+            console.log('[API] Using explicit URL for web:', url);
+            return url;
+        }
+        if (typeof window !== 'undefined') {
+            const url = withApiSuffix(window.location.origin);
+            console.log('[API] Using window.location.origin:', url);
+            return url;
+        }
+    }
+
+    console.log('[API] Using fallback localhost:4000/api');
+    return 'http://localhost:4000/api';
 };
 
 let API_BASE_URL = resolveBaseUrl();

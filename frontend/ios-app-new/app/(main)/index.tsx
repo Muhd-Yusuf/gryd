@@ -1434,7 +1434,7 @@ const TenantCommunityScreen = () => {
                     </Text>
                     <TouchableOpacity
                         style={styles.emptyButton}
-                        onPress={() => router.replace('/welcome')}
+                        onPress={() => router.replace('/login')}
                     >
                         <Text style={styles.emptyButtonText}>Go Back</Text>
                     </TouchableOpacity>

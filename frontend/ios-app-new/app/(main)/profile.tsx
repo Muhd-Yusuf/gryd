@@ -69,7 +69,7 @@ const ProfileScreen = () => {
         try {
             const authUser = await getAuthUser();
             if (!authUser) {
-                router.replace('/welcome');
+                router.replace('/login');
                 return;
             }
 
@@ -351,7 +351,7 @@ const ProfileScreen = () => {
 
         try {
             await logout();
-            router.replace('/welcome');
+            router.replace('/login');
         } catch (err: any) {
             setError(err.message || 'Failed to log out');
         }

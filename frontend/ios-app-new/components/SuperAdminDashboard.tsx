@@ -533,7 +533,7 @@ const SuperAdminDashboard = () => {
 
     const handleLogout = async () => {
         await logout();
-        router.replace('/welcome');
+        router.replace('/login');
     };
 
     // Open suspend modal
@@ -845,6 +845,12 @@ const SuperAdminDashboard = () => {
                     <TouchableOpacity style={styles.topBarIconButton} onPress={toggleTheme}>
                         <MaterialIcons name={mode === 'dark' ? 'light-mode' : 'dark-mode'} size={20} color={colors.textMuted} />
                     </TouchableOpacity>
+                    {/* Logout button for mobile */}
+                    {isMobile && (
+                        <TouchableOpacity style={styles.topBarIconButton} onPress={handleLogout}>
+                            <MaterialIcons name="logout" size={20} color={colors.error || '#EF4444'} />
+                        </TouchableOpacity>
+                    )}
                 </View>
                 {!isMobile && <View style={styles.topBarDivider} />}
                 <View style={styles.profileSection}>

@@ -8,17 +8,25 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
+    ScrollView,
+    useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sun, Moon } from 'lucide-react-native';
+import { Sun, Moon, ArrowLeft } from 'lucide-react-native';
 import { authVerifyOtp, authSendOtp } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 
 export default function VerifyOtpScreen() {
     const router = useRouter();
     const { colors, mode, toggleTheme } = useTheme();
-    const styles = createStyles(colors);
+    const { width } = useWindowDimensions();
+    const isWeb = Platform.OS === 'web';
+    const isMobileView = !isWeb || width < 768;
+
+    const mobileStyles = createMobileStyles(colors);
+    const webStyles = createWebStyles(colors);
+
     const params = useLocalSearchParams<{
         serverCode: string;
         subgridId: string;
@@ -144,158 +152,446 @@ export default function VerifyOtpScreen() {
         }
     };
 
-    return (
-        <SafeAreaView style={styles.container}>
-            {/* Header with theme toggle */}
-            <View style={styles.header}>
-                <View style={styles.logoContainer}>
-                    <Text style={styles.logoText}>THE GRYD</Text>
-                </View>
-                <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme}>
-                    {mode === 'dark' ? (
-                        <Sun color={colors.text} size={20} />
-                    ) : (
-                        <Moon color={colors.text} size={20} />
-                    )}
-                </TouchableOpacity>
-            </View>
+    const handleBack = () => {
+        router.back();
+    };
 
+    // Shared OTP inputs
+    const renderOtpInputs = (styles: any) => (
+        <View style={styles.otpContainer}>
+            {otp.map((digit, index) => (
+                <TextInput
+                    key={index}
+                    ref={(ref) => (inputRefs.current[index] = ref)}
+                    style={[
+                        styles.otpInput,
+                        digit && styles.otpInputFilled,
+                        error && styles.otpInputError,
+                    ]}
+                    value={digit}
+                    onChangeText={(value) => handleOtpChange(value, index)}
+                    onKeyPress={(e) => handleKeyPress(e, index)}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    selectTextOnFocus
+                    autoFocus={index === 0}
+                />
+            ))}
+        </View>
+    );
+
+    // Mobile view
+    if (isMobileView) {
+        return (
+            <SafeAreaView style={mobileStyles.container}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={mobileStyles.container}
+                >
+                    <ScrollView contentContainerStyle={mobileStyles.scrollContent}>
+                        <View style={mobileStyles.topRow}>
+                            <TouchableOpacity style={mobileStyles.backButton} onPress={handleBack}>
+                                <ArrowLeft color={colors.text} size={24} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={mobileStyles.themeToggle} onPress={toggleTheme}>
+                                {mode === 'dark' ? (
+                                    <Sun color={colors.text} size={22} />
+                                ) : (
+                                    <Moon color={colors.text} size={22} />
+                                )}
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={mobileStyles.header}>
+                            <Text style={mobileStyles.title}>Verify Your Email</Text>
+                            <Text style={mobileStyles.subtitle}>
+                                We sent a 6-digit code to{'\n'}
+                                <Text style={mobileStyles.emailHighlight}>{params.email}</Text>
+                            </Text>
+                        </View>
+
+                        <View style={mobileStyles.form}>
+                            {renderOtpInputs(mobileStyles)}
+
+                            {!!error && (
+                                <Text style={mobileStyles.errorText}>{error}</Text>
+                            )}
+
+                            <TouchableOpacity
+                                style={[mobileStyles.submitButton, loading && mobileStyles.buttonDisabled]}
+                                onPress={() => handleVerify()}
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator size="small" color={colors.primaryText} />
+                                ) : (
+                                    <Text style={mobileStyles.submitButtonText}>Verify Code</Text>
+                                )}
+                            </TouchableOpacity>
+
+                            <View style={mobileStyles.resendContainer}>
+                                <Text style={mobileStyles.resendText}>Didn't receive the code? </Text>
+                                {canResend ? (
+                                    <TouchableOpacity onPress={handleResend} disabled={resending}>
+                                        <Text style={mobileStyles.resendLink}>
+                                            {resending ? 'Sending...' : 'Resend'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ) : (
+                                    <Text style={mobileStyles.countdownText}>
+                                        Resend in {countdown}s
+                                    </Text>
+                                )}
+                            </View>
+                        </View>
+
+                        <View style={mobileStyles.footer}>
+                            <Text style={mobileStyles.footerText}>
+                                Already have an account?{' '}
+                            </Text>
+                            <TouchableOpacity onPress={() => router.push('/login')}>
+                                <Text style={mobileStyles.loginLink}>Login</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        );
+    }
+
+    // Web view
+    return (
+        <SafeAreaView style={webStyles.container}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.keyboardView}
+                style={webStyles.container}
             >
-                <View style={styles.content}>
-                    <View style={styles.card}>
-                        <Text style={styles.title}>Verify Your Email</Text>
-                        <Text style={styles.subtitle}>
-                            We sent a 6-digit code to{'\n'}
-                            <Text style={styles.emailText}>{params.email}</Text>
-                        </Text>
-
-                        <View style={styles.otpContainer}>
-                            {otp.map((digit, index) => (
-                                <TextInput
-                                    key={index}
-                                    ref={(ref) => (inputRefs.current[index] = ref)}
-                                    style={[
-                                        styles.otpInput,
-                                        digit && styles.otpInputFilled,
-                                        error && styles.otpInputError,
-                                    ]}
-                                    value={digit}
-                                    onChangeText={(value) => handleOtpChange(value, index)}
-                                    onKeyPress={(e) => handleKeyPress(e, index)}
-                                    keyboardType="number-pad"
-                                    maxLength={1}
-                                    selectTextOnFocus
-                                    autoFocus={index === 0}
-                                />
-                            ))}
+                <ScrollView
+                    contentContainerStyle={webStyles.shell}
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={webStyles.leftPanel}>
+                        <View style={webStyles.logoRow}>
+                            <View style={webStyles.logoMark}>
+                                <View style={[webStyles.hashLine, webStyles.hashLineVerticalLeft]} />
+                                <View style={[webStyles.hashLine, webStyles.hashLineVerticalRight]} />
+                                <View style={[webStyles.hashLine, webStyles.hashLineHorizontalTop]} />
+                                <View style={[webStyles.hashLine, webStyles.hashLineHorizontalBottom]} />
+                            </View>
+                            <Text style={webStyles.logoText}>THE GRYD</Text>
                         </View>
 
-                        {!!error && (
-                            <Text style={styles.errorText}>{error}</Text>
-                        )}
-
-                        <TouchableOpacity
-                            style={[styles.button, loading && styles.buttonDisabled]}
-                            onPress={() => handleVerify()}
-                            disabled={loading}
-                        >
-                            {loading ? (
-                                <ActivityIndicator size="small" color={colors.primaryText} />
-                            ) : (
-                                <Text style={styles.buttonText}>Verify Code</Text>
-                            )}
-                        </TouchableOpacity>
-
-                        <View style={styles.resendContainer}>
-                            <Text style={styles.resendText}>Didn't receive the code? </Text>
-                            {canResend ? (
-                                <TouchableOpacity onPress={handleResend} disabled={resending}>
-                                    <Text style={styles.resendLink}>
-                                        {resending ? 'Sending...' : 'Resend'}
-                                    </Text>
-                                </TouchableOpacity>
-                            ) : (
-                                <Text style={styles.countdownText}>
-                                    Resend in {countdown}s
-                                </Text>
-                            )}
+                        <View style={webStyles.welcomeBlock}>
+                            <Text style={webStyles.welcomeTitle}>Welcome to The Gryd</Text>
                         </View>
                     </View>
-                </View>
+
+                    <View style={webStyles.rightPanel}>
+                        <TouchableOpacity style={webStyles.themeToggle} onPress={toggleTheme}>
+                            {mode === 'dark' ? (
+                                <Sun color={colors.text} size={20} />
+                            ) : (
+                                <Moon color={colors.text} size={20} />
+                            )}
+                        </TouchableOpacity>
+                        <View style={webStyles.formCard}>
+                            <Text style={webStyles.title}>Verify Your Email</Text>
+                            <Text style={webStyles.subtitle}>
+                                We sent a 6-digit code to{'\n'}
+                                <Text style={webStyles.emailHighlight}>{params.email}</Text>
+                            </Text>
+
+                            {!!error && <Text style={webStyles.errorText}>{error}</Text>}
+
+                            {renderOtpInputs(webStyles)}
+
+                            <TouchableOpacity
+                                style={[webStyles.button, loading && webStyles.buttonDisabled]}
+                                onPress={() => handleVerify()}
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator size="small" color={colors.primaryText} />
+                                ) : (
+                                    <Text style={webStyles.buttonText}>Verify Code</Text>
+                                )}
+                            </TouchableOpacity>
+
+                            <View style={webStyles.resendContainer}>
+                                <Text style={webStyles.resendText}>Didn't receive the code? </Text>
+                                {canResend ? (
+                                    <TouchableOpacity onPress={handleResend} disabled={resending}>
+                                        <Text style={webStyles.resendLink}>
+                                            {resending ? 'Sending...' : 'Resend'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ) : (
+                                    <Text style={webStyles.countdownText}>
+                                        Resend in {countdown}s
+                                    </Text>
+                                )}
+                            </View>
+
+                            <View style={webStyles.signupContainer}>
+                                <Text style={webStyles.signupText}>Already have an account? </Text>
+                                <TouchableOpacity onPress={() => router.push('/login')}>
+                                    <Text style={webStyles.signupLink}>Login</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
             backgroundColor: colors.appBg,
         },
-        header: {
+        shell: {
+            flexGrow: 1,
+            flexDirection: 'row',
+            alignItems: 'stretch',
+        },
+        leftPanel: {
+            flex: 1,
+            backgroundColor: '#000000',
+            paddingHorizontal: 32,
+            paddingTop: 26,
+            paddingBottom: 80,
+            justifyContent: 'space-between',
+            alignItems: 'center',
+        },
+        logoRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            alignSelf: 'center',
+        },
+        logoMark: {
+            width: 18,
+            height: 18,
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+            transform: [{ rotate: '-12deg' }],
+        },
+        hashLine: {
+            position: 'absolute',
+            backgroundColor: '#FFFFFF',
+            borderRadius: 1,
+        },
+        hashLineVerticalLeft: {
+            width: 2,
+            height: 16,
+            left: 4,
+        },
+        hashLineVerticalRight: {
+            width: 2,
+            height: 16,
+            right: 4,
+        },
+        hashLineHorizontalTop: {
+            height: 2,
+            width: 16,
+            top: 4,
+        },
+        hashLineHorizontalBottom: {
+            height: 2,
+            width: 16,
+            bottom: 4,
+        },
+        logoText: {
+            fontSize: 12,
+            fontFamily: 'Inter_700Bold',
+            letterSpacing: 1.4,
+            color: '#FFFFFF',
+        },
+        welcomeBlock: {
+            alignSelf: 'center',
+            alignItems: 'center',
+            marginBottom: 12,
+        },
+        welcomeTitle: {
+            fontSize: 16,
+            fontFamily: 'Inter_600SemiBold',
+            color: '#FFFFFF',
+            letterSpacing: 0.2,
+            textAlign: 'center',
+        },
+        rightPanel: {
+            flex: 1,
+            backgroundColor: colors.appBg,
+            padding: 48,
+            justifyContent: 'center',
+            borderLeftWidth: 1,
+            borderLeftColor: colors.border,
+        },
+        themeToggle: {
+            position: 'absolute',
+            top: 20,
+            right: 20,
+            padding: 10,
+            borderRadius: 20,
+            backgroundColor: colors.surface,
+        },
+        formCard: {
+            maxWidth: 360,
+            width: '100%',
+            alignSelf: 'center',
+        },
+        title: {
+            fontSize: 20,
+            fontFamily: 'Inter_700Bold',
+            color: colors.text,
+            marginBottom: 6,
+        },
+        subtitle: {
+            fontSize: 12,
+            fontFamily: 'Inter_400Regular',
+            color: colors.textMuted,
+            marginBottom: 20,
+            lineHeight: 16,
+        },
+        emailHighlight: {
+            fontFamily: 'Inter_600SemiBold',
+            color: colors.text,
+        },
+        otpContainer: {
+            flexDirection: 'row',
+            gap: 10,
+            marginBottom: 18,
+        },
+        otpInput: {
+            width: 36,
+            height: 40,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 10,
+            backgroundColor: colors.surface,
+            fontSize: 12,
+            fontFamily: 'Inter_600SemiBold',
+            textAlign: 'center',
+            color: colors.text,
+        },
+        otpInputFilled: {
+            borderColor: colors.text,
+        },
+        otpInputError: {
+            borderColor: '#DC2626',
+        },
+        errorText: {
+            color: '#DC2626',
+            fontSize: 11,
+            fontFamily: 'Inter_500Medium',
+            marginBottom: 12,
+        },
+        button: {
+            backgroundColor: colors.primary,
+            borderRadius: 10,
+            height: 36,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: 2,
+        },
+        buttonDisabled: {
+            opacity: 0.7,
+        },
+        buttonText: {
+            color: colors.primaryText,
+            fontSize: 12,
+            fontFamily: 'Inter_600SemiBold',
+        },
+        resendContainer: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginTop: 10,
+        },
+        resendText: {
+            fontSize: 11,
+            fontFamily: 'Inter_400Regular',
+            color: colors.textMuted,
+        },
+        resendLink: {
+            fontSize: 11,
+            fontFamily: 'Inter_600SemiBold',
+            color: colors.text,
+        },
+        countdownText: {
+            fontSize: 11,
+            fontFamily: 'Inter_400Regular',
+            color: colors.textMuted,
+        },
+        signupContainer: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: 20,
+        },
+        signupText: {
+            fontSize: 11,
+            fontFamily: 'Inter_400Regular',
+            color: colors.textMuted,
+        },
+        signupLink: {
+            fontSize: 11,
+            fontFamily: 'Inter_600SemiBold',
+            color: colors.primary,
+        },
+    });
+
+const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: colors.appBg,
+        },
+        scrollContent: {
+            padding: 30,
+            flexGrow: 1,
+        },
+        topRow: {
             flexDirection: 'row',
             justifyContent: 'space-between',
             alignItems: 'center',
-            paddingHorizontal: 24,
-            paddingVertical: 16,
+            marginBottom: 40,
         },
-        logoContainer: {
-            flexDirection: 'row',
-            alignItems: 'center',
-        },
-        logoText: {
-            fontSize: 18,
-            fontWeight: '700',
-            color: colors.text,
+        backButton: {
         },
         themeToggle: {
             padding: 8,
             borderRadius: 20,
             backgroundColor: colors.surface,
         },
-        keyboardView: {
-            flex: 1,
-        },
-        content: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 24,
-        },
-        card: {
-            width: '100%',
-            maxWidth: 400,
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            padding: 32,
-            alignItems: 'center',
+        header: {
+            marginBottom: 40,
         },
         title: {
-            fontSize: 22,
-            fontWeight: '600',
+            fontSize: 32,
+            fontWeight: 'bold',
             color: colors.text,
-            marginBottom: 12,
-            textAlign: 'center',
+            marginBottom: 8,
         },
         subtitle: {
-            fontSize: 15,
+            fontSize: 16,
             color: colors.textMuted,
-            textAlign: 'center',
-            marginBottom: 32,
-            lineHeight: 22,
+            lineHeight: 24,
         },
-        emailText: {
+        emailHighlight: {
             fontWeight: '600',
             color: colors.text,
+        },
+        form: {
+            gap: 20,
         },
         otpContainer: {
             flexDirection: 'row',
+            justifyContent: 'center',
             gap: 10,
-            marginBottom: 24,
         },
         otpInput: {
             width: 48,
@@ -303,7 +599,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             borderWidth: 1,
             borderColor: colors.border,
             borderRadius: 12,
-            backgroundColor: colors.appBg,
+            backgroundColor: colors.surface,
             fontSize: 24,
             fontWeight: '600',
             textAlign: 'center',
@@ -311,7 +607,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         otpInputFilled: {
             borderColor: colors.primary,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.appBg,
         },
         otpInputError: {
             borderColor: colors.error,
@@ -319,28 +615,28 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         errorText: {
             color: colors.error,
             fontSize: 14,
-            marginBottom: 16,
             textAlign: 'center',
         },
-        button: {
-            width: '100%',
+        submitButton: {
             backgroundColor: colors.primary,
             borderRadius: 30,
-            paddingVertical: 16,
+            height: 56,
+            justifyContent: 'center',
             alignItems: 'center',
+            marginTop: 10,
         },
         buttonDisabled: {
             opacity: 0.7,
         },
-        buttonText: {
+        submitButtonText: {
             color: colors.primaryText,
-            fontSize: 16,
-            fontWeight: '600',
+            fontSize: 18,
+            fontWeight: 'bold',
         },
         resendContainer: {
             flexDirection: 'row',
+            justifyContent: 'center',
             alignItems: 'center',
-            marginTop: 24,
         },
         resendText: {
             fontSize: 14,
@@ -354,5 +650,22 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         countdownText: {
             fontSize: 14,
             color: colors.textSubtle,
+        },
+        footer: {
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginTop: 40,
+            flexWrap: 'wrap',
+        },
+        footerText: {
+            color: colors.textMuted,
+            fontSize: 14,
+            textAlign: 'center',
+        },
+        loginLink: {
+            color: colors.primary,
+            fontSize: 14,
+            fontWeight: '600',
         },
     });

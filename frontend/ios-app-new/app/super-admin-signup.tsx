@@ -88,7 +88,7 @@ export default function SuperAdminSignupScreen() {
                     <View style={styles.header}>
                         <TouchableOpacity
                             style={styles.backButton}
-                            onPress={() => router.replace('/welcome')}
+                            onPress={() => router.replace('/login')}
                         >
                             <MaterialIcons name="arrow-back" size={24} color={colors.text} />
                         </TouchableOpacity>
@@ -206,7 +206,7 @@ export default function SuperAdminSignupScreen() {
                                 Already have an account?{' '}
                                 <Text
                                     style={styles.linkText}
-                                    onPress={() => router.replace('/welcome')}
+                                    onPress={() => router.replace('/login')}
                                 >
                                     Login here
                                 </Text>

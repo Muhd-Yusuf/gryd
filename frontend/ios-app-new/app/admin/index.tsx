@@ -15,7 +15,7 @@ export default function CreditUnionServerPage() {
         const checkAccess = async () => {
             const authenticated = await isAuthenticated();
             if (!authenticated) {
-                router.replace('/welcome');
+                router.replace('/login');
                 return;
             }
 
