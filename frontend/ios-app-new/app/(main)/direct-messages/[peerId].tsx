@@ -34,7 +34,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import { useTheme } from '../../../lib/theme';
 import { Attachment, EMOJI_SET, STICKER_SET, formatDuration, twemojiUrl } from '../../../lib/chatMedia';
-import { getCachedUser, cacheUser } from '../../../lib/userCache';
+import { getCachedUser, cacheUser, getCachedMessages, cacheMessages, addMessageToCache, getCachedSubgrids, cacheSubgrids, getCachedFriends, cacheFriends } from '../../../lib/userCache';
 import { useAgoraCall } from '../../../hooks';
 import { useCallContext } from '../../../contexts/CallContext';
 import { CallModalDefault as CallModal } from '../../../components';
@@ -258,11 +258,16 @@ const DirectMessageChatScreen = () => {
     const initialSubgridId = normalizeParam(params.subgridId);
     const [currentUserId, setCurrentUserId] = useState(getUserId());
     const [tenantId, setTenantId] = useState(getTenantId());
-    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
+    const [subgrids, setSubgrids] = useState<Subgrid[]>(() => {
+        const tid = getTenantId();
+        return tid ? (getCachedSubgrids(tid) || []) : [];
+    });
     const [subgridId, setSubgridId] = useState(initialSubgridId);
     const [members, setMembers] = useState<Member[]>([]);
     const [channels, setChannels] = useState<Channel[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<Message[]>(() => {
+        return peerId ? (getCachedMessages(peerId) as Message[] || []) : [];
+    });
     const [draft, setDraft] = useState('');
     const [error, setError] = useState('');
     const [emojiOpen, setEmojiOpen] = useState(false);
@@ -378,14 +383,29 @@ const DirectMessageChatScreen = () => {
 
     useEffect(() => {
         const loadSubgrids = async () => {
-            if (!tenantId || subgridId) return;
+            if (!tenantId) return;
+
+            // Use cached subgrids first for instant display
+            const cached = getCachedSubgrids(tenantId);
+            if (cached && cached.length > 0 && !subgridId) {
+                setSubgrids(cached);
+                setSubgridId(cached[0]._id);
+            }
+
+            // Skip API call if we already have subgridId set
+            if (subgridId) return;
+
             try {
                 const response = await communityGet(`/tenants/${tenantId}/subgrids`);
                 const list = response?.data || [];
                 setSubgrids(list);
+                cacheSubgrids(tenantId, list);
                 if (!subgridId && list.length > 0) setSubgridId(list[0]._id);
             } catch (err: any) {
-                setError(err.message || 'Failed to load subgrids.');
+                // Keep cached data on error
+                if (!cached || cached.length === 0) {
+                    setError(err.message || 'Failed to load subgrids.');
+                }
             }
         };
         loadSubgrids();
@@ -462,12 +482,25 @@ const DirectMessageChatScreen = () => {
         const loadMessages = async () => {
             if (!subgridId || !peerId) return;
             setError('');
+
+            // Load from cache first for instant display
+            const cached = getCachedMessages(peerId);
+            if (cached && cached.length > 0) {
+                setMessages(cached as Message[]);
+            }
+
+            // Then fetch fresh data in background
             try {
                 const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${peerId}`);
                 const msgs = response?.data || [];
                 setMessages(msgs);
+                // Update cache with fresh data
+                cacheMessages(peerId, msgs);
             } catch (err: any) {
-                setMessages([]);
+                // Keep cached messages on error, only clear if no cache
+                if (!cached || cached.length === 0) {
+                    setMessages([]);
+                }
                 setError(err.message || 'Failed to load direct messages.');
             }
         };

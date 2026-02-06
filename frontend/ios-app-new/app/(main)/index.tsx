@@ -32,7 +32,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, initiateChannelCall, uploadFile, logout } from '../../lib/api';
-import { cacheUsers } from '../../lib/userCache';
+import { cacheUsers, getCachedSubgrids, cacheSubgrids, cacheFriends } from '../../lib/userCache';
 import { useTheme } from '../../lib/theme';
 import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
@@ -212,8 +212,15 @@ const TenantCommunityScreen = () => {
     const userId = getUserId();
     const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
     const [tenantId, setTenantId] = useState(getTenantId());
-    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
-    const [activeSubgridId, setActiveSubgridId] = useState('');
+    const [subgrids, setSubgrids] = useState<Subgrid[]>(() => {
+        const tid = getTenantId();
+        return tid ? (getCachedSubgrids(tid) || []) : [];
+    });
+    const [activeSubgridId, setActiveSubgridId] = useState(() => {
+        const tid = getTenantId();
+        const cached = tid ? getCachedSubgrids(tid) : null;
+        return cached && cached.length > 0 ? cached[0]._id : '';
+    });
     const [channels, setChannels] = useState<Channel[]>([]);
     const [activeChannelId, setActiveChannelId] = useState('');
     const [posts, setPosts] = useState<Post[]>([]);
@@ -305,14 +312,24 @@ const TenantCommunityScreen = () => {
     useEffect(() => {
         const loadSubgrids = async () => {
             if (!tenantId) {
-                // If we don't have a tenant ID yet, we might still be resolving it.
-                // However, if we fail to resolve, an error should be set.
                 return;
             }
+
+            // Use cached subgrids first for instant display
+            const cached = getCachedSubgrids(tenantId);
+            if (cached && cached.length > 0) {
+                setSubgrids(cached);
+                if (!activeSubgridId) {
+                    setActiveSubgridId(cached[0]._id);
+                }
+            }
+
+            // Fetch fresh data in background
             try {
                 const response = await communityGet(`/tenants/${tenantId}/subgrids`);
                 const list = response?.data || [];
                 setSubgrids(list);
+                cacheSubgrids(tenantId, list);
                 if (!activeSubgridId && list.length > 0) {
                     setActiveSubgridId(list[0]._id);
                 }
@@ -367,10 +384,12 @@ const TenantCommunityScreen = () => {
                     cacheUsers(memberProfiles);
                 }
                 if (friendsRes.status === 'fulfilled') {
-                    setFriends(friendsRes.value?.data?.friends || []);
+                    const friendsList = friendsRes.value?.data?.friends || [];
                     const users = friendsRes.value?.data?.users || {};
+                    setFriends(friendsList);
                     setFriendUsers(users);
-                    cacheUsers(users);
+                    // Cache friends data for instant DM loading
+                    cacheFriends(activeSubgridId, friendsList, users);
                 }
                 if (eventsRes.status === 'fulfilled') {
                     setEvents(eventsRes.value?.data || []);

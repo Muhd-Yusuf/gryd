@@ -22,7 +22,7 @@ import { Platform } from 'react-native';
 import { communityGet, communityPost, communityDelete, getAuthUser, getTenantId, getUserId, resolveTenantId, resolveUserId, getOnlineStatus, updatePresence, setUserOnline, uploadFile } from '../../../lib/api';
 import { useTheme } from '../../../lib/theme';
 import { formatRelativeTime, formatMessageDate, Attachment, twemojiUrl } from '../../../lib/chatMedia';
-import { getCachedUsers, cacheUsers, getAllCachedUsers } from '../../../lib/userCache';
+import { getCachedUsers, cacheUsers, getAllCachedUsers, getCachedSubgrids, cacheSubgrids, getCachedFriends, cacheFriends } from '../../../lib/userCache';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 import { useAgoraCall } from '../../../hooks';
@@ -177,10 +177,27 @@ const DirectMessagesScreen = () => {
     const initialSubgridId = normalizeParam(params.subgridId);
     const [userId, setUserId] = useState(getUserId() || '');
     const [tenantId, setTenantId] = useState(getTenantId());
-    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
-    const [subgridId, setSubgridId] = useState(initialSubgridId);
+    const [subgrids, setSubgrids] = useState<Subgrid[]>(() => {
+        const tid = getTenantId();
+        return tid ? (getCachedSubgrids(tid) || []) : [];
+    });
+    const [subgridId, setSubgridId] = useState(() => {
+        if (initialSubgridId) return initialSubgridId;
+        const tid = getTenantId();
+        const cached = tid ? getCachedSubgrids(tid) : null;
+        return cached && cached.length > 0 ? cached[0]._id : '';
+    });
     const [members, setMembers] = useState<Member[]>([]);
-    const [friends, setFriends] = useState<string[]>([]);
+    const [friends, setFriends] = useState<string[]>(() => {
+        const tid = getTenantId();
+        const cached = tid ? getCachedSubgrids(tid) : null;
+        const sgId = cached && cached.length > 0 ? cached[0]._id : '';
+        if (sgId) {
+            const friendsData = getCachedFriends(sgId);
+            return friendsData?.friends || [];
+        }
+        return [];
+    });
     const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>(() => getAllCachedUsers() as Record<string, UserProfile>);
     const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
     const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
@@ -326,15 +343,30 @@ const DirectMessagesScreen = () => {
     useEffect(() => {
         const loadSubgrids = async () => {
             if (!tenantId) return;
+
+            // Use cached subgrids first for instant display
+            const cached = getCachedSubgrids(tenantId);
+            if (cached && cached.length > 0) {
+                setSubgrids(cached);
+                if (!subgridId) {
+                    setSubgridId(cached[0]._id);
+                }
+            }
+
+            // Fetch fresh data in background
             try {
                 const response = await communityGet(`/tenants/${tenantId}/subgrids`);
                 const list = response?.data || [];
                 setSubgrids(list);
+                cacheSubgrids(tenantId, list);
                 if (!subgridId && list.length > 0) {
                     setSubgridId(list[0]._id);
                 }
             } catch (err: any) {
-                setError(err.message || 'Failed to load subgrids.');
+                // Keep cached data on error
+                if (!cached || cached.length === 0) {
+                    setError(err.message || 'Failed to load subgrids.');
+                }
             }
         };
 
@@ -347,6 +379,14 @@ const DirectMessagesScreen = () => {
     );
 
     const refreshFriendState = async (activeSubgridId: string) => {
+        // Load from cache first for instant display
+        const cachedFriends = getCachedFriends(activeSubgridId);
+        if (cachedFriends) {
+            setFriends(cachedFriends.friends);
+            setFriendUsers(prev => ({ ...prev, ...cachedFriends.users }));
+        }
+
+        // Then fetch fresh data in background
         try {
             const results = await Promise.allSettled([
                 communityGet(`/subgrids/${activeSubgridId}/friends`),
@@ -356,14 +396,14 @@ const DirectMessagesScreen = () => {
             ]);
             const [friendsRes, incomingRes, outgoingRes, blocksRes] = results;
             if (friendsRes.status === 'fulfilled') {
-                setFriends(friendsRes.value?.data?.friends || []);
+                const friendsList = friendsRes.value?.data?.friends || [];
                 const users = friendsRes.value?.data?.users || {};
+                setFriends(friendsList);
                 setFriendUsers(users);
-                // Cache user profiles for instant loading on next visit
-                cacheUsers(users);
-            } else {
+                // Cache for instant loading on next visit
+                cacheFriends(activeSubgridId, friendsList, users);
+            } else if (!cachedFriends) {
                 setFriends([]);
-                // Keep cached users if API fails
             }
             if (incomingRes.status === 'fulfilled') {
                 setIncomingRequests(incomingRes.value?.data || []);
