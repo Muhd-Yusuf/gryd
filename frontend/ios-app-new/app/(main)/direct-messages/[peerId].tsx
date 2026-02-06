@@ -34,6 +34,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import { useTheme } from '../../../lib/theme';
 import { Attachment, EMOJI_SET, STICKER_SET, formatDuration, twemojiUrl } from '../../../lib/chatMedia';
+import { getCachedUser, cacheUser } from '../../../lib/userCache';
 import { useAgoraCall } from '../../../hooks';
 import { useCallContext } from '../../../contexts/CallContext';
 import { CallModalDefault as CallModal } from '../../../components';
@@ -263,7 +264,6 @@ const DirectMessageChatScreen = () => {
     const [channels, setChannels] = useState<Channel[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [draft, setDraft] = useState('');
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [stickerOpen, setStickerOpen] = useState(false);
@@ -271,7 +271,7 @@ const DirectMessageChatScreen = () => {
     const [recording, setRecording] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
     const [recordingError, setRecordingError] = useState('');
-    const [friendName, setFriendName] = useState('User');
+    const [friendName, setFriendName] = useState('');
     const [friendUsername, setFriendUsername] = useState<string | null>(null);
     const [friendAvatar, setFriendAvatar] = useState<string | undefined>(undefined);
     const [friendStakeholderBadge, setFriendStakeholderBadge] = useState<StakeholderBadge | null>(null);
@@ -293,6 +293,20 @@ const DirectMessageChatScreen = () => {
 
     // Get call context for managing calls
     const { incomingCall, clearIncomingCall, startActiveCall, markCallConnected, endCall: contextEndCall } = useCallContext();
+
+    // Load friend profile from cache immediately (instant display)
+    useEffect(() => {
+        if (!peerId) return;
+        const cached = getCachedUser(peerId);
+        if (cached) {
+            const name = [cached.firstName, cached.lastName].filter(Boolean).join(' ').trim();
+            if (name || cached.email) setFriendName(name || cached.email || '');
+            if (cached.username) setFriendUsername(cached.username);
+            if (cached.avatarUrl) setFriendAvatar(cached.avatarUrl);
+            if (cached.company) setFriendCompany(cached.company);
+            if (cached.stakeholderBadge) setFriendStakeholderBadge(cached.stakeholderBadge as StakeholderBadge);
+        }
+    }, [peerId]);
 
     // Get answerCall params from URL (when navigating from incoming call overlay)
     const answerCallId = normalizeParam(params.answerCall);
@@ -391,7 +405,7 @@ const DirectMessageChatScreen = () => {
                 const user = users[peerId] as UserProfile | undefined;
                 if (user) {
                     const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
-                    setFriendName(name || user.email || 'Unknown User');
+                    setFriendName(name || user.email || '');
                     setFriendUsername(user.username || null);
                     setFriendAvatar(user.avatarUrl || undefined);
                     setFriendCompany(user.company || null);
@@ -401,13 +415,20 @@ const DirectMessageChatScreen = () => {
                     } else {
                         setFriendStakeholderBadge(null);
                     }
-                } else {
-                    setFriendName('Unknown User');
-                    setFriendUsername(null);
-                    setFriendAvatar(undefined);
-                    setFriendCompany(null);
-                    setFriendStakeholderBadge(null);
+                    // Cache for instant loading next time
+                    cacheUser({
+                        id: peerId,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        email: user.email,
+                        username: user.username,
+                        avatarUrl: user.avatarUrl,
+                        role: user.role,
+                        stakeholderBadge: user.stakeholderBadge,
+                        company: user.company,
+                    });
                 }
+                // If user not found, keep any cached data that was already loaded
             }
             if (blocksRes.status === 'fulfilled') {
                 const blocked = blocksRes.value?.data?.blocked || [];
@@ -440,7 +461,6 @@ const DirectMessageChatScreen = () => {
     useEffect(() => {
         const loadMessages = async () => {
             if (!subgridId || !peerId) return;
-            setLoading(true);
             setError('');
             try {
                 const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${peerId}`);
@@ -449,8 +469,6 @@ const DirectMessageChatScreen = () => {
             } catch (err: any) {
                 setMessages([]);
                 setError(err.message || 'Failed to load direct messages.');
-            } finally {
-                setLoading(false);
             }
         };
         loadMessages();
@@ -883,7 +901,7 @@ const DirectMessageChatScreen = () => {
             .filter(Boolean) as string[];
     }, [channels, peerId, currentUserId, members]);
 
-    const profileHandle = friendUsername ? `@${friendUsername}` : (peerId ? `@user_${peerId.slice(-8)}` : '@unknown');
+    const profileHandle = friendUsername ? `@${friendUsername}` : '';
     const messageGroups = groupMessagesByDate(messages);
     const showSendButton = draft.trim().length > 0 || pendingAttachments.length > 0;
     const formatRecordingTime = (secs: number) => {
@@ -962,7 +980,7 @@ const DirectMessageChatScreen = () => {
                                 />
                             </View>
                             <Text style={styles.profileName}>{friendName}</Text>
-                            <Text style={styles.profileHandle}>{profileHandle}</Text>
+                            {profileHandle ? <Text style={styles.profileHandle}>{profileHandle}</Text> : null}
                             <Text style={styles.profileIntro}>
                                 This is the beginning of your direct message with{'\n'}
                                 <Text style={styles.profileIntroName}>{friendName}</Text>

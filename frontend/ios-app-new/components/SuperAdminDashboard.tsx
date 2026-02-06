@@ -248,7 +248,6 @@ const SuperAdminDashboard = () => {
     // Customer detail view
     const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
     const [customerDetailData, setCustomerDetailData] = useState<any>(null);
-    const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
     const [customerActivities, setCustomerActivities] = useState<ActivityItem[]>([]);
 
     // Add customer modal
@@ -432,7 +431,6 @@ const SuperAdminDashboard = () => {
 
     const handleViewCustomer = async (customer: Customer) => {
         setViewingCustomer(customer);
-        setCustomerDetailLoading(true);
 
         try {
             const response = await getSuperAdminCustomerDetails(customer._id);
@@ -466,8 +464,6 @@ const SuperAdminDashboard = () => {
             }
         } catch (err: any) {
             setError(err.message || 'Failed to load customer details');
-        } finally {
-            setCustomerDetailLoading(false);
         }
     };
 
@@ -1322,11 +1318,7 @@ const SuperAdminDashboard = () => {
                     </View>
                 </View>
 
-                {customerDetailLoading ? (
-                    <View style={styles.detailLoading}>
-                        <ActivityIndicator size="large" color={colors.primary} />
-                    </View>
-                ) : customerDetailData ? (
+                {customerDetailData ? (
                     <>
                         {/* Account Information Card */}
                         <View style={[styles.detailCard, isMobile && styles.detailCardMobile]}>
@@ -3108,10 +3100,6 @@ const createStyles = (colors: any) =>
             color: '#fff',
             fontSize: 14,
             fontWeight: '500',
-        },
-        detailLoading: {
-            padding: 48,
-            alignItems: 'center',
         },
         detailCard: {
             backgroundColor: colors.surface,

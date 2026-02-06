@@ -19,9 +19,10 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { Platform } from 'react-native';
-import { communityGet, communityPost, communityDelete, getAuthUser, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile } from '../../../lib/api';
+import { communityGet, communityPost, communityDelete, getAuthUser, getTenantId, getUserId, resolveTenantId, resolveUserId, getOnlineStatus, updatePresence, setUserOnline, uploadFile } from '../../../lib/api';
 import { useTheme } from '../../../lib/theme';
 import { formatRelativeTime, formatMessageDate, Attachment, twemojiUrl } from '../../../lib/chatMedia';
+import { getCachedUsers, cacheUsers, getAllCachedUsers } from '../../../lib/userCache';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 import { useAgoraCall } from '../../../hooks';
@@ -87,16 +88,15 @@ const normalizeParam = (value?: string | string[]) => {
 };
 
 const labelFromId = (value?: string) => {
-    if (!value) return 'Unknown User';
-    return `User ${String(value).slice(-6)}`;
+    return '';
 };
 
 const buildName = (value?: string, user?: UserProfile | null) => {
     if (user) {
         const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
-        return name || user.email || labelFromId(value);
+        return name || user.email || '';
     }
-    return labelFromId(value);
+    return '';
 };
 
 const formatTimeOnly = (value?: string) => {
@@ -175,13 +175,13 @@ const DirectMessagesScreen = () => {
     const router = useRouter();
     const params = useLocalSearchParams();
     const initialSubgridId = normalizeParam(params.subgridId);
-    const userId = getUserId();
+    const [userId, setUserId] = useState(getUserId() || '');
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [subgridId, setSubgridId] = useState(initialSubgridId);
     const [members, setMembers] = useState<Member[]>([]);
     const [friends, setFriends] = useState<string[]>([]);
-    const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>({});
+    const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>(() => getAllCachedUsers() as Record<string, UserProfile>);
     const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
     const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
     const [blockedIds, setBlockedIds] = useState<string[]>([]);
@@ -194,7 +194,6 @@ const DirectMessagesScreen = () => {
     const [activePeerId, setActivePeerId] = useState('');
     const [messages, setMessages] = useState<Message[]>([]);
     const [draft, setDraft] = useState('');
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [requestsOpen, setRequestsOpen] = useState(true);
     const [blockedOpen, setBlockedOpen] = useState(false);
@@ -294,6 +293,10 @@ const DirectMessagesScreen = () => {
                     email: user.email,
                     avatarUrl: user.avatarUrl,
                 });
+                // Also set userId from auth user if available
+                if (user.userId) {
+                    setUserId(user.userId);
+                }
             })
             .catch(() => {});
         resolveTenantId()
@@ -307,6 +310,14 @@ const DirectMessagesScreen = () => {
                     setError(err.message || 'Failed to resolve tenant.');
                 }
             });
+        // Also resolve userId asynchronously (important for mobile)
+        resolveUserId()
+            .then((id) => {
+                if (isActive && id) {
+                    setUserId(id);
+                }
+            })
+            .catch(() => {});
         return () => {
             isActive = false;
         };
@@ -346,10 +357,13 @@ const DirectMessagesScreen = () => {
             const [friendsRes, incomingRes, outgoingRes, blocksRes] = results;
             if (friendsRes.status === 'fulfilled') {
                 setFriends(friendsRes.value?.data?.friends || []);
-                setFriendUsers(friendsRes.value?.data?.users || {});
+                const users = friendsRes.value?.data?.users || {};
+                setFriendUsers(users);
+                // Cache user profiles for instant loading on next visit
+                cacheUsers(users);
             } else {
                 setFriends([]);
-                setFriendUsers({});
+                // Keep cached users if API fails
             }
             if (incomingRes.status === 'fulfilled') {
                 setIncomingRequests(incomingRes.value?.data || []);
@@ -363,7 +377,9 @@ const DirectMessagesScreen = () => {
             }
             if (blocksRes.status === 'fulfilled') {
                 setBlockedIds(blocksRes.value?.data?.blocked || []);
-                setBlockedUsers(blocksRes.value?.data?.users || {});
+                const users = blocksRes.value?.data?.users || {};
+                setBlockedUsers(users);
+                cacheUsers(users);
             } else {
                 setBlockedIds([]);
                 setBlockedUsers({});
@@ -397,7 +413,6 @@ const DirectMessagesScreen = () => {
     useEffect(() => {
         const loadMembers = async () => {
             if (!subgridId) return;
-            setLoading(true);
             setError('');
             try {
                 const response = await communityGet(`/subgrids/${subgridId}/members`);
@@ -405,8 +420,6 @@ const DirectMessagesScreen = () => {
             } catch (err: any) {
                 setMembers([]);
                 setError(err.message || 'Failed to load members.');
-            } finally {
-                setLoading(false);
             }
         };
 
@@ -473,11 +486,20 @@ const DirectMessagesScreen = () => {
     const peers = friends.filter((friendId) => friendId && friendId !== userId);
     const visiblePeers = peers.filter((peerId) => !blockedSet.has(peerId));
 
-    const filteredPeers = visiblePeers.filter((peerId) =>
-        buildName(peerId, friendUsers[peerId])
-            .toLowerCase()
-            .includes(search.trim().toLowerCase())
-    );
+    const filteredPeers = visiblePeers
+        .filter((peerId) =>
+            buildName(peerId, friendUsers[peerId])
+                .toLowerCase()
+                .includes(search.trim().toLowerCase())
+        )
+        .sort((a, b) => {
+            // Sort by most recent message (like WhatsApp)
+            const msgA = lastMessages[a];
+            const msgB = lastMessages[b];
+            const timeA = msgA?.createdAt ? new Date(msgA.createdAt).getTime() : 0;
+            const timeB = msgB?.createdAt ? new Date(msgB.createdAt).getTime() : 0;
+            return timeB - timeA; // Newest first
+        });
 
     const memberIds = members
         .map((member) => member.userId)
@@ -624,6 +646,31 @@ const DirectMessagesScreen = () => {
             await refreshFriendState(subgridId);
         } catch (err: any) {
             setError(err.message || 'Failed to update block status.');
+        }
+    };
+
+    const handleDeleteMessage = async (messageId: string) => {
+        if (!subgridId) return;
+        const confirmDelete = Platform.OS === 'web'
+            ? window.confirm('Delete this message? This action cannot be undone.')
+            : await new Promise<boolean>((resolve) => {
+                Alert.alert(
+                    'Delete message',
+                    'Delete this message? This action cannot be undone.',
+                    [
+                        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                        { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+                    ]
+                );
+            });
+
+        if (!confirmDelete) return;
+
+        try {
+            await communityDelete(`/subgrids/${subgridId}/direct-messages/${messageId}`);
+            setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+        } catch (error) {
+            console.error('Failed to delete message:', error);
         }
     };
 
@@ -1076,7 +1123,7 @@ const DirectMessagesScreen = () => {
                                     </View>
                                 )}
 
-                                {filteredPeers.length === 0 && !loading && incomingRequests.length === 0 && (
+                                {filteredPeers.length === 0 && incomingRequests.length === 0 && (
                                     <Text style={styles.emptyText}>No direct messages yet.</Text>
                                 )}
                                 {filteredPeers.map((peerId) => {
@@ -1181,9 +1228,11 @@ const DirectMessagesScreen = () => {
                                                 />
                                             </View>
                                             <Text style={styles.profileName}>{activePeerName}</Text>
-                                            <Text style={styles.profileHandle}>
-                                                @{friendUsers[activePeerId]?.username || activePeerId?.slice(-8) || 'user'}
-                                            </Text>
+                                            {friendUsers[activePeerId]?.username && (
+                                                <Text style={styles.profileHandle}>
+                                                    @{friendUsers[activePeerId].username}
+                                                </Text>
+                                            )}
                                             <Text style={styles.profileIntro}>
                                                 This is the beginning of your direct message with{'\n'}
                                                 <Text style={styles.profileIntroName}>{activePeerName}</Text>
@@ -1212,12 +1261,14 @@ const DirectMessagesScreen = () => {
                                             </View>
                                         )}
                                         {sortedMessages.map((message) => {
-                                            const isMe = message.senderId === userId;
+                                            const isMe = String(message.senderId || '') === String(userId || '');
+                                            // Debug: log to verify isMe detection
+                                            console.log('[DM] Message check:', { msgId: message._id, senderId: message.senderId, userId, isMe });
                                             const attachmentList = normalizeAttachments(message);
 
                                             // Render call history entry (like WhatsApp)
                                             if (message.callType || message.kind === 'call') {
-                                                const isOutgoing = message.isOutgoing || message.senderId === userId;
+                                                const isOutgoing = message.isOutgoing || String(message.senderId || '') === String(userId || '');
                                                 const isMissed = message.isMissed || message.callStatus === 'missed';
                                                 const isDeclined = message.isDeclined || message.callStatus === 'declined';
                                                 const callIcon = message.callType === 'video' ? 'videocam' : 'phone';
@@ -1259,6 +1310,15 @@ const DirectMessagesScreen = () => {
 
                                             return (
                                                 <View key={message._id} style={[styles.messageBubbleWrap, isMe && styles.messageBubbleWrapMe]}>
+                                                    {/* Delete button for own messages - appears on left for own messages */}
+                                                    {isMe && (
+                                                        <TouchableOpacity
+                                                            style={styles.messageDeleteBtn}
+                                                            onPress={() => handleDeleteMessage(message._id)}
+                                                        >
+                                                            <MaterialIcons name="delete-outline" size={18} color={colors.error || '#EF4444'} />
+                                                        </TouchableOpacity>
+                                                    )}
                                                     {!isMe && (
                                                         <UserAvatar
                                                             uri={getAvatarUrl(message.senderId)}
@@ -2050,6 +2110,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         messageTimeMe: {
             color: 'rgba(255,255,255,0.7)',
+        },
+        messageDeleteBtn: {
+            padding: 8,
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderRadius: 16,
+            alignSelf: 'center',
+            marginRight: 8,
         },
         // Call history styles
         callHistoryItem: {

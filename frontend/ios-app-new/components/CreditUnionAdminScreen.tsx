@@ -262,7 +262,6 @@ const CreditUnionAdminScreen = () => {
     const [members, setMembers] = useState<Member[]>([]);
     const [memberOnlineStatuses, setMemberOnlineStatuses] = useState<Record<string, boolean>>({});
     const [error, setError] = useState('');
-    const [initialLoading, setInitialLoading] = useState(true);
 
     // UI State
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -336,7 +335,6 @@ const CreditUnionAdminScreen = () => {
     });
     const [channelMembersModalOpen, setChannelMembersModalOpen] = useState(false);
     const [channelMembers, setChannelMembers] = useState<any[]>([]);
-    const [channelMembersLoading, setChannelMembersLoading] = useState(false);
     const [addMemberSearchQuery, setAddMemberSearchQuery] = useState('');
     const [managingChannelId, setManagingChannelId] = useState<string | null>(null);
     const [newCategoryName, setNewCategoryName] = useState('');
@@ -400,11 +398,9 @@ const CreditUnionAdminScreen = () => {
     const [comments, setComments] = useState<any[]>([]);
     const [commentText, setCommentText] = useState('');
     const [commentLoading, setCommentLoading] = useState(false);
-    const [commentsLoading, setCommentsLoading] = useState(false);
 
     // Moderation queue state (server settings)
     const [moderationQueue, setModerationQueue] = useState<ModerationFlag[]>([]);
-    const [moderationLoading, setModerationLoading] = useState(false);
     const [moderationError, setModerationError] = useState('');
     const [moderationMenuOpen, setModerationMenuOpen] = useState<string | null>(null);
     const [moderationDetailOpen, setModerationDetailOpen] = useState(false);
@@ -497,9 +493,6 @@ const CreditUnionAdminScreen = () => {
             })
             .catch((err) => {
                 console.error('[CUA Admin] Failed to load subgrids:', err);
-            })
-            .finally(() => {
-                setInitialLoading(false);
             });
     }, [tenantId]);
 
@@ -551,12 +544,14 @@ const CreditUnionAdminScreen = () => {
     useEffect(() => {
         if (!activeChannelId || !isConnected) return;
 
+        const channelId = String(activeChannelId);
+
         // Join the channel room
-        joinRoom('channel', activeChannelId);
+        joinRoom('channel', channelId);
 
         // Subscribe to new messages
         const unsubscribeNewMessage = subscribe('new_message', (data) => {
-            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+            if (data.roomType === 'channel' && String(data.roomId) === channelId && data.message) {
                 setMessages((prev) => {
                     // Avoid duplicates
                     if (prev.some(m => m._id === data.message._id)) return prev;
@@ -567,7 +562,7 @@ const CreditUnionAdminScreen = () => {
 
         // Subscribe to message updates
         const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
-            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+            if (data.roomType === 'channel' && String(data.roomId) === channelId && data.message) {
                 setMessages((prev) => prev.map(m =>
                     m._id === data.message._id ? data.message : m
                 ));
@@ -576,13 +571,13 @@ const CreditUnionAdminScreen = () => {
 
         // Subscribe to message deletions
         const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
-            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+            if (data.roomType === 'channel' && String(data.roomId) === channelId) {
                 setMessages((prev) => prev.filter(m => m._id !== data.messageId));
             }
         });
 
         return () => {
-            leaveRoom('channel', activeChannelId);
+            leaveRoom('channel', channelId);
             unsubscribeNewMessage();
             unsubscribeMessageUpdated();
             unsubscribeMessageDeleted();
@@ -932,7 +927,6 @@ const CreditUnionAdminScreen = () => {
 
     const loadModerationQueue = async () => {
         if (!activeSubgridId) return;
-        setModerationLoading(true);
         setModerationError('');
         try {
             const response = await communityGet(`/subgrids/${activeSubgridId}/moderation`);
@@ -940,8 +934,6 @@ const CreditUnionAdminScreen = () => {
         } catch (err: any) {
             setModerationError(err.message || 'Failed to load moderation queue.');
             setModerationQueue([]);
-        } finally {
-            setModerationLoading(false);
         }
     };
 
@@ -1206,15 +1198,12 @@ const CreditUnionAdminScreen = () => {
         setChannelMembersModalOpen(true);
         setChannelSettingsModalOpen(false);
         setAddMemberSearchQuery('');
-        setChannelMembersLoading(true);
         try {
             const response = await communityGet(`/subgrids/${activeSubgridId}/channels/${channel._id}/members`);
             setChannelMembers(response?.data || []);
         } catch (err) {
             console.error('Failed to load channel members:', err);
             setChannelMembers([]);
-        } finally {
-            setChannelMembersLoading(false);
         }
     };
 
@@ -2111,7 +2100,6 @@ const CreditUnionAdminScreen = () => {
 
         setCommentTarget({ id: itemId, isPost });
         setCommentModalOpen(true);
-        setCommentsLoading(true);
         setComments([]);
 
         try {
@@ -2126,8 +2114,6 @@ const CreditUnionAdminScreen = () => {
         } catch (err: any) {
             console.error('[Comment] Error fetching comments:', err);
             setError('Failed to load comments');
-        } finally {
-            setCommentsLoading(false);
         }
     };
 
@@ -2370,15 +2356,6 @@ const CreditUnionAdminScreen = () => {
             </View>
         </View>
     );
-
-    if (initialLoading) {
-        return (
-            <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={{ marginTop: 16, color: colors.textMuted, fontSize: 16 }}>Loading server...</Text>
-            </View>
-        );
-    }
 
     return (
         <View style={styles.container}>
@@ -3619,9 +3596,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>CURRENT MEMBERS ({channelMembers.length})</Text>
                         <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
-                            {channelMembersLoading ? (
-                                <Text style={styles.emptyText}>Loading...</Text>
-                            ) : channelMembers.length === 0 ? (
+                            {channelMembers.length === 0 ? (
                                 <Text style={styles.emptyText}>No members added yet</Text>
                             ) : (
                                 channelMembers.map((member: any) => {
@@ -4607,12 +4582,7 @@ const CreditUnionAdminScreen = () => {
                                                 <View style={styles.moderationColActions} />
                                             </View>
 
-                                            {moderationLoading ? (
-                                                <View style={styles.moderationEmpty}>
-                                                    <MaterialIcons name="hourglass-empty" size={40} color={colors.textMuted} />
-                                                    <Text style={styles.moderationEmptyText}>Loading moderation queue</Text>
-                                                </View>
-                                            ) : moderationQueue.length === 0 ? (
+                                            {moderationQueue.length === 0 ? (
                                                 <View style={styles.moderationEmpty}>
                                                     <MaterialIcons name="shield" size={48} color={colors.textMuted} />
                                                     <Text style={styles.moderationEmptyText}>No flagged content</Text>
@@ -5177,11 +5147,7 @@ const CreditUnionAdminScreen = () => {
                         </View>
 
                         <ScrollView style={styles.commentList} contentContainerStyle={styles.commentListContent}>
-                            {commentsLoading ? (
-                                <View style={styles.commentLoading}>
-                                    <Text style={styles.commentLoadingText}>Loading comments...</Text>
-                                </View>
-                            ) : comments.length === 0 ? (
+                            {comments.length === 0 ? (
                                 <View style={styles.commentEmpty}>
                                     <MaterialIcons name="chat-bubble-outline" size={32} color={colors.textMuted} />
                                     <Text style={styles.commentEmptyText}>No comments yet</Text>

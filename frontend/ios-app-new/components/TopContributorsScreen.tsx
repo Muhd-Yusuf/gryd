@@ -68,7 +68,6 @@ export default function TopContributorsScreen() {
     const [selectedContributor, setSelectedContributor] = useState<ContributorStats | null>(null);
     const [currentUserId, setCurrentUserId] = useState<string>('');
     const [error, setError] = useState<string>('');
-    const [loading, setLoading] = useState(true);
 
     const activeSubgrid = useMemo(
         () => subgrids.find((s) => s._id === activeSubgridId) || null,
@@ -78,7 +77,6 @@ export default function TopContributorsScreen() {
     // Load initial data
     useEffect(() => {
         const loadData = async () => {
-            setLoading(true);
             setError('');
             try {
                 const tenantId = await resolveTenantId();
@@ -87,7 +85,6 @@ export default function TopContributorsScreen() {
 
                 if (!tenantId) {
                     setError('No community found. Please join a community first.');
-                    setLoading(false);
                     return;
                 }
 
@@ -100,8 +97,6 @@ export default function TopContributorsScreen() {
             } catch (err: any) {
                 console.error('[TopContributors] Failed to load data:', err);
                 setError(err.message || 'Failed to load data');
-            } finally {
-                setLoading(false);
             }
         };
         loadData();
@@ -639,14 +634,6 @@ export default function TopContributorsScreen() {
             color: colors.text,
         },
     });
-
-    if (loading) {
-        return (
-            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: colors.textMuted, fontSize: 14 }}>Loading...</Text>
-            </View>
-        );
-    }
 
     if (error) {
         return (

@@ -32,6 +32,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, initiateChannelCall, uploadFile, logout } from '../../lib/api';
+import { cacheUsers } from '../../lib/userCache';
 import { useTheme } from '../../lib/theme';
 import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
@@ -209,9 +210,7 @@ const TenantCommunityScreen = () => {
     const showCenterPanel = !isMobile;
     const showRightPanel = !isCompact;
     const userId = getUserId();
-    const hasLoadedOnce = useRef(false);
     const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
-    const [initialLoading, setInitialLoading] = useState(true);
     const [tenantId, setTenantId] = useState(getTenantId());
     const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [activeSubgridId, setActiveSubgridId] = useState('');
@@ -269,7 +268,6 @@ const TenantCommunityScreen = () => {
     const [comments, setComments] = useState<any[]>([]);
     const [commentText, setCommentText] = useState('');
     const [commentLoading, setCommentLoading] = useState(false);
-    const [commentsLoading, setCommentsLoading] = useState(false);
     const recordingInterval = useRef<NodeJS.Timeout | null>(null);
     const mediaRecorderRef = useRef<any | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -318,11 +316,8 @@ const TenantCommunityScreen = () => {
                 if (!activeSubgridId && list.length > 0) {
                     setActiveSubgridId(list[0]._id);
                 }
-                hasLoadedOnce.current = true;
             } catch (err: any) {
                 console.error('Failed to load subgrids:', err.message);
-            } finally {
-                setInitialLoading(false);
             }
         };
 
@@ -332,13 +327,6 @@ const TenantCommunityScreen = () => {
     useEffect(() => {
         const loadSubgridData = async () => {
             if (!activeSubgridId) {
-                // Only clear data if we haven't loaded once (prevents flash during refresh)
-                if (!hasLoadedOnce.current) {
-                    setChannels([]);
-                    setPosts([]);
-                    setMembers([]);
-                    setMemberCount(0);
-                }
                 return;
             }
             try {
@@ -362,10 +350,27 @@ const TenantCommunityScreen = () => {
                     const list = membersRes.value?.data || [];
                     setMembers(list);
                     setMemberCount(list.length);
+                    // Cache member profiles for instant DM loading
+                    const memberProfiles: Record<string, any> = {};
+                    list.forEach((m: any) => {
+                        if (m.userId) {
+                            memberProfiles[m.userId] = {
+                                id: m.userId,
+                                firstName: m.firstName,
+                                lastName: m.lastName,
+                                email: m.email,
+                                avatarUrl: m.avatarUrl,
+                                role: m.role || m.userRole,
+                            };
+                        }
+                    });
+                    cacheUsers(memberProfiles);
                 }
                 if (friendsRes.status === 'fulfilled') {
                     setFriends(friendsRes.value?.data?.friends || []);
-                    setFriendUsers(friendsRes.value?.data?.users || {});
+                    const users = friendsRes.value?.data?.users || {};
+                    setFriendUsers(users);
+                    cacheUsers(users);
                 }
                 if (eventsRes.status === 'fulfilled') {
                     setEvents(eventsRes.value?.data || []);
@@ -414,12 +419,14 @@ const TenantCommunityScreen = () => {
     useEffect(() => {
         if (!activeChannelId || !isConnected) return;
 
+        const channelId = String(activeChannelId);
+
         // Join the channel room
-        joinRoom('channel', activeChannelId);
+        joinRoom('channel', channelId);
 
         // Subscribe to new messages
         const unsubscribeNewMessage = subscribe('new_message', (data) => {
-            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+            if (data.roomType === 'channel' && String(data.roomId) === channelId && data.message) {
                 setMessages((prev) => {
                     // Avoid duplicates
                     if (prev.some(m => m._id === data.message._id)) return prev;
@@ -430,7 +437,7 @@ const TenantCommunityScreen = () => {
 
         // Subscribe to message updates
         const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
-            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+            if (data.roomType === 'channel' && String(data.roomId) === channelId && data.message) {
                 setMessages((prev) => prev.map(m =>
                     m._id === data.message._id ? data.message : m
                 ));
@@ -439,13 +446,13 @@ const TenantCommunityScreen = () => {
 
         // Subscribe to message deletions
         const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
-            if (data.roomType === 'channel' && data.roomId === activeChannelId) {
+            if (data.roomType === 'channel' && String(data.roomId) === channelId) {
                 setMessages((prev) => prev.filter(m => m._id !== data.messageId));
             }
         });
 
         return () => {
-            leaveRoom('channel', activeChannelId);
+            leaveRoom('channel', channelId);
             unsubscribeNewMessage();
             unsubscribeMessageUpdated();
             unsubscribeMessageDeleted();
@@ -487,7 +494,7 @@ const TenantCommunityScreen = () => {
         if (!activeDmId || !userId || !isConnected) return;
 
         // Create DM room ID (consistent ordering)
-        const sortedIds = [userId, activeDmId].sort();
+        const sortedIds = [String(userId), String(activeDmId)].sort();
         const dmRoomId = `${sortedIds[0]}_${sortedIds[1]}`;
 
         // Join the DM room
@@ -495,7 +502,7 @@ const TenantCommunityScreen = () => {
 
         // Subscribe to new DM messages
         const unsubscribeNewMessage = subscribe('new_message', (data) => {
-            if (data.roomType === 'dm' && data.roomId === dmRoomId) {
+            if (data.roomType === 'dm' && String(data.roomId) === dmRoomId && data.message) {
                 setDmMessages((prev) => {
                     // Avoid duplicates
                     if (prev.some(m => m._id === data.message._id)) return prev;
@@ -506,7 +513,7 @@ const TenantCommunityScreen = () => {
 
         // Subscribe to DM message updates
         const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
-            if (data.roomType === 'dm' && data.roomId === dmRoomId) {
+            if (data.roomType === 'dm' && String(data.roomId) === dmRoomId && data.message) {
                 setDmMessages((prev) => prev.map(m =>
                     m._id === data.message._id ? data.message : m
                 ));
@@ -515,7 +522,7 @@ const TenantCommunityScreen = () => {
 
         // Subscribe to DM message deletions
         const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
-            if (data.roomType === 'dm' && data.roomId === dmRoomId) {
+            if (data.roomType === 'dm' && String(data.roomId) === dmRoomId) {
                 setDmMessages((prev) => prev.filter(m => m._id !== data.messageId));
             }
         });
@@ -1364,7 +1371,6 @@ const TenantCommunityScreen = () => {
 
         setCommentTarget({ id: itemId, isPost });
         setCommentModalOpen(true);
-        setCommentsLoading(true);
         setComments([]);
 
         try {
@@ -1379,8 +1385,6 @@ const TenantCommunityScreen = () => {
         } catch (err: any) {
             console.error('[Comment] Error fetching comments:', err);
             setError('Failed to load comments');
-        } finally {
-            setCommentsLoading(false);
         }
     };
 
@@ -1422,59 +1426,6 @@ const TenantCommunityScreen = () => {
             setCommentLoading(false);
         }
     };
-
-    // Show empty state when no tenants/subgrids - only on first load
-    if (!tenantId && !error && !hasLoadedOnce.current) {
-        return (
-            <SafeAreaView style={styles.safe}>
-                <View style={styles.emptyState}>
-                    <Text style={styles.emptyTitle}>No Communities Yet</Text>
-                    <Text style={styles.emptySubtitle}>
-                        You haven't joined any communities. Check your email for an invite link, or contact your admin.
-                    </Text>
-                    <TouchableOpacity
-                        style={styles.emptyButton}
-                        onPress={() => router.replace('/login')}
-                    >
-                        <Text style={styles.emptyButtonText}>Go Back</Text>
-                    </TouchableOpacity>
-                </View>
-            </SafeAreaView>
-        );
-    }
-
-    // Only show loading screen on true first load, not on refresh
-    if (initialLoading && !hasLoadedOnce.current) {
-        return (
-            <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Image
-                    source={require('../../assets/icon.png')}
-                    style={{ width: 80, height: 80, borderRadius: 20, marginBottom: 20 }}
-                />
-                <Text style={{ fontSize: 16, color: colors.textMuted }}>Loading community...</Text>
-            </SafeAreaView>
-        );
-    }
-
-    // Only show empty state on first load, not during refresh
-    if (subgrids.length === 0 && tenantId && !error && !hasLoadedOnce.current) {
-        return (
-            <SafeAreaView style={styles.safe}>
-                <View style={styles.emptyState}>
-                    <Text style={styles.emptyTitle}>No Communities Found</Text>
-                    <Text style={styles.emptySubtitle}>
-                        Your organization doesn't have any communities yet. Go to the admin dashboard to create one.
-                    </Text>
-                    <TouchableOpacity
-                        style={styles.emptyButton}
-                        onPress={() => router.push('/admin')}
-                    >
-                        <Text style={styles.emptyButtonText}>Go to Admin Dashboard</Text>
-                    </TouchableOpacity>
-                </View>
-            </SafeAreaView>
-        );
-    }
 
     return (
         <SafeAreaView style={styles.safe}>
@@ -2263,11 +2214,7 @@ const TenantCommunityScreen = () => {
                         </View>
 
                         <ScrollView style={styles.commentList} contentContainerStyle={styles.commentListContent}>
-                            {commentsLoading ? (
-                                <View style={styles.commentLoading}>
-                                    <Text style={styles.commentLoadingText}>Loading comments...</Text>
-                                </View>
-                            ) : comments.length === 0 ? (
+                            {comments.length === 0 ? (
                                 <View style={styles.commentEmpty}>
                                     <MessageCircle size={32} color={colors.textMuted} />
                                     <Text style={styles.commentEmptyText}>No comments yet</Text>
@@ -2375,37 +2322,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         safe: {
             flex: 1,
             backgroundColor: colors.appBg,
-        },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 24,
-        },
-        emptyTitle: {
-            fontSize: 24,
-            fontWeight: '700',
-            color: colors.text,
-            marginBottom: 12,
-            textAlign: 'center',
-        },
-        emptySubtitle: {
-            fontSize: 16,
-            color: colors.textMuted,
-            textAlign: 'center',
-            maxWidth: 320,
-            marginBottom: 24,
-        },
-        emptyButton: {
-            backgroundColor: '#3B82F6',
-            paddingHorizontal: 24,
-            paddingVertical: 12,
-            borderRadius: 12,
-        },
-        emptyButtonText: {
-            color: '#FFFFFF',
-            fontSize: 16,
-            fontWeight: '600',
         },
         page: {
             flex: 1,

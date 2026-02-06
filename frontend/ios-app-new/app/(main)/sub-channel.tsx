@@ -175,7 +175,6 @@ const SubChannelScreen = () => {
     const [posts, setPosts] = useState<Post[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [draft, setDraft] = useState('');
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [stickerOpen, setStickerOpen] = useState(false);
@@ -199,7 +198,6 @@ const SubChannelScreen = () => {
     const [comments, setComments] = useState<any[]>([]);
     const [commentText, setCommentText] = useState('');
     const [commentLoading, setCommentLoading] = useState(false);
-    const [commentsLoading, setCommentsLoading] = useState(false);
     const currentUserId = getUserId();
     const mediaRecorderRef = useRef<any | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -298,7 +296,6 @@ const SubChannelScreen = () => {
     useEffect(() => {
         const loadFeed = async () => {
             if (!subgridId || !channelId) return;
-            setLoading(true);
             setError('');
             try {
                 const [postsRes, messagesRes] = await Promise.allSettled([
@@ -317,8 +314,6 @@ const SubChannelScreen = () => {
                 }
             } catch (err: any) {
                 setError(err.message || 'Failed to load channel updates.');
-            } finally {
-                setLoading(false);
             }
         };
 
@@ -1136,7 +1131,6 @@ const SubChannelScreen = () => {
 
         setCommentTarget({ id: itemId, isPost });
         setCommentModalOpen(true);
-        setCommentsLoading(true);
         setComments([]);
 
         try {
@@ -1151,8 +1145,6 @@ const SubChannelScreen = () => {
         } catch (err: any) {
             console.error('[SubChannel Comment] Error fetching comments:', err);
             setError('Failed to load comments');
-        } finally {
-            setCommentsLoading(false);
         }
     };
 
@@ -1222,7 +1214,6 @@ const SubChannelScreen = () => {
                     </View>
 
                     {!!error && <Text style={styles.errorText}>{error}</Text>}
-                    {loading && <Text style={styles.helperText}>Loading channel...</Text>}
 
                     {showEventsView ? (
                         /* Events View */
@@ -1308,7 +1299,7 @@ const SubChannelScreen = () => {
                             feedScrollRef.current?.scrollToEnd({ animated: false });
                         }}
                     >
-                        {feedItems.length === 0 && !loading && (
+                        {feedItems.length === 0 && (
                             <Text style={styles.emptyText}>No channel updates yet.</Text>
                         )}
                         {feedItems.map((item: any) => {
@@ -1649,11 +1640,7 @@ const SubChannelScreen = () => {
                         </View>
 
                         <ScrollView style={styles.commentList} contentContainerStyle={styles.commentListContent}>
-                            {commentsLoading ? (
-                                <View style={styles.commentLoading}>
-                                    <Text style={styles.commentLoadingText}>Loading comments...</Text>
-                                </View>
-                            ) : comments.length === 0 ? (
+                            {comments.length === 0 ? (
                                 <View style={styles.commentEmpty}>
                                     <MessageCircle size={32} color={colors.textMuted} />
                                     <Text style={styles.commentEmptyText}>No comments yet</Text>

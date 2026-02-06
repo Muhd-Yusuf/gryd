@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import CreditUnionAdminScreen from '../../components/CreditUnionAdminScreen';
 import { getAuthUser, isAuthenticated, communityGet, resolveTenantId } from '../../lib/api';
@@ -58,12 +58,7 @@ export default function CreditUnionServerPage() {
     }, []);
 
     if (loading) {
-        return (
-            <View style={[styles.container, { backgroundColor: colors.appBg }]}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={[styles.loadingText, { color: colors.textMuted }]}>Checking access...</Text>
-            </View>
-        );
+        return <View style={[styles.container, { backgroundColor: colors.appBg }]} />;
     }
 
     if (!hasAccess) {
@@ -92,10 +87,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         padding: 24,
-    },
-    loadingText: {
-        marginTop: 12,
-        fontSize: 14,
     },
     title: {
         fontSize: 24,
