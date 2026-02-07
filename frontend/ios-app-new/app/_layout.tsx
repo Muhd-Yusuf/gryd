@@ -8,6 +8,7 @@ import { initAuth } from '../lib/api';
 import { WebSocketProvider } from '../contexts/WebSocketContext';
 import { CallProvider } from '../contexts/CallContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
+import { ToastProvider } from '../contexts/ToastContext';
 import IncomingCallOverlay from '../components/IncomingCallOverlay';
 
 const RootStack = () => {
@@ -71,14 +72,16 @@ export default function RootLayout() {
 
     return (
         <ThemeProvider>
-            <WebSocketProvider>
-                <NotificationProvider>
-                    <CallProvider>
-                        <RootStack />
-                        <IncomingCallOverlay />
-                    </CallProvider>
-                </NotificationProvider>
-            </WebSocketProvider>
+            <ToastProvider>
+                <WebSocketProvider>
+                    <NotificationProvider>
+                        <CallProvider>
+                            <RootStack />
+                            <IncomingCallOverlay />
+                        </CallProvider>
+                    </NotificationProvider>
+                </WebSocketProvider>
+            </ToastProvider>
         </ThemeProvider>
     );
 }

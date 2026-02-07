@@ -29,18 +29,44 @@ import {
     communityGet,
     getUserId,
     resolveTenantId,
+    StakeholderBadge,
 } from '../lib/api';
+
+// Badge colors for stakeholders
+const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
+    stakeholder: '#3B82F6',
+    vendor: '#8B5CF6',
+    partner: '#10B981',
+    sponsor: '#F59E0B',
+    investor: '#EC4899',
+};
+
+// Role badge colors for CU admins and moderators
+const ROLE_BADGE_COLORS: Record<string, string> = {
+    subgrid_admin: '#EF4444',
+    moderator: '#F97316',
+};
 
 type Member = {
     _id?: string;
     userId?: string;
     role?: string;
+    userRole?: string;
+    stakeholderBadge?: StakeholderBadge;
+    company?: string;
     user?: {
         _id?: string;
         firstName?: string;
         lastName?: string;
         email?: string;
         createdAt?: string;
+        avatarUrl?: string;
+        bannerUrl?: string;
+        profilePicture?: string;
+        coverImage?: string;
+        role?: string;
+        stakeholderBadge?: StakeholderBadge;
+        company?: string;
     };
 };
 
@@ -188,6 +214,37 @@ export default function TopContributorsScreen() {
         if (!dateStr) return 'Unknown';
         const date = new Date(dateStr);
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    const getMemberAvatarUrl = (member: Member): string | null => {
+        const user = member.user;
+        return user?.avatarUrl || user?.profilePicture || null;
+    };
+
+    const getMemberBannerUrl = (member: Member): string | null => {
+        const user = member.user;
+        return user?.bannerUrl || user?.coverImage || null;
+    };
+
+    const getMemberStakeholderBadge = (member: Member): StakeholderBadge | null => {
+        const badge = member.stakeholderBadge || member.user?.stakeholderBadge;
+        const role = member.userRole || member.user?.role;
+        if (role === 'stakeholder' && badge) {
+            return badge;
+        }
+        return null;
+    };
+
+    const getMemberRole = (member: Member): string | null => {
+        return member.role || null;
+    };
+
+    const getMemberCompany = (member: Member): string | null => {
+        return member.company || member.user?.company || null;
+    };
+
+    const formatBadgeLabel = (badge: StakeholderBadge | string): string => {
+        return badge.charAt(0).toUpperCase() + badge.slice(1).replace('_', ' ');
     };
 
     const currentUser = members.find(m => String(m.user?._id) === String(currentUserId) || String(m.userId) === String(currentUserId));
@@ -348,12 +405,53 @@ export default function TopContributorsScreen() {
             fontSize: 12,
             color: colors.textMuted,
         },
+        contributorBadgeRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            marginTop: 2,
+            flexWrap: 'wrap',
+        },
+        badge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 8,
+        },
+        badgeText: {
+            fontSize: 9,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        profileBadgeRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 8,
+            marginBottom: 16,
+            flexWrap: 'wrap',
+        },
+        profileBadge: {
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 12,
+        },
+        profileBadgeText: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
+        companyText: {
+            fontSize: 13,
+            color: colors.textMuted,
+            fontStyle: 'italic',
+            marginTop: 4,
+        },
         profileArea: {
             flex: 1,
             backgroundColor: colors.surface,
         },
         profileBanner: {
-            height: 140,
+            height: 200,
             backgroundColor: '#F8E8E8',
             position: 'relative',
             overflow: 'hidden',
@@ -450,11 +548,30 @@ export default function TopContributorsScreen() {
             borderWidth: 4,
             borderColor: colors.surface,
             marginBottom: 16,
+            overflow: 'hidden',
+        },
+        profileAvatarImage: {
+            width: 100,
+            height: 100,
+            borderRadius: 50,
         },
         profileAvatarText: {
             fontSize: 32,
             fontWeight: '600',
             color: '#8B7355',
+        },
+        bannerImage: {
+            width: '100%',
+            height: 200,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+        },
+        contributorAvatarImage: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
         },
         profileName: {
             fontSize: 24,
@@ -749,6 +866,9 @@ export default function TopContributorsScreen() {
                     <ScrollView style={styles.contributorsList}>
                         {(contributors || []).map((stats) => {
                             const name = getMemberName(stats.member);
+                            const avatarUrl = getMemberAvatarUrl(stats.member);
+                            const stakeholderBadge = getMemberStakeholderBadge(stats.member);
+                            const memberRole = getMemberRole(stats.member);
                             const isActive = selectedContributor?.member._id === stats.member._id;
                             return (
                                 <TouchableOpacity
@@ -757,11 +877,31 @@ export default function TopContributorsScreen() {
                                     onPress={() => { setSelectedContributor(stats); if (isMobile) setMobileShowContent(true); }}
                                 >
                                     <View style={styles.contributorAvatar}>
-                                        <Text style={styles.contributorAvatarText}>{getInitials(name)}</Text>
+                                        {avatarUrl ? (
+                                            <Image
+                                                source={{ uri: avatarUrl }}
+                                                style={styles.contributorAvatarImage}
+                                                resizeMode="cover"
+                                            />
+                                        ) : (
+                                            <Text style={styles.contributorAvatarText}>{getInitials(name)}</Text>
+                                        )}
                                     </View>
                                     <View style={styles.contributorInfo}>
                                         <Text style={styles.contributorName}>{name}</Text>
-                                        <Text style={styles.contributorMessages}>{stats.messageCount} messages</Text>
+                                        <View style={styles.contributorBadgeRow}>
+                                            <Text style={styles.contributorMessages}>{stats.messageCount} messages</Text>
+                                            {memberRole && ROLE_BADGE_COLORS[memberRole] && (
+                                                <View style={[styles.badge, { backgroundColor: ROLE_BADGE_COLORS[memberRole] }]}>
+                                                    <Text style={styles.badgeText}>{formatBadgeLabel(memberRole)}</Text>
+                                                </View>
+                                            )}
+                                            {stakeholderBadge && (
+                                                <View style={[styles.badge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[stakeholderBadge] }]}>
+                                                    <Text style={styles.badgeText}>{formatBadgeLabel(stakeholderBadge)}</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                     </View>
                                 </TouchableOpacity>
                             );
@@ -813,18 +953,29 @@ export default function TopContributorsScreen() {
                             )}
                             {/* Profile Banner */}
                             <View style={styles.profileBanner}>
-                                {/* Decorative shapes */}
-                                <View style={styles.bannerShape1} />
-                                <View style={styles.bannerShape2} />
-                                <View style={styles.bannerShape3} />
-                                <View style={styles.bannerShape4} />
-                                <View style={styles.bannerStripes}>
-                                    <View style={styles.stripe} />
-                                    <View style={styles.stripe} />
-                                    <View style={styles.stripe} />
-                                    <View style={styles.stripe} />
-                                    <View style={styles.stripe} />
-                                </View>
+                                {/* User banner image or gradient fallback */}
+                                {getMemberBannerUrl(selectedContributor.member) ? (
+                                    <Image
+                                        source={{ uri: getMemberBannerUrl(selectedContributor.member)! }}
+                                        style={styles.bannerImage}
+                                        resizeMode="cover"
+                                    />
+                                ) : (
+                                    <>
+                                        {/* Gradient fallback for users without banner */}
+                                        <View style={styles.bannerShape1} />
+                                        <View style={styles.bannerShape2} />
+                                        <View style={styles.bannerShape3} />
+                                        <View style={styles.bannerShape4} />
+                                        <View style={styles.bannerStripes}>
+                                            <View style={styles.stripe} />
+                                            <View style={styles.stripe} />
+                                            <View style={styles.stripe} />
+                                            <View style={styles.stripe} />
+                                            <View style={styles.stripe} />
+                                        </View>
+                                    </>
+                                )}
 
                                 {/* Header Icons */}
                                 <View style={styles.profileHeader}>
@@ -840,9 +991,17 @@ export default function TopContributorsScreen() {
                             {/* Profile Content */}
                             <View style={styles.profileContent}>
                                 <View style={styles.profileAvatar}>
-                                    <Text style={styles.profileAvatarText}>
-                                        {getInitials(getMemberName(selectedContributor.member))}
-                                    </Text>
+                                    {getMemberAvatarUrl(selectedContributor.member) ? (
+                                        <Image
+                                            source={{ uri: getMemberAvatarUrl(selectedContributor.member)! }}
+                                            style={styles.profileAvatarImage}
+                                            resizeMode="cover"
+                                        />
+                                    ) : (
+                                        <Text style={styles.profileAvatarText}>
+                                            {getInitials(getMemberName(selectedContributor.member))}
+                                        </Text>
+                                    )}
                                 </View>
                                 <Text style={styles.profileName}>
                                     {getMemberName(selectedContributor.member)}
@@ -851,13 +1010,35 @@ export default function TopContributorsScreen() {
                                     {getMemberUsername(selectedContributor.member)}
                                 </Text>
 
+                                {/* Badges and Company */}
+                                {(getMemberRole(selectedContributor.member) || getMemberStakeholderBadge(selectedContributor.member) || getMemberCompany(selectedContributor.member)) && (
+                                    <View style={styles.profileBadgeRow}>
+                                        {getMemberRole(selectedContributor.member) && ROLE_BADGE_COLORS[getMemberRole(selectedContributor.member)!] && (
+                                            <View style={[styles.profileBadge, { backgroundColor: ROLE_BADGE_COLORS[getMemberRole(selectedContributor.member)!] }]}>
+                                                <Text style={styles.profileBadgeText}>{formatBadgeLabel(getMemberRole(selectedContributor.member)!)}</Text>
+                                            </View>
+                                        )}
+                                        {getMemberStakeholderBadge(selectedContributor.member) && (
+                                            <View style={[styles.profileBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getMemberStakeholderBadge(selectedContributor.member)!] }]}>
+                                                <Text style={styles.profileBadgeText}>{formatBadgeLabel(getMemberStakeholderBadge(selectedContributor.member)!)}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                )}
+                                {getMemberCompany(selectedContributor.member) && (
+                                    <Text style={styles.companyText}>from {getMemberCompany(selectedContributor.member)}</Text>
+                                )}
+
                                 <View style={styles.aboutCard}>
                                     <View style={styles.aboutSection}>
                                         <Text style={styles.aboutLabel}>
                                             About {getMemberName(selectedContributor.member)}
                                         </Text>
                                         <Text style={styles.aboutValue}>
-                                            Credit Union Member
+                                            {getMemberRole(selectedContributor.member) === 'subgrid_admin' ? 'CU Administrator' :
+                                             getMemberRole(selectedContributor.member) === 'moderator' ? 'Community Moderator' :
+                                             getMemberStakeholderBadge(selectedContributor.member) ? formatBadgeLabel(getMemberStakeholderBadge(selectedContributor.member)!) :
+                                             'Credit Union Member'}
                                         </Text>
                                     </View>
                                     <View>

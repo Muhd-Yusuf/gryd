@@ -103,6 +103,7 @@ type UserProfile = {
     username?: string;
     createdAt?: string;
     avatarUrl?: string;
+    bannerUrl?: string;
 };
 
 type DirectMessage = {
@@ -307,11 +308,10 @@ export default function DirectMessagesScreen() {
             console.log('[DirectMessages] refreshFriends loaded:', normalizedIds.length, 'friends');
             setFriends(normalizedIds);
             setFriendUsers(users);
+            // Only clear selection if previously selected friend is no longer in list
             setSelectedFriendId((prev) => {
-                if (normalizedIds.length > 0 && !prev) {
-                    return normalizedIds[0];
-                } else if (prev && !normalizedIds.includes(prev)) {
-                    return normalizedIds[0] || null;
+                if (prev && !normalizedIds.includes(prev)) {
+                    return null;
                 }
                 return prev;
             });
@@ -1716,17 +1716,27 @@ export default function DirectMessagesScreen() {
                 {!isMobile && selectedFriendId && (
                     <View style={styles.profileSidebar}>
                         <View style={styles.profileHeaderBanner}>
-                            {/* Decorative shapes */}
-                            <View style={styles.bannerShape1} />
-                            <View style={styles.bannerShape2} />
-                            <View style={styles.bannerShape3} />
-                            <View style={styles.bannerShape4} />
-                            <View style={styles.bannerStripes}>
-                                <View style={styles.stripe} />
-                                <View style={styles.stripe} />
-                                <View style={styles.stripe} />
-                                <View style={styles.stripe} />
-                            </View>
+                            {/* User banner image or decorative fallback */}
+                            {selectedFriendUser?.bannerUrl ? (
+                                <Image
+                                    source={{ uri: selectedFriendUser.bannerUrl }}
+                                    style={styles.bannerImage}
+                                    resizeMode="cover"
+                                />
+                            ) : (
+                                <>
+                                    <View style={styles.bannerShape1} />
+                                    <View style={styles.bannerShape2} />
+                                    <View style={styles.bannerShape3} />
+                                    <View style={styles.bannerShape4} />
+                                    <View style={styles.bannerStripes}>
+                                        <View style={styles.stripe} />
+                                        <View style={styles.stripe} />
+                                        <View style={styles.stripe} />
+                                        <View style={styles.stripe} />
+                                    </View>
+                                </>
+                            )}
                             {/* More icon */}
                             <TouchableOpacity style={styles.moreIcon}>
                                 <MoreHorizontal size={18} color={colors.text} />
@@ -2528,10 +2538,18 @@ const createStyles = (colors: any) =>
             borderLeftColor: colors.border,
         },
         profileHeaderBanner: {
-            height: 120,
+            height: 160,
             backgroundColor: '#F8E8E8',
             position: 'relative',
             overflow: 'hidden',
+        },
+        bannerImage: {
+            width: '100%',
+            height: 160,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
         },
         bannerShape1: {
             position: 'absolute',

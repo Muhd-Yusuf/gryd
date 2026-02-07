@@ -59,6 +59,18 @@ import {
     superAdminPatch,
 } from '../lib/api';
 import { useTheme } from '../lib/theme';
+import {
+    getCachedSuperAdminStats,
+    cacheSuperAdminStats,
+    getCachedSuperAdminCustomers,
+    cacheSuperAdminCustomers,
+    getCachedSuperAdminModeration,
+    cacheSuperAdminModeration,
+    getCachedSuperAdminConfig,
+    cacheSuperAdminConfig,
+    getCachedSuperAdminTeamMembers,
+    cacheSuperAdminTeamMembers,
+} from '../lib/userCache';
 
 type NavItem = 'overview' | 'customers' | 'moderation' | 'configuration';
 
@@ -336,6 +348,12 @@ const SuperAdminDashboard = () => {
     };
 
     const loadTeamMembers = async () => {
+        // Try cache first for instant display
+        const cachedMembers = getCachedSuperAdminTeamMembers();
+        if (cachedMembers) {
+            setTeamMembers(cachedMembers);
+        }
+
         try {
             const response = await getSuperAdminTeamMembers({ limit: 50 });
             console.log('[SuperAdmin] Team members response:', response);
@@ -349,9 +367,11 @@ const SuperAdminDashboard = () => {
                     avatar: user.avatarUrl,
                 }));
                 setTeamMembers(members);
+                cacheSuperAdminTeamMembers(members);
             }
         } catch (err: any) {
             console.error('Failed to load team members:', err.message);
+            // Keep cached data on error
         }
     };
 
@@ -384,25 +404,52 @@ const SuperAdminDashboard = () => {
     };
 
     const loadOverviewData = async () => {
+        // Try cache first for instant display
+        const cachedStats = getCachedSuperAdminStats();
+        if (cachedStats) {
+            setStats(cachedStats.stats);
+            if (cachedStats.customerGrowth) setCustomerGrowth(cachedStats.customerGrowth);
+            if (cachedStats.systemUptime) setSystemUptime(cachedStats.systemUptime);
+            if (cachedStats.recentCustomers) setRecentCustomers(cachedStats.recentCustomers);
+        }
+
         try {
             const response = await getSuperAdminOverview({ growthDays: growthRange });
             if (response?.data) {
                 setStats(response.data.stats);
                 setCustomerGrowth(response.data.customerGrowth);
                 setSystemUptime(response.data.systemUptime);
-            }
 
-            // Also load recent customers for the overview table
-            const customersResponse = await getSuperAdminCustomers({ limit: 5 });
-            if (customersResponse?.data?.customers) {
-                setRecentCustomers(customersResponse.data.customers);
+                // Also load recent customers for the overview table
+                const customersResponse = await getSuperAdminCustomers({ limit: 5 });
+                if (customersResponse?.data?.customers) {
+                    setRecentCustomers(customersResponse.data.customers);
+                }
+
+                // Cache all overview data together
+                cacheSuperAdminStats({
+                    stats: response.data.stats,
+                    customerGrowth: response.data.customerGrowth,
+                    systemUptime: response.data.systemUptime,
+                    recentCustomers: customersResponse?.data?.customers || [],
+                });
             }
         } catch (err: any) {
             console.error('Failed to load overview:', err.message);
+            // Keep cached data on error
         }
     };
 
     const loadCustomersData = async () => {
+        // Try cache first for instant display (only for first page without filters)
+        if (currentPage === 1 && !customerSearch && customerStatusFilter === 'all') {
+            const cachedCustomers = getCachedSuperAdminCustomers();
+            if (cachedCustomers) {
+                setCustomers(cachedCustomers.customers);
+                setCustomersTotal(cachedCustomers.total);
+            }
+        }
+
         try {
             const response = await getSuperAdminCustomers({
                 q: customerSearch,
@@ -424,13 +471,28 @@ const SuperAdminDashboard = () => {
                     trialCustomers: 0,
                     premiumCustomers: 0,
                 });
+
+                // Cache first page without filters
+                if (currentPage === 1 && !customerSearch && customerStatusFilter === 'all') {
+                    cacheSuperAdminCustomers(response.data.customers, response.data.total);
+                }
             }
         } catch (err: any) {
             console.error('Failed to load customers:', err.message);
+            // Keep cached data on error
         }
     };
 
     const loadModerationData = async () => {
+        // Try cache first for instant display (only for unfiltered view)
+        if (moderationStatusFilter === 'all') {
+            const cachedModeration = getCachedSuperAdminModeration();
+            if (cachedModeration) {
+                setModerationItems(cachedModeration);
+                setModerationTotal(cachedModeration.length);
+            }
+        }
+
         try {
             const response = await getSuperAdminModeration({
                 status: moderationStatusFilter !== 'all' ? moderationStatusFilter : undefined,
@@ -439,21 +501,36 @@ const SuperAdminDashboard = () => {
             if (response?.data) {
                 setModerationItems(response.data.items);
                 setModerationTotal(response.data.total);
+
+                // Cache unfiltered moderation data
+                if (moderationStatusFilter === 'all') {
+                    cacheSuperAdminModeration(response.data.items);
+                }
             }
         } catch (err: any) {
             console.error('Failed to load moderation queue:', err.message);
+            // Keep cached data on error
         }
     };
 
     const loadConfigData = async () => {
+        // Try cache first for instant display
+        const cachedConfig = getCachedSuperAdminConfig();
+        if (cachedConfig) {
+            setConfig(cachedConfig);
+            setConfigForm(cachedConfig);
+        }
+
         try {
             const response = await getSuperAdminConfig();
             if (response?.data) {
                 setConfig(response.data);
                 setConfigForm(response.data);
+                cacheSuperAdminConfig(response.data);
             }
         } catch (err: any) {
             console.error('Failed to load configuration:', err.message);
+            // Keep cached data on error
         }
     };
 

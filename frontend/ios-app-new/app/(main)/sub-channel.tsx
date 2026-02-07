@@ -18,6 +18,8 @@ import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, uploadFile, StakeholderBadge } from '../../lib/api';
+import { getCachedChannelMessages, cacheChannelMessages, addChannelMessageToCache, removeChannelMessageFromCache, getCachedChannelPosts, cacheChannelPosts, updateChannelPostInCache } from '../../lib/userCache';
+import { createOptimisticMessage, markMessageSent, markMessageFailed, isTempId, saveDraft, getDraft, clearDraft } from '../../lib/messageQueue';
 import { useTheme } from '../../lib/theme';
 import { Attachment, EMOJI_SET, STICKER_SET, formatDuration, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
@@ -171,9 +173,13 @@ const SubChannelScreen = () => {
     const [subgridId, setSubgridId] = useState(initialSubgridId);
     const [channelId, setChannelId] = useState(initialChannelId);
     const [channelName, setChannelName] = useState(initialChannelName);
-    const [posts, setPosts] = useState<Post[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [draft, setDraft] = useState('');
+    const [posts, setPosts] = useState<Post[]>(() => {
+        return initialChannelId ? (getCachedChannelPosts(initialChannelId) || []) : [];
+    });
+    const [messages, setMessages] = useState<Message[]>(() => {
+        return initialChannelId ? (getCachedChannelMessages(initialChannelId) as Message[] || []) : [];
+    });
+    const [draft, setDraft] = useState(() => initialChannelId ? getDraft(`channel_${initialChannelId}`) : '');
     const [error, setError] = useState('');
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [stickerOpen, setStickerOpen] = useState(false);
@@ -292,27 +298,53 @@ const SubChannelScreen = () => {
         loadEvents();
     }, [subgridId]);
 
+    // Load draft when switching channels
+    useEffect(() => {
+        if (channelId) {
+            setDraft(getDraft(`channel_${channelId}`));
+        }
+    }, [channelId]);
+
     useEffect(() => {
         const loadFeed = async () => {
             if (!subgridId || !channelId) return;
             setError('');
+
+            // Load from cache first for instant display
+            const cachedPosts = getCachedChannelPosts(channelId);
+            const cachedMessages = getCachedChannelMessages(channelId);
+            if (cachedPosts && cachedPosts.length > 0) {
+                setPosts(cachedPosts);
+            }
+            if (cachedMessages && cachedMessages.length > 0) {
+                setMessages(cachedMessages as Message[]);
+            }
+
+            // Then fetch fresh data in background
             try {
                 const [postsRes, messagesRes] = await Promise.allSettled([
                     communityGet(`/subgrids/${subgridId}/posts?channelId=${channelId}`),
                     communityGet(`/subgrids/${subgridId}/messages?channelId=${channelId}`),
                 ]);
                 if (postsRes.status === 'fulfilled') {
-                    setPosts(postsRes.value?.data || []);
-                } else {
+                    const freshPosts = postsRes.value?.data || [];
+                    setPosts(freshPosts);
+                    cacheChannelPosts(channelId, freshPosts);
+                } else if (!cachedPosts) {
                     setPosts([]);
                 }
                 if (messagesRes.status === 'fulfilled') {
-                    setMessages(messagesRes.value?.data || []);
-                } else {
+                    const freshMessages = messagesRes.value?.data || [];
+                    setMessages(freshMessages);
+                    cacheChannelMessages(channelId, freshMessages);
+                } else if (!cachedMessages) {
                     setMessages([]);
                 }
             } catch (err: any) {
-                setError(err.message || 'Failed to load channel updates.');
+                // Keep cached data on error
+                if (!cachedPosts && !cachedMessages) {
+                    setError(err.message || 'Failed to load channel updates.');
+                }
             }
         };
 
@@ -607,7 +639,15 @@ const SubChannelScreen = () => {
     };
 
     const handleDeleteItem = async (item: any) => {
-        if (!subgridId) return;
+        if (!subgridId || !channelId) return;
+
+        // For temp messages, just remove immediately
+        if (isTempId(item._id)) {
+            setMessages((prev) => prev.filter((m) => m._id !== item._id));
+            setMenuOpen(null);
+            return;
+        }
+
         // Use _isPost flag set during feedItems creation for reliable detection
         const isPost = item._isPost === true;
         const itemId = item._id;
@@ -631,93 +671,183 @@ const SubChannelScreen = () => {
             return;
         }
 
+        // Store for rollback
+        const deletedItem = item;
+
+        // Remove immediately (optimistic)
+        if (isPost) {
+            setPosts((prev) => prev.filter((p) => p._id !== itemId));
+        } else {
+            setMessages((prev) => prev.filter((m) => m._id !== itemId));
+            removeChannelMessageFromCache(channelId, itemId);
+        }
+        setMenuOpen(null);
+
         try {
-            console.log('[handleDeleteItem] Debug:', {
-                itemId,
-                itemType,
-                currentUserId,
-                itemAuthorId: item.authorId,
-                itemSenderId: item.senderId,
-                resolvedAuthorId: item.authorId || item.senderId,
-            });
             if (isPost) {
                 await communityDelete(`/subgrids/${subgridId}/posts/${itemId}`);
-                setPosts((prev) => prev.filter((p) => p._id !== itemId));
             } else {
                 await communityDelete(`/subgrids/${subgridId}/messages/${itemId}`);
-                setMessages((prev) => prev.filter((m) => m._id !== itemId));
             }
-            setMenuOpen(null);
-            if (Platform.OS === 'web') {
-                window.alert(`${itemType} deleted successfully.`);
-            } else {
-                Alert.alert('Success', `${itemType} deleted successfully.`);
-            }
+            // Success - item already removed
         } catch (err: any) {
-            setError(err.message || 'Failed to delete item.');
-            if (Platform.OS === 'web') {
-                window.alert(err.message || `Failed to delete ${itemType.toLowerCase()}.`);
+            // Rollback on failure
+            if (isPost) {
+                setPosts((prev) => [...prev, deletedItem].sort((a, b) => {
+                    const aTime = new Date(a.createdAt || 0).getTime();
+                    const bTime = new Date(b.createdAt || 0).getTime();
+                    return aTime - bTime;
+                }));
             } else {
-                Alert.alert('Error', err.message || `Failed to delete ${itemType.toLowerCase()}.`);
+                setMessages((prev) => [...prev, deletedItem].sort((a, b) => {
+                    const aTime = new Date(a.createdAt || 0).getTime();
+                    const bTime = new Date(b.createdAt || 0).getTime();
+                    return aTime - bTime;
+                }));
+                addChannelMessageToCache(channelId, deletedItem);
             }
-            setMenuOpen(null);
+            setError('Failed to delete. Item restored.');
         }
     };
 
     const handleSend = async () => {
-        if ((!draft.trim() && attachments.length === 0) || !subgridId || !channelId) {
+        if ((!draft.trim() && attachments.length === 0) || !subgridId || !channelId || !currentUserId) {
             return;
         }
         const body = draft.trim();
+
+        // Clear draft immediately for instant feel
         setDraft('');
+        clearDraft(`channel_${channelId}`);
+
         const currentAttachments = [...attachments];
         setAttachments([]);
+
+        // Create optimistic message - shows instantly in UI
+        const { tempMessage } = createOptimisticMessage(
+            channelId, // Using channelId as the "peerId" for channel messages
+            subgridId,
+            body,
+            currentUserId,
+            currentAttachments.map(att => ({
+                type: att.type,
+                value: att.uri,
+                label: att.name,
+                _isLocal: true,
+            })),
+            'text'
+        );
+
+        // Add to UI immediately
+        setMessages((prev) => [...prev, tempMessage as Message]);
+
+        // Scroll to bottom
+        setTimeout(() => {
+            feedScrollRef.current?.scrollToEnd({ animated: true });
+        }, 50);
+
         try {
-            // Upload attachments if any
+            // Upload attachments in parallel
             const uploadedAttachments: Attachment[] = [];
-            for (const att of currentAttachments) {
-                try {
-                    const result = await uploadFile(
-                        { uri: att.uri, name: att.name || 'file', type: att.mimeType || 'application/octet-stream' },
-                        { type: 'attachment', subgridId }
-                    );
-                    if (result?.success && result?.data) {
-                        uploadedAttachments.push({
-                            type: att.type,
-                            value: result.data.url || result.data.secure_url,
-                            label: att.name,
-                            mimeType: att.mimeType,
-                        });
+            if (currentAttachments.length > 0) {
+                const uploadPromises = currentAttachments.map(async (att) => {
+                    try {
+                        const result = await uploadFile(
+                            { uri: att.uri, name: att.name || 'file', type: att.mimeType || 'application/octet-stream' },
+                            { type: 'attachment', subgridId }
+                        );
+                        if (result?.success && result?.data) {
+                            return {
+                                type: att.type,
+                                value: result.data.url || result.data.secure_url,
+                                label: att.name,
+                                mimeType: att.mimeType,
+                            } as Attachment;
+                        }
+                    } catch (uploadErr: any) {
+                        console.error('Failed to upload attachment:', uploadErr);
                     }
-                } catch (uploadErr: any) {
-                    console.error('Failed to upload attachment:', uploadErr);
-                }
+                    return null;
+                });
+                const results = await Promise.all(uploadPromises);
+                results.forEach(r => { if (r) uploadedAttachments.push(r); });
             }
 
-            await communityPost(`/subgrids/${subgridId}/messages`, {
+            const sendResult = await communityPost(`/subgrids/${subgridId}/messages`, {
                 channelId,
                 body: body || '',
                 attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
             });
-            const response = await communityGet(`/subgrids/${subgridId}/messages?channelId=${channelId}`);
-            setMessages(response?.data || []);
+
+            // Replace temp message with real one
+            if (sendResult?.data) {
+                markMessageSent(tempMessage._id, sendResult.data);
+                setMessages((prev) => {
+                    const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
+                    const newMessages = [...filtered, sendResult.data];
+                    cacheChannelMessages(channelId, newMessages.filter(m => !isTempId(m._id)));
+                    return newMessages;
+                });
+            }
         } catch (err: any) {
-            setError(err.message || 'Failed to send message.');
+            // Mark message as failed but keep visible
+            markMessageFailed(tempMessage._id, err.message);
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m._id === tempMessage._id
+                        ? { ...m, _status: 'failed', _error: err.message } as any
+                        : m
+                )
+            );
+            setError(err.message || 'Failed to send. Tap to retry.');
         }
     };
 
     const handleSendAttachment = async (attachment: Attachment) => {
-        if (!subgridId || !channelId) return;
+        if (!subgridId || !channelId || !currentUserId) return;
+
+        // Create optimistic message
+        const { tempMessage } = createOptimisticMessage(
+            channelId,
+            subgridId,
+            '',
+            currentUserId,
+            [attachment],
+            attachment.type || 'file'
+        );
+
+        // Add to UI immediately
+        setMessages((prev) => [...prev, tempMessage as Message]);
+        setTimeout(() => {
+            feedScrollRef.current?.scrollToEnd({ animated: true });
+        }, 50);
+
         try {
-            await communityPost(`/subgrids/${subgridId}/messages`, {
+            const sendResult = await communityPost(`/subgrids/${subgridId}/messages`, {
                 channelId,
                 body: '',
                 kind: attachment.type,
                 attachments: [attachment],
             });
-            const response = await communityGet(`/subgrids/${subgridId}/messages?channelId=${channelId}`);
-            setMessages(response?.data || []);
+
+            if (sendResult?.data) {
+                markMessageSent(tempMessage._id, sendResult.data);
+                setMessages((prev) => {
+                    const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
+                    const newMessages = [...filtered, sendResult.data];
+                    cacheChannelMessages(channelId, newMessages.filter(m => !isTempId(m._id)));
+                    return newMessages;
+                });
+            }
         } catch (err: any) {
+            markMessageFailed(tempMessage._id, err.message);
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m._id === tempMessage._id
+                        ? { ...m, _status: 'failed', _error: err.message } as any
+                        : m
+                )
+            );
             setError(err.message || 'Failed to send attachment.');
         }
     };
@@ -1553,7 +1683,10 @@ const SubChannelScreen = () => {
                                 </TouchableOpacity>
                                 <TextInput
                                     value={draft}
-                                    onChangeText={setDraft}
+                                    onChangeText={(text) => {
+                                        setDraft(text);
+                                        if (channelId) saveDraft(`channel_${channelId}`, text);
+                                    }}
                                     placeholder="Type message"
                                     placeholderTextColor={colors.textSubtle}
                                     style={styles.composerInput}

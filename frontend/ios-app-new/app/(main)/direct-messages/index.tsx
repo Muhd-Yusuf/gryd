@@ -22,7 +22,8 @@ import { Platform } from 'react-native';
 import { communityGet, communityPost, communityDelete, getAuthUser, getTenantId, getUserId, resolveTenantId, resolveUserId, getOnlineStatus, updatePresence, setUserOnline, uploadFile } from '../../../lib/api';
 import { useTheme } from '../../../lib/theme';
 import { formatRelativeTime, formatMessageDate, Attachment, twemojiUrl } from '../../../lib/chatMedia';
-import { getCachedUsers, cacheUsers, getAllCachedUsers, getCachedSubgrids, cacheSubgrids, getCachedFriends, cacheFriends } from '../../../lib/userCache';
+import { getCachedUsers, cacheUsers, getAllCachedUsers, getCachedSubgrids, cacheSubgrids, getCachedFriends, cacheFriends, getCachedMessages, cacheMessages, removeMessageFromCache, addMessageToCache } from '../../../lib/userCache';
+import { createOptimisticMessage, markMessageSent, markMessageFailed, isTempId, saveDraft, getDraft, clearDraft } from '../../../lib/messageQueue';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 import { useAgoraCall } from '../../../hooks';
@@ -211,7 +212,7 @@ const DirectMessagesScreen = () => {
     const [addFriendOpen, setAddFriendOpen] = useState(false);
     const [activePeerId, setActivePeerId] = useState('');
     const [messages, setMessages] = useState<Message[]>([]);
-    const [draft, setDraft] = useState('');
+    const [draft, setDraft] = useState(() => ''); // Will be updated when activePeerId changes
     const [error, setError] = useState('');
     const [requestsOpen, setRequestsOpen] = useState(true);
     const [blockedOpen, setBlockedOpen] = useState(false);
@@ -491,31 +492,49 @@ const DirectMessagesScreen = () => {
         }
     }, [subgridId, friends]);
 
+    // Load draft when switching conversations
+    useEffect(() => {
+        if (activePeerId) {
+            setDraft(getDraft(activePeerId));
+        }
+    }, [activePeerId]);
+
     useEffect(() => {
         const loadMessages = async () => {
             if (!subgridId || !activePeerId) {
                 setMessages([]);
                 return;
             }
+
+            // Load from cache first for instant display
+            const cached = getCachedMessages(activePeerId);
+            if (cached && cached.length > 0) {
+                setMessages(cached as Message[]);
+            }
+
+            // Then fetch fresh data in background
             try {
                 const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`);
-                setMessages(response?.data || []);
+                const msgs = response?.data || [];
+                setMessages(msgs);
+                cacheMessages(activePeerId, msgs);
             } catch {
-                setMessages([]);
+                // Keep cached messages on error
+                if (!cached || cached.length === 0) {
+                    setMessages([]);
+                }
             }
         };
 
         // Initial fetch
         loadMessages();
 
-        // Keep polling as fallback only if WebSocket is not connected
-        // The WebSocket subscription below handles real-time updates when connected
-        const interval = setInterval(() => {
-            if (!isConnected) {
-                loadMessages();
-            }
-        }, 5000);
-        return () => clearInterval(interval);
+        // Only poll if WebSocket is not connected (fallback)
+        let interval: NodeJS.Timeout | null = null;
+        if (!isConnected) {
+            interval = setInterval(loadMessages, 10000); // Reduced frequency when polling
+        }
+        return () => { if (interval) clearInterval(interval); };
     }, [subgridId, activePeerId, isConnected]);
 
     // WebSocket subscription for real-time DM updates
@@ -648,36 +667,59 @@ const DirectMessagesScreen = () => {
         );
     };
 
+    // Clear selection if active peer is no longer in filtered list
     useEffect(() => {
-        if (!activePeerId && filteredPeers.length > 0) {
-            setActivePeerId(filteredPeers[0]);
+        if (activePeerId && filteredPeers.length > 0 && !filteredPeers.includes(activePeerId)) {
+            setActivePeerId('');
         }
     }, [filteredPeers, activePeerId]);
 
-    // Fetch and update online statuses
+    // Fetch initial online statuses and subscribe to WebSocket presence events
     useEffect(() => {
         if (!subgridId || visiblePeers.length === 0) return;
 
         // Update current user's presence
         updatePresence(subgridId);
 
-        // Fetch online statuses for peers
+        // Fetch initial online statuses (once)
         const fetchStatuses = async () => {
             const statuses = await getOnlineStatus(visiblePeers, subgridId);
             setOnlineStatuses(statuses);
         };
-
         fetchStatuses();
 
-        // Poll for updates every 30 seconds
-        const interval = setInterval(fetchStatuses, 30000);
-        return () => clearInterval(interval);
-    }, [subgridId, visiblePeers]);
+        // Subscribe to presence changes via WebSocket (real-time, no polling)
+        const unsubPresence = subscribe('presence_changed', (data: any) => {
+            if (data?.userId && typeof data?.online === 'boolean') {
+                setOnlineStatuses((prev) => ({
+                    ...prev,
+                    [data.userId]: data.online,
+                }));
+                setUserOnline(data.userId, data.online);
+            }
+        });
 
-    // Update online status when messages are received
+        // Also subscribe to user_status_changed for broader updates
+        const unsubStatus = subscribe('user_status_changed', (data: any) => {
+            if (data?.userId && typeof data?.online === 'boolean') {
+                setOnlineStatuses((prev) => ({
+                    ...prev,
+                    [data.userId]: data.online,
+                }));
+            }
+        });
+
+        return () => {
+            unsubPresence();
+            unsubStatus();
+        };
+    }, [subgridId, visiblePeers, subscribe]);
+
+    // Update online status when messages are received (mark sender as online)
     useEffect(() => {
         messages.forEach((msg) => {
             if (msg.senderId && msg.senderId !== userId) {
+                setOnlineStatuses((prev) => ({ ...prev, [msg.senderId!]: true }));
                 setUserOnline(msg.senderId, true);
             }
         });
@@ -759,7 +801,14 @@ const DirectMessagesScreen = () => {
     };
 
     const handleDeleteMessage = async (messageId: string) => {
-        if (!subgridId) return;
+        if (!subgridId || !activePeerId) return;
+
+        // For temp messages (pending), just remove from state
+        if (isTempId(messageId)) {
+            setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+            return;
+        }
+
         const confirmDelete = Platform.OS === 'web'
             ? window.confirm('Delete this message? This action cannot be undone.')
             : await new Promise<boolean>((resolve) => {
@@ -775,11 +824,30 @@ const DirectMessagesScreen = () => {
 
         if (!confirmDelete) return;
 
+        // Store message for rollback
+        const deletedMessage = messages.find((msg) => msg._id === messageId);
+
+        // Remove immediately (optimistic)
+        setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+        removeMessageFromCache(activePeerId, messageId);
+
         try {
             await communityDelete(`/subgrids/${subgridId}/direct-messages/${messageId}`);
-            setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to delete message:', error);
+            // Rollback on failure
+            if (deletedMessage) {
+                setMessages((prev) => {
+                    const newMessages = [...prev, deletedMessage].sort((a, b) => {
+                        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                        return dateA - dateB;
+                    });
+                    return newMessages;
+                });
+                addMessageToCache(activePeerId, deletedMessage);
+            }
+            setError('Failed to delete. Message restored.');
         }
     };
 
@@ -788,83 +856,101 @@ const DirectMessagesScreen = () => {
 
         // Validate before sending
         if (!body && attachments.length === 0) {
-            return; // Nothing to send
+            return;
         }
-        if (!subgridId || !activePeerId) {
+        if (!subgridId || !activePeerId || !userId) {
             setError('Please select a friend to message.');
             return;
         }
 
-        setError(''); // Clear any previous errors
+        setError('');
+
+        // Clear draft immediately for instant feel
         setDraft('');
+        clearDraft(activePeerId);
+
+        // Create optimistic message - shows instantly
+        const { tempMessage } = createOptimisticMessage(
+            activePeerId,
+            subgridId,
+            body,
+            userId,
+            attachments.map(f => ({
+                type: f.type.startsWith('image/') ? 'image' : 'file',
+                value: f.uri,
+                label: f.name,
+                _isLocal: true,
+            })),
+            'text'
+        );
+
+        // Add to UI immediately
+        setMessages((prev) => [...prev, tempMessage as Message]);
+
+        // Update last message immediately
+        setLastMessages(prev => ({
+            ...prev,
+            [activePeerId]: tempMessage as Message
+        }));
+
+        // Upload attachments in parallel
+        const uploadedAttachments: any[] = [];
+        if (attachments.length > 0) {
+            const uploadPromises = attachments.map(async (file) => {
+                try {
+                    const result = await uploadFile(file, { type: 'attachment', subgridId });
+                    if (result?.success && result?.data) {
+                        return {
+                            type: file.type.startsWith('image/') ? 'image' : 'file',
+                            value: result.data.url || result.data.secure_url,
+                            label: file.name,
+                            mimeType: file.type,
+                        };
+                    }
+                } catch (uploadErr: any) {
+                    console.error('Failed to upload attachment:', uploadErr.message);
+                }
+                return null;
+            });
+
+            const results = await Promise.all(uploadPromises);
+            results.forEach(r => { if (r) uploadedAttachments.push(r); });
+            setAttachments([]);
+        }
 
         try {
-            // Upload attachments first if any
-            const uploadedAttachments: any[] = [];
-            if (attachments.length > 0) {
-                for (const file of attachments) {
-                    try {
-                        const result = await uploadFile(file, { type: 'attachment', subgridId });
-                        if (result?.success && result?.data) {
-                            uploadedAttachments.push({
-                                type: file.type.startsWith('image/') ? 'image' : 'file',
-                                value: result.data.url || result.data.secure_url,
-                                label: file.name,
-                                mimeType: file.type,
-                            });
-                        }
-                    } catch (uploadErr: any) {
-                        console.error('Failed to upload attachment:', uploadErr.message);
-                    }
-                }
-                setAttachments([]); // Clear attachments after upload
-            }
-
-            // Only send if we have content
-            if (!body && uploadedAttachments.length === 0) {
-                return; // Nothing to send after processing
-            }
-
-            // Send message with attachments
             const sendResult = await communityPost(`/subgrids/${subgridId}/direct-messages`, {
                 recipientId: activePeerId,
-                body: body || '', // Ensure body is at least empty string
+                body: body || '',
                 kind: 'text',
                 attachments: uploadedAttachments,
             });
 
-            // Use optimistic update if WebSocket is connected (backend will broadcast the message back)
-            // Otherwise fall back to refetching
-            if (isConnected && sendResult?.data) {
-                const sentMessage = sendResult.data;
+            // Replace temp message with real one
+            if (sendResult?.data) {
+                markMessageSent(tempMessage._id, sendResult.data);
                 setMessages((prev) => {
-                    // Avoid duplicates (WebSocket might deliver it first)
-                    if (prev.some((m) => m._id === sentMessage._id)) {
-                        return prev;
-                    }
-                    return [...prev, sentMessage];
+                    const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
+                    const newMessages = [...filtered, sendResult.data];
+                    cacheMessages(activePeerId, newMessages.filter(m => !isTempId(m._id)));
+                    return newMessages;
                 });
-                // Update last message for this conversation
                 setLastMessages(prev => ({
                     ...prev,
-                    [activePeerId]: sentMessage
+                    [activePeerId]: sendResult.data
                 }));
-            } else {
-                // Fallback: refetch messages
-                const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`);
-                const newMessages = response?.data || [];
-                setMessages(newMessages);
-
-                // Update last message for this conversation
-                if (newMessages.length > 0) {
-                    setLastMessages(prev => ({
-                        ...prev,
-                        [activePeerId]: newMessages[0]
-                    }));
-                }
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to send message.');
+            // Mark as failed but keep visible
+            markMessageFailed(tempMessage._id, err.message);
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m._id === tempMessage._id
+                        ? { ...m, _status: 'failed', _error: err.message } as any
+                        : m
+                )
+            );
+            setError(err.message || 'Failed to send. Tap to retry.');
         }
     };
 

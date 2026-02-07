@@ -47,4 +47,30 @@ router.patch('/preferences',
     notificationController.updatePreferences
 );
 
+// ===== In-app Notification Inbox =====
+
+// Get in-app notifications (inbox)
+router.get('/inbox',
+    requireUser,
+    notificationController.getInboxNotifications
+);
+
+// Get unread notification count
+router.get('/unread-count',
+    requireUser,
+    notificationController.getUnreadCount
+);
+
+// Mark notification(s) as read
+router.patch('/read',
+    requireUser,
+    notificationController.markAsRead
+);
+
+// Delete notification(s)
+router.delete('/inbox',
+    requireUser,
+    notificationController.deleteNotifications
+);
+
 module.exports = router;

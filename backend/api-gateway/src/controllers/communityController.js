@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Tenant = require('../models/Tenant');
 const Subgrid = require('../models/Subgrid');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const TenantMembership = require('../models/TenantMembership');
 const SubgridMembership = require('../models/SubgridMembership');
 const InviteLink = require('../models/InviteLink');
@@ -81,20 +82,15 @@ const touchMemberActivity = async (tenantId, subgridId, userId) => {
 
 /**
  * Send push notification to user if they're offline
+ * Also creates an in-app notification for the user's notification inbox
  * Checks user's notification preferences and push tokens
  */
 const sendPushToOfflineUser = async (userId, notificationType, notificationData) => {
     try {
-        // Check if user is online via WebSocket
-        if (websocketService.isUserOnline(userId)) {
-            console.log(`[Push] User ${userId} is online, skipping push notification`);
-            return;
-        }
-
         // Get user with push tokens and preferences
         const user = await User.findById(userId).select('pushTokens notificationPreferences firstName lastName');
-        if (!user || !user.pushTokens || user.pushTokens.length === 0) {
-            console.log(`[Push] User ${userId} has no push tokens`);
+        if (!user) {
+            console.log(`[Push] User ${userId} not found`);
             return;
         }
 
@@ -105,6 +101,33 @@ const sendPushToOfflineUser = async (userId, notificationType, notificationData)
         if (notificationType === 'call' && prefs.calls === false) return;
         if (notificationType === 'mention' && prefs.mentions === false) return;
         if (notificationType === 'invite' && prefs.invites === false) return;
+
+        // Always create an in-app notification (regardless of online status)
+        try {
+            await Notification.create({
+                userId,
+                type: notificationType,
+                title: notificationData.title,
+                body: notificationData.body,
+                data: notificationData.data || {},
+                imageUrl: notificationData.imageUrl || null,
+            });
+            console.log(`[Notification] Created in-app notification for user ${userId}`);
+        } catch (notifError) {
+            console.error(`[Notification] Failed to create in-app notification:`, notifError.message);
+        }
+
+        // Check if user is online via WebSocket - if so, skip push notification
+        if (websocketService.isUserOnline(userId)) {
+            console.log(`[Push] User ${userId} is online, skipping push notification`);
+            return;
+        }
+
+        // Check if user has push tokens
+        if (!user.pushTokens || user.pushTokens.length === 0) {
+            console.log(`[Push] User ${userId} has no push tokens`);
+            return;
+        }
 
         // Send to all registered tokens
         const notifications = user.pushTokens.map((tokenInfo) => ({
@@ -736,7 +759,7 @@ exports.listSubgridMembers = async (req, res) => {
         const User = require('../models/User');
         const userIds = members.map(m => m.userId);
         const users = await User.find({ _id: { $in: userIds } })
-            .select('_id firstName lastName email username avatarUrl createdAt role stakeholderBadge company')
+            .select('_id firstName lastName email username avatarUrl bannerUrl createdAt role stakeholderBadge company')
             .lean();
 
         const userMap = {};
@@ -757,6 +780,7 @@ exports.listSubgridMembers = async (req, res) => {
                     email: user.email || '',
                     username: user.username || '',
                     avatarUrl: user.avatarUrl || '',
+                    bannerUrl: user.bannerUrl || '',
                     createdAt: user.createdAt || m.createdAt,
                     role: user.role || 'member',
                     stakeholderBadge: user.stakeholderBadge || null,
@@ -2206,7 +2230,8 @@ exports.createMessage = async (req, res) => {
                             subgridId,
                             channelId,
                             messageId: String(message._id),
-                            senderId: authorId,
+                            senderId: String(authorId),
+                            senderName,
                         },
                         channelId: 'messages',
                     });
@@ -3290,7 +3315,8 @@ exports.createDirectMessage = async (req, res) => {
                     data: {
                         type: 'dm',
                         subgridId,
-                        senderId,
+                        senderId: String(senderId),
+                        senderName,
                         messageId: String(message._id),
                     },
                     channelId: 'messages',
@@ -3401,6 +3427,7 @@ const mapUsersById = async (ids) => {
             email: user.email,
             username: user.username,
             avatarUrl: user.avatarUrl,
+            bannerUrl: user.bannerUrl,
             role: user.role || 'member',
             stakeholderBadge: user.stakeholderBadge || null,
             company: user.company || null,

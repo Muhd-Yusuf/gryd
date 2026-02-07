@@ -91,11 +91,13 @@ import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { communityGet, communityPost, communityPatch, communityPut, communityDelete, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile, getAuthUser, initiateChannelCall, logout, inviteStakeholder, StakeholderBadge } from '../lib/api';
+import { communityGet, communityPost, communityPatch, communityPut, communityDelete, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile, getAuthUser, initiateChannelCall, logout, inviteStakeholder, StakeholderBadge, getNotificationPreferences, updateNotificationPreferences } from '../lib/api';
 import { useTheme } from '../lib/theme';
 import UserAvatar from './UserAvatar';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
+import { getCachedSubgrids, cacheSubgrids, getCachedChannelMessages, cacheChannelMessages, getCachedChannelPosts, cacheChannelPosts, getCachedCUAdminMembers, cacheCUAdminMembers, addChannelMessageToCache } from '../lib/userCache';
+import { generateTempId, isTempId } from '../lib/messageQueue';
 
 // Helper to convert Blob to data URL
 const blobToDataUrl = (blob: Blob): Promise<string> => {
@@ -430,6 +432,10 @@ const CreditUnionAdminScreen = () => {
     const [notifyAllMessages, setNotifyAllMessages] = useState(true);
     const [notifyMentions, setNotifyMentions] = useState(true);
     const [notifyEvents, setNotifyEvents] = useState(true);
+    const [notifyDMs, setNotifyDMs] = useState(true);
+    const [notifyCalls, setNotifyCalls] = useState(true);
+    const [notificationSettingsLoading, setNotificationSettingsLoading] = useState(false);
+    const [notificationSettingsSaving, setNotificationSettingsSaving] = useState(false);
 
     // Privacy Settings
     const [allowDMs, setAllowDMs] = useState(true);
@@ -543,18 +549,33 @@ const CreditUnionAdminScreen = () => {
         });
     }, []);
 
-    // Load subgrids
+    // Load subgrids with caching for instant display
     useEffect(() => {
         if (!tenantId) {
             console.log('[CUA Admin] No tenantId yet, skipping subgrids load');
             return;
         }
+
+        // Load from cache first for instant display
+        const cached = getCachedSubgrids(tenantId);
+        if (cached && cached.length > 0) {
+            setSubgrids(cached);
+            if (!activeSubgridId) {
+                setActiveSubgridId(cached[0]._id);
+                setServerName(cached[0].name || '');
+                setServerDescription(cached[0].description || '');
+                setServerLogoUrl(cached[0].logoUrl || '');
+            }
+        }
+
+        // Then fetch fresh data in background
         console.log('[CUA Admin] Loading subgrids for tenant:', tenantId);
         communityGet(`/tenants/${tenantId}/subgrids`)
             .then((response) => {
                 console.log('[CUA Admin] Subgrids response:', response);
                 const list = response?.data || [];
                 setSubgrids(list);
+                cacheSubgrids(tenantId, list);
                 if (list.length > 0 && !activeSubgridId) {
                     console.log('[CUA Admin] Setting active subgrid:', list[0]._id);
                     setActiveSubgridId(list[0]._id);
@@ -565,6 +586,7 @@ const CreditUnionAdminScreen = () => {
             })
             .catch((err) => {
                 console.error('[CUA Admin] Failed to load subgrids:', err);
+                // Keep cached data on error
             });
     }, [tenantId]);
 
@@ -574,6 +596,13 @@ const CreditUnionAdminScreen = () => {
             console.log('[CUA Admin] No activeSubgridId, skipping subgrid data load');
             return;
         }
+
+        // Load cached members first for instant display
+        const cachedMembers = getCachedCUAdminMembers(activeSubgridId);
+        if (cachedMembers) {
+            setMembers(cachedMembers);
+        }
+
         console.log('[CUA Admin] Loading subgrid data for:', activeSubgridId);
         Promise.allSettled([
             communityGet(`/subgrids/${activeSubgridId}/channels`),
@@ -587,8 +616,20 @@ const CreditUnionAdminScreen = () => {
                 console.log('[CUA Admin] Posts result:', postsRes);
                 console.log('[CUA Admin] Members result:', membersRes);
                 if (channelsRes.status === 'fulfilled') setChannels(channelsRes.value?.data || []);
-                if (postsRes.status === 'fulfilled') setPosts(postsRes.value?.data || []);
-                if (membersRes.status === 'fulfilled') setMembers(membersRes.value?.data || []);
+                if (postsRes.status === 'fulfilled') {
+                    const postsData = postsRes.value?.data || [];
+                    setPosts(postsData);
+                    // Cache posts for the first channel
+                    if (postsData.length > 0 && postsData[0]?.channelId) {
+                        cacheChannelPosts(postsData[0].channelId, postsData);
+                    }
+                }
+                if (membersRes.status === 'fulfilled') {
+                    const membersData = membersRes.value?.data || [];
+                    setMembers(membersData);
+                    // Cache members for offline access
+                    cacheCUAdminMembers(activeSubgridId, membersData);
+                }
                 if (categoriesRes.status === 'fulfilled') setCategories(categoriesRes.value?.data || []);
                 if (eventsRes.status === 'fulfilled') setEvents(eventsRes.value?.data || []);
             });
@@ -606,10 +647,24 @@ const CreditUnionAdminScreen = () => {
     useEffect(() => {
         if (!activeSubgridId || !activeChannelId) return;
 
-        // Initial fetch
+        // Load cached messages first for instant display
+        const cachedMessages = getCachedChannelMessages(activeChannelId);
+        if (cachedMessages) {
+            setMessages(cachedMessages);
+        }
+
+        // Initial fetch from server
         communityGet(`/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`)
-            .then((response) => setMessages(response?.data || []))
-            .catch(() => setMessages([]));
+            .then((response) => {
+                const messagesData = response?.data || [];
+                setMessages(messagesData);
+                // Cache messages for offline access
+                cacheChannelMessages(activeChannelId, messagesData);
+            })
+            .catch(() => {
+                // Keep cached messages on error
+                if (!cachedMessages) setMessages([]);
+            });
     }, [activeSubgridId, activeChannelId]);
 
     // WebSocket: Join channel room and subscribe to new messages
@@ -789,7 +844,58 @@ const CreditUnionAdminScreen = () => {
         setServerName(current.name || '');
         setServerDescription(current.description || '');
         setServerLogoUrl(current.logoUrl || '');
+        // Initialize banner color selection from saved coverImageUrl
+        if (current.coverImageUrl) {
+            const savedBannerIndex = bannerColors.findIndex(
+                (colors) => colors[0] === current.coverImageUrl
+            );
+            if (savedBannerIndex !== -1) {
+                setSelectedBanner(savedBannerIndex);
+            }
+        }
     }, [activeSubgridId, subgrids]);
+
+    // Load notification preferences when modal opens
+    useEffect(() => {
+        if (!notificationSettingsModalOpen) return;
+        const loadPreferences = async () => {
+            setNotificationSettingsLoading(true);
+            try {
+                const res = await getNotificationPreferences();
+                if (res.success && res.data) {
+                    setNotifyAllMessages(res.data.messages ?? true);
+                    setNotifyMentions(res.data.mentions ?? true);
+                    setNotifyDMs(res.data.dms ?? true);
+                    setNotifyCalls(res.data.calls ?? true);
+                    setNotifyEvents(res.data.invites ?? true); // Map invites to events for UI
+                }
+            } catch (err) {
+                console.error('Failed to load notification preferences:', err);
+            } finally {
+                setNotificationSettingsLoading(false);
+            }
+        };
+        loadPreferences();
+    }, [notificationSettingsModalOpen]);
+
+    const handleSaveNotificationSettings = async () => {
+        setNotificationSettingsSaving(true);
+        try {
+            await updateNotificationPreferences({
+                messages: notifyAllMessages,
+                mentions: notifyMentions,
+                dms: notifyDMs,
+                calls: notifyCalls,
+                invites: notifyEvents, // Map events to invites in backend
+            });
+            setNotificationSettingsModalOpen(false);
+        } catch (err) {
+            console.error('Failed to save notification preferences:', err);
+            Alert.alert('Error', 'Failed to save notification settings');
+        } finally {
+            setNotificationSettingsSaving(false);
+        }
+    };
 
     const activeSubgrid = subgrids.find((s) => s._id === activeSubgridId);
     const activeChannel = channels.find((c) => c._id === activeChannelId);
@@ -1618,6 +1724,7 @@ const CreditUnionAdminScreen = () => {
                 name: serverName.trim(),
                 description: serverDescription.trim(),
                 logoUrl: serverLogoUrl || '',
+                coverImageUrl: bannerColors[selectedBanner][0],
             });
             const response = await communityGet(`/tenants/${tenantId}/subgrids`);
             setSubgrids(response?.data || []);
@@ -1768,11 +1875,40 @@ const CreditUnionAdminScreen = () => {
 
     const handleSendMessage = async () => {
         if ((!messageDraft.trim() && attachments.length === 0) || !activeSubgridId || !activeChannelId) return;
+
+        const tempId = generateTempId();
+        const messageBody = messageDraft.trim();
+        const currentAttachments = [...attachments];
+
+        // Create optimistic message for instant display
+        const optimisticMessage = {
+            _id: tempId,
+            senderId: userId,
+            channelId: activeChannelId,
+            body: messageBody,
+            attachments: currentAttachments.map(att => ({
+                type: att.type.startsWith('image/') ? 'image' :
+                      att.type.startsWith('audio/') ? 'voice' :
+                      att.type.startsWith('video/') ? 'video' : 'file',
+                value: att.uri, // Use local URI temporarily
+                mimeType: att.type,
+                fileName: att.name,
+            })),
+            createdAt: new Date().toISOString(),
+            _isPending: true,
+            _status: 'sending',
+        };
+
+        // Add optimistic message to UI immediately
+        setMessages(prev => [...prev, optimisticMessage]);
+        setMessageDraft('');
+        setAttachments([]);
+
         try {
             // Upload attachments first if any
             const uploadedAttachments: Array<{ type: string; value: string; mimeType?: string; fileName?: string }> = [];
 
-            for (const att of attachments) {
+            for (const att of currentAttachments) {
                 try {
                     console.log('[CUAdmin] Uploading attachment:', att.name, att.type);
                     const uploadResult = await uploadFile(
@@ -1780,7 +1916,6 @@ const CreditUnionAdminScreen = () => {
                         { type: 'chat', subgridId: activeSubgridId }
                     );
                     console.log('[CUAdmin] Upload result:', uploadResult);
-                    // uploadFile returns { success: true, data: { url: '...' } }
                     const uploadUrl = uploadResult?.data?.url || uploadResult?.url;
                     if (uploadUrl) {
                         const attType = att.type.startsWith('image/') ? 'image' :
@@ -1804,20 +1939,31 @@ const CreditUnionAdminScreen = () => {
             // Build message payload
             const messagePayload: any = {
                 channelId: activeChannelId,
-                body: messageDraft.trim(),
+                body: messageBody,
             };
 
             if (uploadedAttachments.length > 0) {
                 messagePayload.attachments = uploadedAttachments;
             }
 
-            await communityPost(`/subgrids/${activeSubgridId}/messages`, messagePayload);
-            setMessageDraft('');
-            setAttachments([]);
-            const response = await communityGet(`/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`);
-            setMessages(response?.data || []);
+            const response = await communityPost(`/subgrids/${activeSubgridId}/messages`, messagePayload);
+
+            // Replace optimistic message with real message
+            const realMessage = response?.data || response?.message || response;
+            setMessages(prev => prev.map(msg =>
+                msg._id === tempId ? { ...realMessage, _isPending: false } : msg
+            ));
+
+            // Cache the new message
+            if (realMessage?._id) {
+                addChannelMessageToCache(activeChannelId, realMessage);
+            }
         } catch (err: any) {
             console.error('Failed to send message:', err.message);
+            // Mark message as failed but keep it visible for retry
+            setMessages(prev => prev.map(msg =>
+                msg._id === tempId ? { ...msg, _isPending: true, _status: 'failed' } : msg
+            ));
         }
     };
 
@@ -5353,57 +5499,106 @@ const CreditUnionAdminScreen = () => {
                         </TouchableOpacity>
                         <Text style={styles.modalTitle}>Notification Settings</Text>
 
-                        <View style={styles.toggleRow}>
-                            <View style={styles.toggleInfo}>
-                                <Bell size={16} color={colors.textMuted} />
-                                <View>
-                                    <Text style={styles.toggleTitle}>All Messages</Text>
-                                    <Text style={styles.toggleDesc}>Get notified for every message</Text>
-                                </View>
+                        {notificationSettingsLoading ? (
+                            <View style={{ padding: 40, alignItems: 'center' }}>
+                                <ActivityIndicator size="large" color={colors.primary} />
+                                <Text style={[styles.toggleDesc, { marginTop: 12 }]}>Loading preferences...</Text>
                             </View>
-                            <TouchableOpacity
-                                style={[styles.toggle, notifyAllMessages && styles.toggleActive]}
-                                onPress={() => setNotifyAllMessages(!notifyAllMessages)}
-                            >
-                                <View style={[styles.toggleKnob, notifyAllMessages && styles.toggleKnobActive]} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.toggleRow}>
-                            <View style={styles.toggleInfo}>
-                                <Users size={16} color={colors.textMuted} />
-                                <View>
-                                    <Text style={styles.toggleTitle}>Mentions Only</Text>
-                                    <Text style={styles.toggleDesc}>Only get notified when mentioned</Text>
+                        ) : (
+                            <>
+                                <View style={styles.toggleRow}>
+                                    <View style={styles.toggleInfo}>
+                                        <Bell size={16} color={colors.textMuted} />
+                                        <View>
+                                            <Text style={styles.toggleTitle}>Channel Messages</Text>
+                                            <Text style={styles.toggleDesc}>Get notified for channel messages</Text>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.toggle, notifyAllMessages && styles.toggleActive]}
+                                        onPress={() => setNotifyAllMessages(!notifyAllMessages)}
+                                    >
+                                        <View style={[styles.toggleKnob, notifyAllMessages && styles.toggleKnobActive]} />
+                                    </TouchableOpacity>
                                 </View>
-                            </View>
-                            <TouchableOpacity
-                                style={[styles.toggle, notifyMentions && styles.toggleActive]}
-                                onPress={() => setNotifyMentions(!notifyMentions)}
-                            >
-                                <View style={[styles.toggleKnob, notifyMentions && styles.toggleKnobActive]} />
-                            </TouchableOpacity>
-                        </View>
 
-                        <View style={styles.toggleRow}>
-                            <View style={styles.toggleInfo}>
-                                <Calendar size={16} color={colors.textMuted} />
-                                <View>
-                                    <Text style={styles.toggleTitle}>Events</Text>
-                                    <Text style={styles.toggleDesc}>Get notified about events</Text>
+                                <View style={styles.toggleRow}>
+                                    <View style={styles.toggleInfo}>
+                                        <MessageSquare size={16} color={colors.textMuted} />
+                                        <View>
+                                            <Text style={styles.toggleTitle}>Direct Messages</Text>
+                                            <Text style={styles.toggleDesc}>Get notified for DMs</Text>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.toggle, notifyDMs && styles.toggleActive]}
+                                        onPress={() => setNotifyDMs(!notifyDMs)}
+                                    >
+                                        <View style={[styles.toggleKnob, notifyDMs && styles.toggleKnobActive]} />
+                                    </TouchableOpacity>
                                 </View>
-                            </View>
-                            <TouchableOpacity
-                                style={[styles.toggle, notifyEvents && styles.toggleActive]}
-                                onPress={() => setNotifyEvents(!notifyEvents)}
-                            >
-                                <View style={[styles.toggleKnob, notifyEvents && styles.toggleKnobActive]} />
-                            </TouchableOpacity>
-                        </View>
 
-                        <TouchableOpacity style={styles.fullWidthBtn} onPress={() => setNotificationSettingsModalOpen(false)}>
-                            <Text style={styles.fullWidthBtnText}>Save Settings</Text>
-                        </TouchableOpacity>
+                                <View style={styles.toggleRow}>
+                                    <View style={styles.toggleInfo}>
+                                        <Users size={16} color={colors.textMuted} />
+                                        <View>
+                                            <Text style={styles.toggleTitle}>Mentions</Text>
+                                            <Text style={styles.toggleDesc}>Get notified when mentioned</Text>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.toggle, notifyMentions && styles.toggleActive]}
+                                        onPress={() => setNotifyMentions(!notifyMentions)}
+                                    >
+                                        <View style={[styles.toggleKnob, notifyMentions && styles.toggleKnobActive]} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.toggleRow}>
+                                    <View style={styles.toggleInfo}>
+                                        <Video size={16} color={colors.textMuted} />
+                                        <View>
+                                            <Text style={styles.toggleTitle}>Calls</Text>
+                                            <Text style={styles.toggleDesc}>Get notified for incoming calls</Text>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.toggle, notifyCalls && styles.toggleActive]}
+                                        onPress={() => setNotifyCalls(!notifyCalls)}
+                                    >
+                                        <View style={[styles.toggleKnob, notifyCalls && styles.toggleKnobActive]} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.toggleRow}>
+                                    <View style={styles.toggleInfo}>
+                                        <Calendar size={16} color={colors.textMuted} />
+                                        <View>
+                                            <Text style={styles.toggleTitle}>Invites & Events</Text>
+                                            <Text style={styles.toggleDesc}>Get notified about invites and events</Text>
+                                        </View>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.toggle, notifyEvents && styles.toggleActive]}
+                                        onPress={() => setNotifyEvents(!notifyEvents)}
+                                    >
+                                        <View style={[styles.toggleKnob, notifyEvents && styles.toggleKnobActive]} />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <TouchableOpacity
+                                    style={[styles.fullWidthBtn, notificationSettingsSaving && { opacity: 0.7 }]}
+                                    onPress={handleSaveNotificationSettings}
+                                    disabled={notificationSettingsSaving}
+                                >
+                                    {notificationSettingsSaving ? (
+                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                    ) : (
+                                        <Text style={styles.fullWidthBtnText}>Save Settings</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 </View>
             </Modal>

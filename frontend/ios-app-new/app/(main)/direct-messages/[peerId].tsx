@@ -34,7 +34,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import { useTheme } from '../../../lib/theme';
 import { Attachment, EMOJI_SET, STICKER_SET, formatDuration, twemojiUrl } from '../../../lib/chatMedia';
-import { getCachedUser, cacheUser, getCachedMessages, cacheMessages, addMessageToCache, getCachedSubgrids, cacheSubgrids, getCachedFriends, cacheFriends } from '../../../lib/userCache';
+import { getCachedUser, cacheUser, getCachedMessages, cacheMessages, addMessageToCache, removeMessageFromCache, getCachedSubgrids, cacheSubgrids, getCachedFriends, cacheFriends } from '../../../lib/userCache';
+import { createOptimisticMessage, markMessageSent, markMessageFailed, isTempId, saveDraft, getDraft, clearDraft } from '../../../lib/messageQueue';
 import { useAgoraCall } from '../../../hooks';
 import { useCallContext } from '../../../contexts/CallContext';
 import { CallModalDefault as CallModal } from '../../../components';
@@ -269,7 +270,7 @@ const DirectMessageChatScreen = () => {
     const [messages, setMessages] = useState<Message[]>(() => {
         return peerId ? (getCachedMessages(peerId) as Message[] || []) : [];
     });
-    const [draft, setDraft] = useState('');
+    const [draft, setDraft] = useState(() => peerId ? getDraft(peerId) : '');
     const [error, setError] = useState('');
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [stickerOpen, setStickerOpen] = useState(false);
@@ -371,17 +372,22 @@ const DirectMessageChatScreen = () => {
         }
     }, [agoraCall.callState, agoraCall.currentCall?.callId, markCallConnected]);
 
+    // Initialize user data in parallel for faster startup
     useEffect(() => {
         let isActive = true;
-        resolveTenantId().then((id) => { if (isActive) setTenantId(id || ''); }).catch(() => {});
-        resolveUserId().then((id) => { if (isActive) setCurrentUserId(id || ''); }).catch(() => {});
-        getAuthUser()
-            .then((user) => {
-                if (isActive && user?.avatarUrl) {
-                    setCurrentUserAvatar(user.avatarUrl);
-                }
-            })
-            .catch(() => {});
+
+        // Run all initialization calls in parallel
+        Promise.all([
+            resolveTenantId(),
+            resolveUserId(),
+            getAuthUser(),
+        ]).then(([tid, uid, user]) => {
+            if (!isActive) return;
+            if (tid) setTenantId(tid);
+            if (uid) setCurrentUserId(uid);
+            if (user?.avatarUrl) setCurrentUserAvatar(user.avatarUrl);
+        }).catch(() => {});
+
         return () => { isActive = false; };
     }, []);
 
@@ -586,60 +592,90 @@ const DirectMessageChatScreen = () => {
     }, [isConnected, currentUserId, peerId, joinRoom, leaveRoom, subscribe]);
 
     const handleSend = async () => {
-        if ((!draft.trim() && pendingAttachments.length === 0) || !subgridId || !peerId) return;
+        if ((!draft.trim() && pendingAttachments.length === 0) || !subgridId || !peerId || !currentUserId) return;
         const body = draft.trim();
+
+        // Clear draft immediately for instant feel
         setDraft('');
+        clearDraft(peerId);
+
+        // Create optimistic message - shows instantly in UI
+        const { tempMessage } = createOptimisticMessage(
+            peerId,
+            subgridId,
+            body,
+            currentUserId,
+            pendingAttachments.map(f => ({
+                type: f.type.startsWith('image/') ? 'image' : 'file',
+                value: f.uri, // Local URI for preview
+                label: f.name,
+                _isLocal: true, // Flag for local preview
+            })),
+            'text'
+        );
+
+        // Add to UI immediately (optimistic update)
+        setMessages((prev) => [...prev, tempMessage as Message]);
+
+        // Scroll to bottom immediately
+        setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 50);
+
+        // Upload attachments in parallel (background)
+        const uploadedAttachments: Attachment[] = [];
+        if (pendingAttachments.length > 0) {
+            const uploadPromises = pendingAttachments.map(async (file) => {
+                try {
+                    const result = await uploadFile(file, { type: 'attachment', subgridId });
+                    if (result?.success && result?.data) {
+                        return {
+                            type: file.type.startsWith('image/') ? 'image' : 'file',
+                            value: result.data.url || result.data.secure_url,
+                            label: file.name,
+                            mimeType: file.type,
+                        } as Attachment;
+                    }
+                } catch (uploadErr: any) {
+                    console.error('Failed to upload attachment:', uploadErr.message);
+                }
+                return null;
+            });
+
+            const results = await Promise.all(uploadPromises);
+            results.forEach(r => { if (r) uploadedAttachments.push(r); });
+            setPendingAttachments([]);
+        }
 
         try {
-            // Upload attachments first if any
-            const uploadedAttachments: Attachment[] = [];
-            if (pendingAttachments.length > 0) {
-                setUploading(true);
-                for (const file of pendingAttachments) {
-                    try {
-                        const result = await uploadFile(file, { type: 'attachment', subgridId });
-                        if (result?.success && result?.data) {
-                            uploadedAttachments.push({
-                                type: file.type.startsWith('image/') ? 'image' : 'file',
-                                value: result.data.url || result.data.secure_url,
-                                label: file.name,
-                                mimeType: file.type,
-                            } as Attachment);
-                        }
-                    } catch (uploadErr: any) {
-                        console.error('Failed to upload attachment:', uploadErr.message);
-                    }
-                }
-                setPendingAttachments([]);
-                setUploading(false);
-            }
-
             const sendResult = await communityPost(`/subgrids/${subgridId}/direct-messages`, {
                 recipientId: peerId,
                 body,
                 attachments: uploadedAttachments,
             });
 
-            // Use optimistic update - add the sent message immediately
-            // WebSocket will also deliver it, but we handle duplicates
+            // Replace temp message with real message
             if (sendResult?.data) {
+                markMessageSent(tempMessage._id, sendResult.data);
                 setMessages((prev) => {
-                    if (prev.some((m) => m._id === sendResult.data._id)) {
-                        return prev;
-                    }
-                    const newMessages = [...prev, sendResult.data];
-                    // Update cache
-                    cacheMessages(peerId, newMessages);
+                    // Remove temp message and add real one (avoid duplicates from WebSocket)
+                    const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
+                    const newMessages = [...filtered, sendResult.data];
+                    cacheMessages(peerId, newMessages.filter(m => !isTempId(m._id)));
                     return newMessages;
                 });
-                // Scroll to bottom
-                setTimeout(() => {
-                    scrollViewRef.current?.scrollToEnd({ animated: true });
-                }, 100);
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to send message.');
-            setUploading(false);
+            // Mark message as failed but keep it visible with error state
+            markMessageFailed(tempMessage._id, err.message);
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m._id === tempMessage._id
+                        ? { ...m, _status: 'failed', _error: err.message } as any
+                        : m
+                )
+            );
+            setError(err.message || 'Failed to send message. Tap to retry.');
         }
     };
 
@@ -703,17 +739,51 @@ const DirectMessageChatScreen = () => {
     };
 
     const handleSendAttachment = async (attachment: Attachment) => {
-        if (!subgridId || !peerId) return;
+        if (!subgridId || !peerId || !currentUserId) return;
+
+        // Create optimistic message for attachment
+        const { tempMessage } = createOptimisticMessage(
+            peerId,
+            subgridId,
+            '',
+            currentUserId,
+            [attachment],
+            attachment.type || 'file'
+        );
+
+        // Add to UI immediately
+        setMessages((prev) => [...prev, tempMessage as Message]);
+        setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 50);
+
         try {
-            await communityPost(`/subgrids/${subgridId}/direct-messages`, {
+            const sendResult = await communityPost(`/subgrids/${subgridId}/direct-messages`, {
                 recipientId: peerId,
                 body: '',
                 kind: attachment.type,
                 attachments: [attachment],
             });
-            const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${peerId}`);
-            setMessages(response?.data || []);
+
+            // Replace temp with real message
+            if (sendResult?.data) {
+                markMessageSent(tempMessage._id, sendResult.data);
+                setMessages((prev) => {
+                    const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
+                    const newMessages = [...filtered, sendResult.data];
+                    cacheMessages(peerId, newMessages.filter(m => !isTempId(m._id)));
+                    return newMessages;
+                });
+            }
         } catch (err: any) {
+            markMessageFailed(tempMessage._id, err.message);
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m._id === tempMessage._id
+                        ? { ...m, _status: 'failed', _error: err.message } as any
+                        : m
+                )
+            );
             setError(err.message || 'Failed to send attachment.');
         }
     };
@@ -984,7 +1054,14 @@ const DirectMessageChatScreen = () => {
     };
 
     const handleDeleteMessage = async (messageId: string) => {
-        if (!subgridId) return;
+        if (!subgridId || !peerId) return;
+
+        // For temp messages (pending), just remove from queue
+        if (isTempId(messageId)) {
+            setMessages((prev) => prev.filter((m) => m._id !== messageId));
+            return;
+        }
+
         const confirmDelete = Platform.OS === 'web'
             ? window.confirm('Delete this message? This action cannot be undone.')
             : await new Promise<boolean>((resolve) => {
@@ -998,12 +1075,33 @@ const DirectMessageChatScreen = () => {
                 );
             });
         if (!confirmDelete) return;
+
+        // Store the message for rollback
+        const deletedMessage = messages.find((m) => m._id === messageId);
+
+        // Remove immediately (optimistic delete)
+        setMessages((prev) => prev.filter((m) => m._id !== messageId));
+        if (peerId) removeMessageFromCache(peerId, messageId);
+
         try {
             await communityDelete(`/subgrids/${subgridId}/direct-messages/${messageId}`);
-            setMessages((prev) => prev.filter((m) => m._id !== messageId));
+            // Success - message already removed
         } catch (error: any) {
             console.error('Failed to delete message:', error);
-            setError(error.message || 'Failed to delete message');
+            // Rollback - restore the message
+            if (deletedMessage) {
+                setMessages((prev) => {
+                    // Insert back in correct position based on createdAt
+                    const newMessages = [...prev, deletedMessage].sort((a, b) => {
+                        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                        return dateA - dateB;
+                    });
+                    return newMessages;
+                });
+                if (peerId) addMessageToCache(peerId, deletedMessage);
+            }
+            setError('Failed to delete. Message restored.');
         }
     };
 
@@ -1333,7 +1431,10 @@ const DirectMessageChatScreen = () => {
                                 </TouchableOpacity>
                                 <TextInput
                                     value={draft}
-                                    onChangeText={setDraft}
+                                    onChangeText={(text) => {
+                                        setDraft(text);
+                                        if (peerId) saveDraft(peerId, text);
+                                    }}
                                     placeholder="Type message"
                                     placeholderTextColor={colors.textMuted}
                                     style={styles.composerInput}

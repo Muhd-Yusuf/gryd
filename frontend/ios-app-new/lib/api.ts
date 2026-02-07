@@ -1288,6 +1288,33 @@ export const updateNotificationPreferences = (prefs: {
     invites?: boolean;
 }) => notificationsPatch('/preferences', prefs);
 
+// Get in-app notification inbox
+export const getNotificationInbox = (options?: {
+    limit?: number;
+    offset?: number;
+    type?: string;
+    unreadOnly?: boolean;
+}) => {
+    const params = new URLSearchParams();
+    if (options?.limit) params.append('limit', String(options.limit));
+    if (options?.offset) params.append('offset', String(options.offset));
+    if (options?.type) params.append('type', options.type);
+    if (options?.unreadOnly) params.append('unreadOnly', 'true');
+    const query = params.toString();
+    return notificationsGet(`/inbox${query ? `?${query}` : ''}`);
+};
+
+// Get unread notification count
+export const getUnreadNotificationCount = () => notificationsGet('/unread-count');
+
+// Mark notifications as read
+export const markNotificationsAsRead = (notificationIds?: string[], markAll?: boolean) =>
+    notificationsPatch('/read', { notificationIds, markAll });
+
+// Delete notifications
+export const deleteNotifications = (notificationIds?: string[], deleteAll?: boolean) =>
+    notificationsDelete('/inbox', { notificationIds, deleteAll });
+
 // ===================
 // SUPER ADMIN API
 // ===================

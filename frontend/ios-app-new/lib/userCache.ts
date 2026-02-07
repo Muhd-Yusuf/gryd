@@ -27,16 +27,33 @@ export type CachedMessage = {
 
 const USER_CACHE_KEY = 'gryd_user_profiles_cache';
 const MESSAGES_CACHE_KEY = 'gryd_dm_messages_cache';
+const CHANNEL_MESSAGES_CACHE_KEY = 'gryd_channel_messages_cache';
+const CHANNEL_POSTS_CACHE_KEY = 'gryd_channel_posts_cache';
 const SUBGRIDS_CACHE_KEY = 'gryd_subgrids_cache';
 const FRIENDS_CACHE_KEY = 'gryd_friends_cache';
+const SUPER_ADMIN_CACHE_KEY = 'gryd_super_admin_cache';
+const CU_ADMIN_MEMBERS_CACHE_KEY = 'gryd_cu_admin_members_cache';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 const MESSAGE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes for messages
+const ADMIN_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes for admin data
 
 // In-memory caches for instant access
 let userCache: Record<string, CachedUserProfile> = {};
 let messagesCache: Record<string, { messages: CachedMessage[]; cachedAt: number }> = {};
+let channelMessagesCache: Record<string, { messages: CachedMessage[]; cachedAt: number }> = {};
+let channelPostsCache: Record<string, { posts: any[]; cachedAt: number }> = {};
 let subgridsCache: { data: any[]; tenantId: string; cachedAt: number } | null = null;
 let friendsCache: { friends: string[]; users: Record<string, any>; subgridId: string; cachedAt: number } | null = null;
+let superAdminCache: {
+    stats?: any;
+    customers?: any[];
+    customersTotal?: number;
+    moderation?: any[];
+    config?: any;
+    teamMembers?: any[];
+    cachedAt: number;
+} | null = null;
+let cuAdminMembersCache: Record<string, { members: any[]; cachedAt: number }> = {};
 let cacheLoaded = false;
 
 // Load all caches from storage on init
@@ -243,6 +260,99 @@ export const removeMessageFromCache = (peerId: string, messageId: string): void 
     }
 };
 
+// ============ CHANNEL MESSAGES CACHE ============
+
+export const getCachedChannelMessages = (channelId: string): CachedMessage[] | null => {
+    const cached = channelMessagesCache[channelId];
+    if (!cached) return null;
+    if (Date.now() - cached.cachedAt > MESSAGE_CACHE_DURATION) {
+        delete channelMessagesCache[channelId];
+        return null;
+    }
+    return cached.messages;
+};
+
+export const cacheChannelMessages = (channelId: string, messages: CachedMessage[]): void => {
+    channelMessagesCache[channelId] = {
+        messages,
+        cachedAt: Date.now(),
+    };
+};
+
+export const addChannelMessageToCache = (channelId: string, message: CachedMessage): void => {
+    const existing = channelMessagesCache[channelId];
+    if (existing) {
+        if (!existing.messages.find(m => m._id === message._id)) {
+            existing.messages.push(message);
+            existing.cachedAt = Date.now();
+        }
+    } else {
+        channelMessagesCache[channelId] = {
+            messages: [message],
+            cachedAt: Date.now(),
+        };
+    }
+};
+
+export const removeChannelMessageFromCache = (channelId: string, messageId: string): void => {
+    const existing = channelMessagesCache[channelId];
+    if (existing) {
+        existing.messages = existing.messages.filter(m => m._id !== messageId);
+    }
+};
+
+// ============ CHANNEL POSTS CACHE ============
+
+export const getCachedChannelPosts = (channelId: string): any[] | null => {
+    const cached = channelPostsCache[channelId];
+    if (!cached) return null;
+    if (Date.now() - cached.cachedAt > MESSAGE_CACHE_DURATION) {
+        delete channelPostsCache[channelId];
+        return null;
+    }
+    return cached.posts;
+};
+
+export const cacheChannelPosts = (channelId: string, posts: any[]): void => {
+    channelPostsCache[channelId] = {
+        posts,
+        cachedAt: Date.now(),
+    };
+};
+
+export const addChannelPostToCache = (channelId: string, post: any): void => {
+    const existing = channelPostsCache[channelId];
+    if (existing) {
+        if (!existing.posts.find(p => p._id === post._id)) {
+            existing.posts.unshift(post); // Posts are newest first
+            existing.cachedAt = Date.now();
+        }
+    } else {
+        channelPostsCache[channelId] = {
+            posts: [post],
+            cachedAt: Date.now(),
+        };
+    }
+};
+
+export const updateChannelPostInCache = (channelId: string, post: any): void => {
+    const existing = channelPostsCache[channelId];
+    if (existing) {
+        const idx = existing.posts.findIndex(p => p._id === post._id);
+        if (idx >= 0) {
+            existing.posts[idx] = post;
+            existing.cachedAt = Date.now();
+        }
+    }
+};
+
+export const removeChannelPostFromCache = (channelId: string, postId: string): void => {
+    const existing = channelPostsCache[channelId];
+    if (existing) {
+        existing.posts = existing.posts.filter(p => p._id !== postId);
+    }
+};
+
 // ============ SUBGRIDS CACHE ============
 
 export const getCachedSubgrids = (tenantId: string): any[] | null => {
@@ -288,6 +398,150 @@ export const cacheFriends = (subgridId: string, friends: string[], users: Record
     saveFriendsCache();
 };
 
+// ============ SUPER ADMIN CACHE ============
+
+export const getCachedSuperAdminStats = (): any | null => {
+    if (!superAdminCache?.stats) return null;
+    if (Date.now() - superAdminCache.cachedAt > ADMIN_CACHE_DURATION) return null;
+    return superAdminCache.stats;
+};
+
+export const cacheSuperAdminStats = (stats: any): void => {
+    superAdminCache = {
+        ...superAdminCache,
+        stats,
+        cachedAt: Date.now(),
+    };
+    saveSuperAdminCache();
+};
+
+export const getCachedSuperAdminCustomers = (): { customers: any[]; total: number } | null => {
+    if (!superAdminCache?.customers) return null;
+    if (Date.now() - superAdminCache.cachedAt > ADMIN_CACHE_DURATION) return null;
+    return { customers: superAdminCache.customers, total: superAdminCache.customersTotal || 0 };
+};
+
+export const cacheSuperAdminCustomers = (customers: any[], total: number): void => {
+    superAdminCache = {
+        ...superAdminCache,
+        customers,
+        customersTotal: total,
+        cachedAt: Date.now(),
+    };
+    saveSuperAdminCache();
+};
+
+export const getCachedSuperAdminModeration = (): any[] | null => {
+    if (!superAdminCache?.moderation) return null;
+    if (Date.now() - superAdminCache.cachedAt > ADMIN_CACHE_DURATION) return null;
+    return superAdminCache.moderation;
+};
+
+export const cacheSuperAdminModeration = (moderation: any[]): void => {
+    superAdminCache = {
+        ...superAdminCache,
+        moderation,
+        cachedAt: Date.now(),
+    };
+    saveSuperAdminCache();
+};
+
+export const getCachedSuperAdminConfig = (): any | null => {
+    if (!superAdminCache?.config) return null;
+    if (Date.now() - superAdminCache.cachedAt > ADMIN_CACHE_DURATION) return null;
+    return superAdminCache.config;
+};
+
+export const cacheSuperAdminConfig = (config: any): void => {
+    superAdminCache = {
+        ...superAdminCache,
+        config,
+        cachedAt: Date.now(),
+    };
+    saveSuperAdminCache();
+};
+
+export const getCachedSuperAdminTeamMembers = (): any[] | null => {
+    if (!superAdminCache?.teamMembers) return null;
+    if (Date.now() - superAdminCache.cachedAt > ADMIN_CACHE_DURATION) return null;
+    return superAdminCache.teamMembers;
+};
+
+export const cacheSuperAdminTeamMembers = (teamMembers: any[]): void => {
+    superAdminCache = {
+        ...superAdminCache,
+        teamMembers,
+        cachedAt: Date.now(),
+    };
+    saveSuperAdminCache();
+};
+
+let superAdminSaveTimeout: NodeJS.Timeout | null = null;
+const saveSuperAdminCache = (): void => {
+    if (superAdminSaveTimeout) clearTimeout(superAdminSaveTimeout);
+    superAdminSaveTimeout = setTimeout(async () => {
+        try {
+            if (superAdminCache) {
+                await AsyncStorage.setItem(SUPER_ADMIN_CACHE_KEY, JSON.stringify(superAdminCache));
+            }
+        } catch (err) {
+            console.warn('[Cache] Failed to save super admin cache:', err);
+        }
+    }, 1000);
+};
+
+// ============ CU ADMIN MEMBERS CACHE ============
+
+export const getCachedCUAdminMembers = (subgridId: string): any[] | null => {
+    const cached = cuAdminMembersCache[subgridId];
+    if (!cached) return null;
+    if (Date.now() - cached.cachedAt > ADMIN_CACHE_DURATION) {
+        delete cuAdminMembersCache[subgridId];
+        return null;
+    }
+    return cached.members;
+};
+
+export const cacheCUAdminMembers = (subgridId: string, members: any[]): void => {
+    cuAdminMembersCache[subgridId] = {
+        members,
+        cachedAt: Date.now(),
+    };
+    saveCUAdminMembersCache();
+};
+
+export const updateCUAdminMemberInCache = (subgridId: string, member: any): void => {
+    const cached = cuAdminMembersCache[subgridId];
+    if (cached) {
+        const idx = cached.members.findIndex(m => m._id === member._id || m.userId === member.userId);
+        if (idx >= 0) {
+            cached.members[idx] = { ...cached.members[idx], ...member };
+            cached.cachedAt = Date.now();
+            saveCUAdminMembersCache();
+        }
+    }
+};
+
+export const removeCUAdminMemberFromCache = (subgridId: string, memberId: string): void => {
+    const cached = cuAdminMembersCache[subgridId];
+    if (cached) {
+        cached.members = cached.members.filter(m => m._id !== memberId && m.userId !== memberId);
+        saveCUAdminMembersCache();
+    }
+};
+
+let cuAdminMembersSaveTimeout: NodeJS.Timeout | null = null;
+const saveCUAdminMembersCache = (): void => {
+    if (cuAdminMembersSaveTimeout) clearTimeout(cuAdminMembersSaveTimeout);
+    cuAdminMembersSaveTimeout = setTimeout(async () => {
+        try {
+            await AsyncStorage.setItem(CU_ADMIN_MEMBERS_CACHE_KEY, JSON.stringify(cuAdminMembersCache));
+        } catch (err) {
+            console.warn('[Cache] Failed to save CU admin members cache:', err);
+        }
+    }, 1000);
+};
+
 // ============ CLEAR ALL ============
 
 export const clearAllCaches = async (): Promise<void> => {
@@ -295,12 +549,16 @@ export const clearAllCaches = async (): Promise<void> => {
     messagesCache = {};
     subgridsCache = null;
     friendsCache = null;
+    superAdminCache = null;
+    cuAdminMembersCache = {};
     try {
         await Promise.all([
             AsyncStorage.removeItem(USER_CACHE_KEY),
             AsyncStorage.removeItem(MESSAGES_CACHE_KEY),
             AsyncStorage.removeItem(SUBGRIDS_CACHE_KEY),
             AsyncStorage.removeItem(FRIENDS_CACHE_KEY),
+            AsyncStorage.removeItem(SUPER_ADMIN_CACHE_KEY),
+            AsyncStorage.removeItem(CU_ADMIN_MEMBERS_CACHE_KEY),
         ]);
     } catch (err) {
         console.warn('[Cache] Failed to clear caches:', err);

@@ -91,6 +91,7 @@ type Subgrid = {
     _id: string;
     name?: string;
     logoUrl?: string;
+    coverImageUrl?: string;
 };
 
 type Post = {
@@ -1479,7 +1480,13 @@ const TenantCommunityScreen = () => {
                 ]}>
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
                         <View style={styles.leftRail}>
-                            <TouchableOpacity style={styles.railLogo} onPress={() => router.push('/(main)')}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.railLogo,
+                                    activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }
+                                ]}
+                                onPress={() => router.push('/(main)')}
+                            >
                                 {activeSubgrid ? (
                                     activeSubgrid.logoUrl ? (
                                         <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />

@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     Platform,
 } from 'react-native';
-import { Phone, Video, PhoneIncoming, PhoneOutgoing, ChevronRight, File, Trash2 } from 'lucide-react-native';
+import { Phone, Video, PhoneIncoming, PhoneOutgoing, ChevronRight, File, Trash2, Clock, AlertCircle, RotateCcw } from 'lucide-react-native';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../UserAvatar';
 import VoiceMessagePlayer from '../VoiceMessagePlayer';
@@ -44,9 +44,14 @@ export interface MessageBubbleProps {
     callDuration?: number;
     callStatus?: 'ended' | 'missed' | 'declined' | 'cancelled';
     isOutgoing?: boolean;
+    // Message status for optimistic updates
+    isPending?: boolean;
+    isFailed?: boolean;
+    errorMessage?: string;
     // Actions
     onDelete?: (messageId: string) => void;
     onCallAgain?: (callType: 'audio' | 'video') => void;
+    onRetry?: (messageId: string) => void;
     canDelete?: boolean;
 }
 
@@ -82,8 +87,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     callDuration,
     callStatus,
     isOutgoing = false,
+    isPending = false,
+    isFailed = false,
+    errorMessage,
     onDelete,
     onCallAgain,
+    onRetry,
     canDelete = false,
 }) => {
     const { colors } = useTheme();
@@ -231,10 +240,30 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     </Text>
                 )}
 
-                {/* Timestamp */}
-                <Text style={[styles.timestamp, isSelf && styles.timestampSelf]}>
-                    {formatTime(timestamp)}
-                </Text>
+                {/* Timestamp and status */}
+                <View style={styles.timestampRow}>
+                    <Text style={[styles.timestamp, isSelf && styles.timestampSelf]}>
+                        {formatTime(timestamp)}
+                    </Text>
+                    {/* Status indicators */}
+                    {isPending && (
+                        <Clock size={12} color={isSelf ? 'rgba(255,255,255,0.7)' : colors.textMuted} style={{ marginLeft: 4 }} />
+                    )}
+                    {isFailed && (
+                        <AlertCircle size={12} color="#EF4444" style={{ marginLeft: 4 }} />
+                    )}
+                </View>
+
+                {/* Failed message retry option */}
+                {isFailed && onRetry && (
+                    <TouchableOpacity
+                        style={styles.retryButton}
+                        onPress={() => onRetry(messageId)}
+                    >
+                        <RotateCcw size={12} color="#EF4444" />
+                        <Text style={styles.retryText}>Tap to retry</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* Delete button for own messages */}
@@ -293,14 +322,30 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         messageTextSelf: {
             color: '#FFFFFF',
         },
-        timestamp: {
-            fontSize: 11,
-            color: colors.textMuted,
+        timestampRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
             marginTop: 4,
             alignSelf: 'flex-end',
         },
+        timestamp: {
+            fontSize: 11,
+            color: colors.textMuted,
+        },
         timestampSelf: {
             color: 'rgba(255, 255, 255, 0.7)',
+        },
+        retryButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            marginTop: 6,
+            paddingVertical: 4,
+        },
+        retryText: {
+            fontSize: 11,
+            color: '#EF4444',
+            fontWeight: '500',
         },
         deleteButton: {
             padding: 4,

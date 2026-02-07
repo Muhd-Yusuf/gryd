@@ -1,10 +1,11 @@
 /**
  * Notification Controller
- * Handles push notification registration and sending
+ * Handles push notification registration, sending, and in-app notification history
  */
 
 const pushService = require('../services/pushNotificationService');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 
 /**
  * Register push token for a user
@@ -184,6 +185,174 @@ const getPreferences = async (req, res) => {
     }
 };
 
+/**
+ * Get in-app notifications for user
+ * GET /api/notifications/inbox
+ */
+const getInboxNotifications = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { limit = 50, offset = 0, type, unreadOnly } = req.query;
+
+        const query = { userId };
+        if (type) query.type = type;
+        if (unreadOnly === 'true') query.read = false;
+
+        const [notifications, total, unreadCount] = await Promise.all([
+            Notification.find(query)
+                .sort({ createdAt: -1 })
+                .skip(parseInt(offset))
+                .limit(parseInt(limit))
+                .lean(),
+            Notification.countDocuments(query),
+            Notification.countDocuments({ userId, read: false }),
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                notifications,
+                total,
+                unreadCount,
+                hasMore: parseInt(offset) + notifications.length < total,
+            }
+        });
+    } catch (error) {
+        console.error('Get inbox notifications error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Mark notification(s) as read
+ * PATCH /api/notifications/read
+ */
+const markAsRead = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { notificationIds, markAll } = req.body;
+
+        if (markAll) {
+            await Notification.updateMany(
+                { userId, read: false },
+                { $set: { read: true, readAt: new Date() } }
+            );
+        } else if (notificationIds && notificationIds.length > 0) {
+            await Notification.updateMany(
+                { _id: { $in: notificationIds }, userId },
+                { $set: { read: true, readAt: new Date() } }
+            );
+        } else {
+            return res.status(400).json({
+                success: false,
+                error: 'notificationIds or markAll is required'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Notifications marked as read'
+        });
+    } catch (error) {
+        console.error('Mark as read error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Delete notification(s)
+ * DELETE /api/notifications/inbox
+ */
+const deleteNotifications = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { notificationIds, deleteAll } = req.body;
+
+        if (deleteAll) {
+            await Notification.deleteMany({ userId });
+        } else if (notificationIds && notificationIds.length > 0) {
+            await Notification.deleteMany({
+                _id: { $in: notificationIds },
+                userId
+            });
+        } else {
+            return res.status(400).json({
+                success: false,
+                error: 'notificationIds or deleteAll is required'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Notifications deleted'
+        });
+    } catch (error) {
+        console.error('Delete notifications error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Create in-app notification (internal use / admin)
+ * This is typically called by other parts of the system, not directly by users
+ */
+const createNotification = async (userId, type, title, body, data = {}, imageUrl = null) => {
+    try {
+        const notification = await Notification.create({
+            userId,
+            type,
+            title,
+            body,
+            data,
+            imageUrl,
+        });
+        return notification;
+    } catch (error) {
+        console.error('Create notification error:', error);
+        return null;
+    }
+};
+
+/**
+ * Create notifications for multiple users
+ */
+const createBulkNotifications = async (userIds, type, title, body, data = {}, imageUrl = null) => {
+    try {
+        const notifications = userIds.map(userId => ({
+            userId,
+            type,
+            title,
+            body,
+            data,
+            imageUrl,
+        }));
+        await Notification.insertMany(notifications);
+        return true;
+    } catch (error) {
+        console.error('Create bulk notifications error:', error);
+        return false;
+    }
+};
+
+/**
+ * Get unread count for user
+ * GET /api/notifications/unread-count
+ */
+const getUnreadCount = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const count = await Notification.countDocuments({ userId, read: false });
+
+        res.json({
+            success: true,
+            data: { count }
+        });
+    } catch (error) {
+        console.error('Get unread count error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 module.exports = {
     registerPushToken,
     unregisterPushToken,
@@ -191,4 +360,12 @@ module.exports = {
     getPushTokens,
     updatePreferences,
     getPreferences,
+    // In-app notification endpoints
+    getInboxNotifications,
+    markAsRead,
+    deleteNotifications,
+    getUnreadCount,
+    // Internal helper functions
+    createNotification,
+    createBulkNotifications,
 };
