@@ -149,6 +149,7 @@ type Subgrid = {
     _id: string;
     name?: string;
     logoUrl?: string;
+    coverImageUrl?: string;
 };
 
 export default function DirectMessagesScreen() {
@@ -1715,28 +1716,15 @@ export default function DirectMessagesScreen() {
                 {/* Profile Sidebar - hidden on mobile */}
                 {!isMobile && selectedFriendId && (
                     <View style={styles.profileSidebar}>
-                        <View style={styles.profileHeaderBanner}>
-                            {/* User banner image or decorative fallback */}
+                        <View style={[styles.profileHeaderBanner, { backgroundColor: activeSubgrid?.coverImageUrl || colors.primary }]}>
+                            {/* User banner image or subgrid theme color */}
                             {selectedFriendUser?.bannerUrl ? (
                                 <Image
                                     source={{ uri: selectedFriendUser.bannerUrl }}
                                     style={styles.bannerImage}
                                     resizeMode="cover"
                                 />
-                            ) : (
-                                <>
-                                    <View style={styles.bannerShape1} />
-                                    <View style={styles.bannerShape2} />
-                                    <View style={styles.bannerShape3} />
-                                    <View style={styles.bannerShape4} />
-                                    <View style={styles.bannerStripes}>
-                                        <View style={styles.stripe} />
-                                        <View style={styles.stripe} />
-                                        <View style={styles.stripe} />
-                                        <View style={styles.stripe} />
-                                    </View>
-                                </>
-                            )}
+                            ) : null}
                             {/* More icon */}
                             <TouchableOpacity style={styles.moreIcon}>
                                 <MoreHorizontal size={18} color={colors.text} />
@@ -2539,7 +2527,6 @@ const createStyles = (colors: any) =>
         },
         profileHeaderBanner: {
             height: 160,
-            backgroundColor: '#F8E8E8',
             position: 'relative',
             overflow: 'hidden',
         },
@@ -2550,55 +2537,6 @@ const createStyles = (colors: any) =>
             top: 0,
             left: 0,
             right: 0,
-        },
-        bannerShape1: {
-            position: 'absolute',
-            top: 10,
-            left: 30,
-            width: 60,
-            height: 80,
-            backgroundColor: '#2D4A5E',
-            transform: [{ rotate: '15deg' }],
-        },
-        bannerShape2: {
-            position: 'absolute',
-            top: -20,
-            left: 80,
-            width: 100,
-            height: 100,
-            borderRadius: 50,
-            backgroundColor: '#E8B4B4',
-        },
-        bannerShape3: {
-            position: 'absolute',
-            top: 20,
-            right: 60,
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            backgroundColor: '#D4847C',
-        },
-        bannerShape4: {
-            position: 'absolute',
-            top: 50,
-            right: 20,
-            width: 50,
-            height: 50,
-            borderRadius: 25,
-            backgroundColor: '#FAD4D4',
-        },
-        bannerStripes: {
-            position: 'absolute',
-            bottom: 10,
-            left: 10,
-            width: 30,
-            height: 50,
-        },
-        stripe: {
-            width: 30,
-            height: 3,
-            backgroundColor: '#2D4A5E',
-            marginBottom: 3,
         },
         moreIcon: {
             position: 'absolute',

@@ -23,6 +23,10 @@ import {
     ArrowLeft,
     UserPlus,
     MoreHorizontal,
+    BadgeCheck,
+    Mail,
+    Calendar,
+    Building2,
 } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import {
@@ -89,6 +93,7 @@ type Subgrid = {
     _id: string;
     name?: string;
     logoUrl?: string;
+    coverImageUrl?: string;
 };
 
 export default function TopContributorsScreen() {
@@ -243,7 +248,12 @@ export default function TopContributorsScreen() {
         return member.company || member.user?.company || null;
     };
 
+    const getMemberEmail = (member: Member): string | null => {
+        return member.user?.email || null;
+    };
+
     const formatBadgeLabel = (badge: StakeholderBadge | string): string => {
+        if (badge === 'subgrid_admin') return 'Server Admin';
         return badge.charAt(0).toUpperCase() + badge.slice(1).replace('_', ' ');
     };
 
@@ -452,66 +462,8 @@ export default function TopContributorsScreen() {
         },
         profileBanner: {
             height: 200,
-            backgroundColor: '#F8E8E8',
             position: 'relative',
             overflow: 'hidden',
-        },
-        bannerPattern: {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            flexDirection: 'row',
-        },
-        bannerShape1: {
-            position: 'absolute',
-            top: 20,
-            left: 40,
-            width: 80,
-            height: 100,
-            backgroundColor: '#2D4A5E',
-            transform: [{ rotate: '15deg' }],
-        },
-        bannerShape2: {
-            position: 'absolute',
-            top: -20,
-            left: 100,
-            width: 120,
-            height: 120,
-            borderRadius: 60,
-            backgroundColor: '#E8B4B4',
-        },
-        bannerShape3: {
-            position: 'absolute',
-            top: 30,
-            right: 100,
-            width: 100,
-            height: 100,
-            borderRadius: 50,
-            backgroundColor: '#D4847C',
-        },
-        bannerShape4: {
-            position: 'absolute',
-            top: 60,
-            right: 40,
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            backgroundColor: '#FAD4D4',
-        },
-        bannerStripes: {
-            position: 'absolute',
-            bottom: 20,
-            left: 20,
-            width: 40,
-            height: 60,
-        },
-        stripe: {
-            width: 40,
-            height: 4,
-            backgroundColor: '#2D4A5E',
-            marginBottom: 4,
         },
         profileHeader: {
             flexDirection: 'row',
@@ -596,6 +548,12 @@ export default function TopContributorsScreen() {
             fontSize: 14,
             fontWeight: '600',
             color: colors.text,
+            marginBottom: 4,
+        },
+        aboutLabelRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
             marginBottom: 4,
         },
         aboutValue: {
@@ -892,7 +850,8 @@ export default function TopContributorsScreen() {
                                         <View style={styles.contributorBadgeRow}>
                                             <Text style={styles.contributorMessages}>{stats.messageCount} messages</Text>
                                             {memberRole && ROLE_BADGE_COLORS[memberRole] && (
-                                                <View style={[styles.badge, { backgroundColor: ROLE_BADGE_COLORS[memberRole] }]}>
+                                                <View style={[styles.badge, { backgroundColor: ROLE_BADGE_COLORS[memberRole], flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                                                    {memberRole === 'subgrid_admin' && <BadgeCheck size={12} color="#FFFFFF" />}
                                                     <Text style={styles.badgeText}>{formatBadgeLabel(memberRole)}</Text>
                                                 </View>
                                             )}
@@ -952,30 +911,15 @@ export default function TopContributorsScreen() {
                                 </View>
                             )}
                             {/* Profile Banner */}
-                            <View style={styles.profileBanner}>
-                                {/* User banner image or gradient fallback */}
+                            <View style={[styles.profileBanner, { backgroundColor: activeSubgrid?.coverImageUrl || colors.primary }]}>
+                                {/* User banner image or subgrid theme color */}
                                 {getMemberBannerUrl(selectedContributor.member) ? (
                                     <Image
                                         source={{ uri: getMemberBannerUrl(selectedContributor.member)! }}
                                         style={styles.bannerImage}
                                         resizeMode="cover"
                                     />
-                                ) : (
-                                    <>
-                                        {/* Gradient fallback for users without banner */}
-                                        <View style={styles.bannerShape1} />
-                                        <View style={styles.bannerShape2} />
-                                        <View style={styles.bannerShape3} />
-                                        <View style={styles.bannerShape4} />
-                                        <View style={styles.bannerStripes}>
-                                            <View style={styles.stripe} />
-                                            <View style={styles.stripe} />
-                                            <View style={styles.stripe} />
-                                            <View style={styles.stripe} />
-                                            <View style={styles.stripe} />
-                                        </View>
-                                    </>
-                                )}
+                                ) : null}
 
                                 {/* Header Icons */}
                                 <View style={styles.profileHeader}>
@@ -1014,7 +958,8 @@ export default function TopContributorsScreen() {
                                 {(getMemberRole(selectedContributor.member) || getMemberStakeholderBadge(selectedContributor.member) || getMemberCompany(selectedContributor.member)) && (
                                     <View style={styles.profileBadgeRow}>
                                         {getMemberRole(selectedContributor.member) && ROLE_BADGE_COLORS[getMemberRole(selectedContributor.member)!] && (
-                                            <View style={[styles.profileBadge, { backgroundColor: ROLE_BADGE_COLORS[getMemberRole(selectedContributor.member)!] }]}>
+                                            <View style={[styles.profileBadge, { backgroundColor: ROLE_BADGE_COLORS[getMemberRole(selectedContributor.member)!], flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+                                                {getMemberRole(selectedContributor.member) === 'subgrid_admin' && <BadgeCheck size={12} color="#FFFFFF" />}
                                                 <Text style={styles.profileBadgeText}>{formatBadgeLabel(getMemberRole(selectedContributor.member)!)}</Text>
                                             </View>
                                         )}
@@ -1030,22 +975,59 @@ export default function TopContributorsScreen() {
                                 )}
 
                                 <View style={styles.aboutCard}>
+                                    {/* About Section */}
                                     <View style={styles.aboutSection}>
                                         <Text style={styles.aboutLabel}>
                                             About {getMemberName(selectedContributor.member)}
                                         </Text>
                                         <Text style={styles.aboutValue}>
-                                            {getMemberRole(selectedContributor.member) === 'subgrid_admin' ? 'CU Administrator' :
+                                            {getMemberRole(selectedContributor.member) === 'subgrid_admin' ? 'Server Administrator' :
                                              getMemberRole(selectedContributor.member) === 'moderator' ? 'Community Moderator' :
                                              getMemberStakeholderBadge(selectedContributor.member) ? formatBadgeLabel(getMemberStakeholderBadge(selectedContributor.member)!) :
                                              'Credit Union Member'}
                                         </Text>
                                     </View>
-                                    <View>
-                                        <Text style={styles.aboutLabel}>Member since</Text>
+
+                                    {/* Email */}
+                                    {getMemberEmail(selectedContributor.member) && (
+                                        <View style={styles.aboutSection}>
+                                            <View style={styles.aboutLabelRow}>
+                                                <Mail size={14} color={colors.textMuted} />
+                                                <Text style={styles.aboutLabel}>Email</Text>
+                                            </View>
+                                            <Text style={styles.aboutValue}>{getMemberEmail(selectedContributor.member)}</Text>
+                                        </View>
+                                    )}
+
+                                    {/* Company */}
+                                    {getMemberCompany(selectedContributor.member) && (
+                                        <View style={styles.aboutSection}>
+                                            <View style={styles.aboutLabelRow}>
+                                                <Building2 size={14} color={colors.textMuted} />
+                                                <Text style={styles.aboutLabel}>Company</Text>
+                                            </View>
+                                            <Text style={styles.aboutValue}>{getMemberCompany(selectedContributor.member)}</Text>
+                                        </View>
+                                    )}
+
+                                    {/* Member Since */}
+                                    <View style={styles.aboutSection}>
+                                        <View style={styles.aboutLabelRow}>
+                                            <Calendar size={14} color={colors.textMuted} />
+                                            <Text style={styles.aboutLabel}>Member since</Text>
+                                        </View>
                                         <Text style={styles.aboutValue}>
                                             {formatMemberSince(selectedContributor.member.user?.createdAt)}
                                         </Text>
+                                    </View>
+
+                                    {/* Contribution Stats */}
+                                    <View style={styles.aboutSection}>
+                                        <View style={styles.aboutLabelRow}>
+                                            <MessageSquare size={14} color={colors.textMuted} />
+                                            <Text style={styles.aboutLabel}>Contributions</Text>
+                                        </View>
+                                        <Text style={styles.aboutValue}>{selectedContributor.messageCount} messages</Text>
                                     </View>
                                 </View>
                             </View>
