@@ -237,6 +237,7 @@ const SuperAdminDashboard = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+    const [customerFilterDropdownOpen, setCustomerFilterDropdownOpen] = useState(false);
 
     // Action menu
     const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
@@ -404,21 +405,23 @@ const SuperAdminDashboard = () => {
     };
 
     const loadOverviewData = async () => {
-        // Try cache first for instant display
-        const cachedStats = getCachedSuperAdminStats();
-        if (cachedStats) {
-            setStats(cachedStats.stats);
-            if (cachedStats.customerGrowth) setCustomerGrowth(cachedStats.customerGrowth);
-            if (cachedStats.systemUptime) setSystemUptime(cachedStats.systemUptime);
-            if (cachedStats.recentCustomers) setRecentCustomers(cachedStats.recentCustomers);
+        // Try cache first for instant display (only for default 7-day range)
+        if (growthRange === 7) {
+            const cachedStats = getCachedSuperAdminStats();
+            if (cachedStats) {
+                setStats(cachedStats.stats);
+                if (cachedStats.customerGrowth) setCustomerGrowth(cachedStats.customerGrowth);
+                if (cachedStats.systemUptime) setSystemUptime(cachedStats.systemUptime);
+                if (cachedStats.recentCustomers) setRecentCustomers(cachedStats.recentCustomers);
+            }
         }
 
         try {
             const response = await getSuperAdminOverview({ growthDays: growthRange });
             if (response?.data) {
                 setStats(response.data.stats);
-                setCustomerGrowth(response.data.customerGrowth);
-                setSystemUptime(response.data.systemUptime);
+                setCustomerGrowth(response.data.customerGrowth || { labels: [], values: [] });
+                setSystemUptime(response.data.systemUptime || { labels: [], values: [] });
 
                 // Also load recent customers for the overview table
                 const customersResponse = await getSuperAdminCustomers({ limit: 5 });
@@ -426,13 +429,15 @@ const SuperAdminDashboard = () => {
                     setRecentCustomers(customersResponse.data.customers);
                 }
 
-                // Cache all overview data together
-                cacheSuperAdminStats({
-                    stats: response.data.stats,
-                    customerGrowth: response.data.customerGrowth,
-                    systemUptime: response.data.systemUptime,
-                    recentCustomers: customersResponse?.data?.customers || [],
-                });
+                // Cache only 7-day data (default view)
+                if (growthRange === 7) {
+                    cacheSuperAdminStats({
+                        stats: response.data.stats,
+                        customerGrowth: response.data.customerGrowth,
+                        systemUptime: response.data.systemUptime,
+                        recentCustomers: customersResponse?.data?.customers || [],
+                    });
+                }
             }
         } catch (err: any) {
             console.error('Failed to load overview:', err.message);
@@ -729,6 +734,67 @@ const SuperAdminDashboard = () => {
                 ? prev.filter(id => id !== customerId)
                 : [...prev, customerId]
         );
+    };
+
+    // Get filter label for display
+    const getFilterLabel = (filter: string) => {
+        switch (filter) {
+            case 'all': return 'All';
+            case 'active': return 'Active';
+            case 'pending': return 'Pending';
+            case 'suspended': return 'Suspended';
+            default: return 'All';
+        }
+    };
+
+    // Handle export customers as CSV
+    const handleExportCSV = () => {
+        if (customers.length === 0) {
+            setError('No customers to export');
+            return;
+        }
+
+        try {
+            // Define CSV headers
+            const headers = ['Customer Name', 'Email', 'Server Name', 'Members', 'Status', 'Created Date'];
+
+            // Build CSV rows
+            const rows = customers.map((customer) => [
+                customer.clientName || customer.owner?.name || '-',
+                customer.owner?.email || '-',
+                customer.name || '-',
+                String(customer.memberCount || 0),
+                customer.status || '-',
+                formatDate(customer.createdAt),
+            ]);
+
+            // Combine headers and rows
+            const csvContent = [
+                headers.join(','),
+                ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
+
+            // Create download for web
+            if (Platform.OS === 'web') {
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', `customers_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } else {
+                // For mobile, we'd use expo-file-system and expo-sharing
+                // For now, show a message
+                setError('CSV export is available on web only');
+            }
+        } catch (err: any) {
+            console.error('Failed to export CSV:', err);
+            setError('Failed to export CSV');
+        }
     };
 
     // Handle opening action menu with position
@@ -1352,15 +1418,22 @@ const SuperAdminDashboard = () => {
                 {/* Pagination */}
                 <View style={[styles.pagination, isMobile && styles.paginationMobile]}>
                     <Text style={styles.paginationInfo}>
-                        {((currentPage - 1) * rowsPerPage) + 1} - {Math.min(currentPage * rowsPerPage, customersTotal)} of {customersTotal}
+                        {customersTotal > 0 ? ((currentPage - 1) * rowsPerPage) + 1 : 0} - {Math.min(currentPage * rowsPerPage, customersTotal)} of {customersTotal}
                     </Text>
 
                     <View style={styles.paginationControls}>
                         <Text style={styles.paginationLabel}>Rows per page:</Text>
-                        <TouchableOpacity style={styles.rowsDropdown}>
-                            <Text style={styles.rowsDropdownText}>{rowsPerPage}</Text>
-                            <ChevronDown size={16} color={colors.text} />
-                        </TouchableOpacity>
+                        <View style={styles.rowsPerPageSelector}>
+                            {[10, 25, 50].map((num) => (
+                                <TouchableOpacity
+                                    key={num}
+                                    style={[styles.rowsPerPageOption, rowsPerPage === num && styles.rowsPerPageOptionActive]}
+                                    onPress={() => { setRowsPerPage(num); setCurrentPage(1); }}
+                                >
+                                    <Text style={[styles.rowsPerPageText, rowsPerPage === num && styles.rowsPerPageTextActive]}>{num}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
 
                         <TouchableOpacity
                             style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
@@ -1370,11 +1443,14 @@ const SuperAdminDashboard = () => {
                             <ChevronLeft size={20} color={currentPage === 1 ? colors.textMuted : colors.text} />
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.paginationButton, styles.paginationButtonActive]}
+                            style={[
+                                styles.paginationButton,
+                                currentPage * rowsPerPage < customersTotal ? styles.paginationButtonActive : styles.paginationButtonDisabled
+                            ]}
                             onPress={() => setCurrentPage(prev => prev + 1)}
                             disabled={currentPage * rowsPerPage >= customersTotal}
                         >
-                            <ChevronRight size={20} color="#fff" />
+                            <ChevronRight size={20} color={currentPage * rowsPerPage >= customersTotal ? colors.textMuted : '#fff'} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -3142,6 +3218,29 @@ const createStyles = (colors: any) =>
         rowsDropdownText: {
             fontSize: 14,
             color: colors.text,
+        },
+        rowsPerPageSelector: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            marginRight: 12,
+        },
+        rowsPerPageOption: {
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 4,
+            backgroundColor: colors.surfaceMuted,
+        },
+        rowsPerPageOptionActive: {
+            backgroundColor: colors.primary,
+        },
+        rowsPerPageText: {
+            fontSize: 13,
+            color: colors.textMuted,
+        },
+        rowsPerPageTextActive: {
+            color: '#FFFFFF',
+            fontWeight: '600',
         },
         paginationButton: {
             width: 32,
