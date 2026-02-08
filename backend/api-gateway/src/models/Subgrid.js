@@ -120,6 +120,31 @@ const subgridSchema = new mongoose.Schema({
             default: '',
         },
     },
+    // Engagement settings for community interactions
+    engagementSettings: {
+        // System messages
+        joinMessage: {
+            type: Boolean,
+            default: true,
+        },
+        uploadNotice: {
+            type: Boolean,
+            default: true,
+        },
+        // Emoji settings
+        emojiReactions: {
+            type: Boolean,
+            default: true,
+        },
+        autoEmoji: {
+            type: Boolean,
+            default: false,
+        },
+        stickersAutocomplete: {
+            type: Boolean,
+            default: true,
+        },
+    },
     // Invite code for members to join this CU community
     inviteCode: {
         type: String,

@@ -589,6 +589,7 @@ exports.updateSubgrid = async (req, res) => {
             joinSettings,
             moderationRules,
             embedSettings,
+            engagementSettings,
         } = req.body;
 
         const subgrid = await getSubgrid(req, subgridId);
@@ -649,6 +650,26 @@ exports.updateSubgrid = async (req, res) => {
                     : subgrid.embedSettings.allowedOrigins,
                 mode: embedSettings.mode || subgrid.embedSettings.mode,
                 defaultChannelId: embedSettings.defaultChannelId || subgrid.embedSettings.defaultChannelId,
+            };
+        }
+        if (engagementSettings) {
+            const currentEngagement = subgrid.engagementSettings || {};
+            updates.engagementSettings = {
+                joinMessage: engagementSettings.joinMessage !== undefined
+                    ? engagementSettings.joinMessage
+                    : currentEngagement.joinMessage ?? true,
+                uploadNotice: engagementSettings.uploadNotice !== undefined
+                    ? engagementSettings.uploadNotice
+                    : currentEngagement.uploadNotice ?? true,
+                emojiReactions: engagementSettings.emojiReactions !== undefined
+                    ? engagementSettings.emojiReactions
+                    : currentEngagement.emojiReactions ?? true,
+                autoEmoji: engagementSettings.autoEmoji !== undefined
+                    ? engagementSettings.autoEmoji
+                    : currentEngagement.autoEmoji ?? false,
+                stickersAutocomplete: engagementSettings.stickersAutocomplete !== undefined
+                    ? engagementSettings.stickersAutocomplete
+                    : currentEngagement.stickersAutocomplete ?? true,
             };
         }
 
@@ -753,6 +774,7 @@ exports.listSubgridMembers = async (req, res) => {
             .sort({ createdAt: -1 })
             .skip(Number(offset))
             .limit(Math.min(Number(limit), 200))
+            .populate('customRoleId')
             .lean();
 
         // Populate user profile data for each member
@@ -795,6 +817,8 @@ exports.listSubgridMembers = async (req, res) => {
                 userRole: user.role || 'member',
                 stakeholderBadge: user.stakeholderBadge || null,
                 company: user.company || null,
+                // Custom role assigned by CU Admin
+                customRole: m.customRoleId || null,
             };
         });
 

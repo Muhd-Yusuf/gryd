@@ -144,6 +144,13 @@ type Subgrid = {
     logoUrl?: string;
     coverImageUrl?: string;
     status?: string;
+    engagementSettings?: {
+        joinMessage?: boolean;
+        uploadNotice?: boolean;
+        emojiReactions?: boolean;
+        autoEmoji?: boolean;
+        stickersAutocomplete?: boolean;
+    };
 };
 
 type Post = {
@@ -532,9 +539,10 @@ const CreditUnionAdminScreen = () => {
         joinMessage: true,
         uploadNotice: true,
         emojiReactions: true,
-        autoEmoji: true,
-        stickersAutocomplete: false,
+        autoEmoji: false,
+        stickersAutocomplete: true,
     });
+    const [engagementSettingsLoading, setEngagementSettingsLoading] = useState(false);
 
     // Content Moderation (Prohibited Words) state
     const [contentModerationEnabled, setContentModerationEnabled] = useState(true);
@@ -910,6 +918,32 @@ const CreditUnionAdminScreen = () => {
             loadCustomRoles();
         }
     }, [settingsTab, activeSubgridId]);
+
+    // Load engagement settings when engagement tab is selected
+    useEffect(() => {
+        if (settingsTab === 'engagement' && activeSubgridId) {
+            const loadEngagementSettings = async () => {
+                setEngagementSettingsLoading(true);
+                try {
+                    const current = subgrids.find((s) => s._id === activeSubgridId);
+                    if (current?.engagementSettings) {
+                        setEngagementSettings({
+                            joinMessage: current.engagementSettings.joinMessage ?? true,
+                            uploadNotice: current.engagementSettings.uploadNotice ?? true,
+                            emojiReactions: current.engagementSettings.emojiReactions ?? true,
+                            autoEmoji: current.engagementSettings.autoEmoji ?? false,
+                            stickersAutocomplete: current.engagementSettings.stickersAutocomplete ?? true,
+                        });
+                    }
+                } catch (err) {
+                    console.error('Failed to load engagement settings:', err);
+                } finally {
+                    setEngagementSettingsLoading(false);
+                }
+            };
+            loadEngagementSettings();
+        }
+    }, [settingsTab, activeSubgridId, subgrids]);
 
     const handleSaveNotificationSettings = async () => {
         setNotificationSettingsSaving(true);
@@ -1449,8 +1483,32 @@ const CreditUnionAdminScreen = () => {
         }
     };
 
-    const toggleEngagementSetting = (key: EngagementSettingKey) => {
-        setEngagementSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+    const toggleEngagementSetting = async (key: EngagementSettingKey) => {
+        if (!activeSubgridId) return;
+
+        const newValue = !engagementSettings[key];
+        const updatedSettings = { ...engagementSettings, [key]: newValue };
+
+        // Optimistic update
+        setEngagementSettings(updatedSettings);
+
+        try {
+            await communityPatch(`/subgrids/${activeSubgridId}`, {
+                engagementSettings: updatedSettings,
+            });
+            // Update the subgrids state to keep it in sync
+            setSubgrids((prev) =>
+                prev.map((s) =>
+                    s._id === activeSubgridId
+                        ? { ...s, engagementSettings: updatedSettings }
+                        : s
+                )
+            );
+        } catch (err) {
+            console.error('Failed to save engagement setting:', err);
+            // Revert on error
+            setEngagementSettings((prev) => ({ ...prev, [key]: !newValue }));
+        }
     };
 
     const getMemberStatusLabel = (status?: string) => {
@@ -3569,80 +3627,9 @@ const CreditUnionAdminScreen = () => {
             </View>
 
 
-            {/* Create/Edit Role Modal */}
-            <Modal visible={createRoleModalOpen} transparent animationType="fade" onRequestClose={() => setCreateRoleModalOpen(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <TouchableOpacity style={styles.modalClose} onPress={() => { setCreateRoleModalOpen(false); setEditingRole(null); }}>
-                            <X size={20} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <Text style={styles.modalTitle}>{editingRole ? 'Edit Role' : 'Create Role'}</Text>
-                        <Text style={[styles.settingsPanelDesc, { marginBottom: 16 }]}>
-                            Create a role label that will display next to member names
-                        </Text>
-
-                        <Text style={styles.modalLabel}>ROLE NAME</Text>
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="e.g. Branch Manager, Loan Officer"
-                            placeholderTextColor={colors.textMuted}
-                            value={newRoleName}
-                            onChangeText={setNewRoleName}
-                            maxLength={30}
-                        />
-
-                        <Text style={[styles.modalLabel, { marginTop: 16 }]}>ROLE COLOR</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-                            {['#3B82F6', '#22C55E', '#EAB308', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'].map((color) => (
-                                <TouchableOpacity
-                                    key={color}
-                                    onPress={() => setNewRoleColor(color)}
-                                    style={{
-                                        width: 40,
-                                        height: 40,
-                                        borderRadius: 20,
-                                        backgroundColor: color,
-                                        justifyContent: 'center',
-                                        alignItems: 'center',
-                                        borderWidth: newRoleColor === color ? 3 : 0,
-                                        borderColor: '#FFFFFF',
-                                    }}
-                                >
-                                    {newRoleColor === color && <Check size={20} color="#FFFFFF" />}
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 8 }}>
-                            <Text style={{ color: colors.text }}>Preview:</Text>
-                            <View style={[styles.roleBadge, { backgroundColor: newRoleColor + '20', borderColor: newRoleColor }]}>
-                                <Text style={[styles.roleBadgeText, { color: newRoleColor }]}>{newRoleName || 'Role Name'}</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => { setCreateRoleModalOpen(false); setEditingRole(null); }}>
-                                <Text style={styles.modalCancelText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalConfirmBtn, (!newRoleName.trim() || savingRole) && { opacity: 0.5 }]}
-                                onPress={editingRole ? handleUpdateRole : handleCreateRole}
-                                disabled={!newRoleName.trim() || savingRole}
-                            >
-                                {savingRole ? (
-                                    <ActivityIndicator size="small" color="#FFFFFF" />
-                                ) : (
-                                    <Text style={styles.modalConfirmText}>{editingRole ? 'Save Changes' : 'Create Role'}</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
             {/* Assign Role Modal */}
             <Modal visible={assignRoleModalOpen} transparent animationType="fade" onRequestClose={() => setAssignRoleModalOpen(false)}>
-                <View style={styles.modalOverlay}>
+                <View style={[styles.modalOverlay, { zIndex: 9999 }]}>
                     <View style={styles.modalContent}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => { setAssignRoleModalOpen(false); setAssigningMember(null); }}>
                             <X size={20} color={colors.textMuted} />
@@ -4473,9 +4460,9 @@ const CreditUnionAdminScreen = () => {
                                                 <View style={styles.serverProfileInputCol}>
                                                     <Text style={styles.settingsLabel}>Account Email</Text>
                                                     <TextInput
-                                                        style={styles.settingsInput}
+                                                        style={[styles.settingsInput, styles.settingsInputDisabled]}
                                                         value={accountEmail}
-                                                        onChangeText={setAccountEmail}
+                                                        editable={false}
                                                         placeholderTextColor={colors.textSubtle}
                                                     />
                                                 </View>
@@ -4578,14 +4565,6 @@ const CreditUnionAdminScreen = () => {
                                         <TouchableOpacity style={styles.settingsSaveBtn} onPress={handleUpdateServer}>
                                             <Text style={styles.settingsSaveBtnText}>Save Changes</Text>
                                         </TouchableOpacity>
-                                        <View style={styles.serverCrudActions}>
-                                            <TouchableOpacity style={styles.settingsSecondaryBtn} onPress={() => setCreateServerModalOpen(true)}>
-                                                <Text style={styles.settingsSecondaryBtnText}>Create Server</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity style={styles.settingsDangerBtn} onPress={handleArchiveServer}>
-                                                <Text style={styles.settingsDangerBtnText}>Archive Server</Text>
-                                            </TouchableOpacity>
-                                        </View>
                                     </View>
                                 </View>
                             )}
@@ -4967,18 +4946,87 @@ const CreditUnionAdminScreen = () => {
                                     <Text style={styles.settingsPanelTitle}>Roles & Permissions</Text>
                                     <Text style={styles.settingsPanelDesc}>Create custom role labels that display next to member names (like staff badges)</Text>
 
-                                    <TouchableOpacity
-                                        style={styles.createRoleBtn}
-                                        onPress={() => {
-                                            setEditingRole(null);
-                                            setNewRoleName('');
-                                            setNewRoleColor('#3B82F6');
-                                            setCreateRoleModalOpen(true);
-                                        }}
-                                    >
-                                        <Plus size={18} color="#FFFFFF" />
-                                        <Text style={styles.createRoleBtnText}>Create Role</Text>
-                                    </TouchableOpacity>
+                                    {/* Inline Create/Edit Role Form */}
+                                    {createRoleModalOpen ? (
+                                        <View style={{ backgroundColor: colors.surfaceHover, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+                                            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>
+                                                {editingRole ? 'Edit Role' : 'Create New Role'}
+                                            </Text>
+
+                                            <Text style={styles.modalLabel}>ROLE NAME</Text>
+                                            <TextInput
+                                                style={[styles.modalInput, { marginBottom: 12 }]}
+                                                placeholder="e.g. Branch Manager, Loan Officer"
+                                                placeholderTextColor={colors.textMuted}
+                                                value={newRoleName}
+                                                onChangeText={setNewRoleName}
+                                                maxLength={30}
+                                                autoFocus
+                                            />
+
+                                            <Text style={styles.modalLabel}>ROLE COLOR</Text>
+                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, marginBottom: 12 }}>
+                                                {['#3B82F6', '#22C55E', '#EAB308', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'].map((color) => (
+                                                    <TouchableOpacity
+                                                        key={color}
+                                                        onPress={() => setNewRoleColor(color)}
+                                                        style={{
+                                                            width: 36,
+                                                            height: 36,
+                                                            borderRadius: 18,
+                                                            backgroundColor: color,
+                                                            justifyContent: 'center',
+                                                            alignItems: 'center',
+                                                            borderWidth: newRoleColor === color ? 3 : 0,
+                                                            borderColor: '#FFFFFF',
+                                                        }}
+                                                    >
+                                                        {newRoleColor === color && <Check size={18} color="#FFFFFF" />}
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </View>
+
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8 }}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 13 }}>Preview:</Text>
+                                                <View style={[styles.roleBadge, { backgroundColor: newRoleColor + '20', borderColor: newRoleColor }]}>
+                                                    <Text style={[styles.roleBadgeText, { color: newRoleColor }]}>{newRoleName || 'Role Name'}</Text>
+                                                </View>
+                                            </View>
+
+                                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                <TouchableOpacity
+                                                    style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.border, alignItems: 'center' }}
+                                                    onPress={() => { setCreateRoleModalOpen(false); setEditingRole(null); setNewRoleName(''); }}
+                                                >
+                                                    <Text style={{ color: colors.text, fontWeight: '500' }}>Cancel</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: (!newRoleName.trim() || savingRole) ? colors.textMuted : colors.primary, alignItems: 'center' }}
+                                                    onPress={editingRole ? handleUpdateRole : handleCreateRole}
+                                                    disabled={!newRoleName.trim() || savingRole}
+                                                >
+                                                    {savingRole ? (
+                                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                                    ) : (
+                                                        <Text style={{ color: '#FFFFFF', fontWeight: '500' }}>{editingRole ? 'Save' : 'Create'}</Text>
+                                                    )}
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity
+                                            style={styles.createRoleBtn}
+                                            onPress={() => {
+                                                setEditingRole(null);
+                                                setNewRoleName('');
+                                                setNewRoleColor('#3B82F6');
+                                                setCreateRoleModalOpen(true);
+                                            }}
+                                        >
+                                            <Plus size={18} color="#FFFFFF" />
+                                            <Text style={styles.createRoleBtnText}>Create Role</Text>
+                                        </TouchableOpacity>
+                                    )}
 
                                     <View style={styles.rolesList}>
                                         {loadingRoles ? (
@@ -4986,7 +5034,7 @@ const CreditUnionAdminScreen = () => {
                                                 <ActivityIndicator size="small" color={colors.primary} />
                                                 <Text style={{ color: colors.textMuted, marginTop: 8 }}>Loading roles...</Text>
                                             </View>
-                                        ) : customRoles.length === 0 ? (
+                                        ) : customRoles.length === 0 && !createRoleModalOpen ? (
                                             <View style={{ padding: 20, alignItems: 'center' }}>
                                                 <Award size={48} color={colors.textMuted} />
                                                 <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 16 }}>No custom roles yet</Text>
@@ -5001,7 +5049,12 @@ const CreditUnionAdminScreen = () => {
                                                     <Text style={styles.roleName}>{role.name}</Text>
                                                     <View style={{ flexDirection: 'row', gap: 8, marginLeft: 'auto' }}>
                                                         <TouchableOpacity
-                                                            onPress={() => openEditRole(role)}
+                                                            onPress={() => {
+                                                                setEditingRole(role);
+                                                                setNewRoleName(role.name);
+                                                                setNewRoleColor(role.color);
+                                                                setCreateRoleModalOpen(true);
+                                                            }}
                                                             style={{ padding: 4 }}
                                                         >
                                                             <Edit size={16} color={colors.textMuted} />
@@ -8442,6 +8495,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             paddingVertical: 10,
             fontSize: 14,
             color: colors.text,
+        },
+        settingsInputDisabled: {
+            opacity: 0.6,
+            backgroundColor: colors.surfaceMuted,
         },
         engagementCard: {
             backgroundColor: colors.surface,
