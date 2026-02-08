@@ -88,6 +88,12 @@ const userSchema = new mongoose.Schema({
         enum: ['active', 'suspended'],
         default: 'active',
     },
+    // Flag to identify platform team members (invited by super admin to help manage the system)
+    // This distinguishes them from customer admins who manage their own communities
+    isPlatformTeamMember: {
+        type: Boolean,
+        default: false,
+    },
     createdAt: {
         type: Date,
         default: Date.now,

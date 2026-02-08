@@ -828,7 +828,8 @@ exports.getUsers = async (req, res) => {
 };
 
 /**
- * Get team members (admin and super_admin users who help manage the platform)
+ * Get team members (users invited by super admin to help manage the platform)
+ * These are distinct from customer admins who manage their own communities
  * GET /api/super-admin/team
  */
 exports.getTeamMembers = async (req, res) => {
@@ -836,9 +837,10 @@ exports.getTeamMembers = async (req, res) => {
         const { q, limit = 50, offset = 0 } = req.query;
         const search = String(q || '').trim();
 
-        // Team members are users with admin or super_admin roles
+        // Team members are users who were specifically invited as platform team members
+        // This excludes customer admins who only manage their own communities
         const filter = {
-            role: { $in: ['admin', 'super_admin'] }
+            isPlatformTeamMember: true,
         };
 
         if (search) {
@@ -859,7 +861,7 @@ exports.getTeamMembers = async (req, res) => {
                 .lean(),
         ]);
 
-        console.log(`[superAdmin.getTeamMembers] Found ${users.length} team members`);
+        console.log(`[superAdmin.getTeamMembers] Found ${users.length} platform team members`);
 
         return res.status(200).json({
             success: true,
@@ -915,6 +917,7 @@ exports.inviteTeamMember = async (req, res) => {
             role: role,
             setupToken,
             setupTokenExpires,
+            isPlatformTeamMember: true, // Mark as platform team member
         });
 
         // Send invitation email - redirects to login page with email prefilled
