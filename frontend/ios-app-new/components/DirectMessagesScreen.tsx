@@ -355,11 +355,12 @@ export default function DirectMessagesScreen() {
 
             // Fetch last message for each friend to enable sorting by recent activity
             if (normalizedIds.length > 0) {
-                const lastMsgsPromises = normalizedIds.map(async (friendId: string) => {
+                const lastMsgsPromises = normalizedIds.slice(0, 20).map(async (friendId: string) => {
                     try {
                         const msgRes = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${friendId}&limit=1`);
                         const msgs = msgRes?.data || [];
-                        return { friendId, lastMsg: msgs[msgs.length - 1] || null };
+                        // API returns newest first, so msgs[0] is the most recent
+                        return { friendId, lastMsg: msgs.length > 0 ? msgs[0] : null };
                     } catch {
                         return { friendId, lastMsg: null };
                     }
