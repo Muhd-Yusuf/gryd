@@ -57,6 +57,8 @@ import {
     logout,
     superAdminPost,
     superAdminPatch,
+    getNotificationPreferences,
+    updateNotificationPreferences,
 } from '../lib/api';
 import { useTheme } from '../lib/theme';
 import {
@@ -1298,12 +1300,47 @@ const SuperAdminDashboard = () => {
                             />
                         </View>
 
-                        <TouchableOpacity style={styles.filterDropdown}>
-                            <Text style={styles.filterDropdownText}>All</Text>
-                            <ChevronDown size={20} color={colors.text} />
-                        </TouchableOpacity>
+                        <View style={{ position: 'relative' }}>
+                            <TouchableOpacity
+                                style={styles.filterDropdown}
+                                onPress={() => setCustomerFilterDropdownOpen(!customerFilterDropdownOpen)}
+                            >
+                                <Text style={styles.filterDropdownText}>{getFilterLabel(customerStatusFilter)}</Text>
+                                <ChevronDown size={20} color={colors.text} />
+                            </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.exportButton}>
+                            {/* Filter Dropdown Menu */}
+                            {customerFilterDropdownOpen && (
+                                <View style={styles.filterDropdownMenu}>
+                                    {['all', 'active', 'pending', 'suspended'].map((filter) => (
+                                        <TouchableOpacity
+                                            key={filter}
+                                            style={[
+                                                styles.filterDropdownItem,
+                                                customerStatusFilter === filter && styles.filterDropdownItemActive
+                                            ]}
+                                            onPress={() => {
+                                                setCustomerStatusFilter(filter);
+                                                setCurrentPage(1);
+                                                setCustomerFilterDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Text style={[
+                                                styles.filterDropdownItemText,
+                                                customerStatusFilter === filter && styles.filterDropdownItemTextActive
+                                            ]}>
+                                                {getFilterLabel(filter)}
+                                            </Text>
+                                            {customerStatusFilter === filter && (
+                                                <Check size={16} color={colors.primary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+
+                        <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
                             <Download size={18} color={colors.text} />
                             <Text style={styles.exportButtonText}>Export CSV</Text>
                         </TouchableOpacity>
@@ -2983,6 +3020,44 @@ const createStyles = (colors: any) =>
         filterDropdownText: {
             fontSize: 14,
             color: colors.text,
+        },
+        filterDropdownMenu: {
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 8,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 4,
+            zIndex: 1000,
+            minWidth: 140,
+        },
+        filterDropdownItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+        },
+        filterDropdownItemActive: {
+            backgroundColor: colors.surfaceMuted,
+        },
+        filterDropdownItemText: {
+            fontSize: 14,
+            color: colors.text,
+        },
+        filterDropdownItemTextActive: {
+            fontWeight: '600',
+            color: colors.primary,
         },
         exportButton: {
             flexDirection: 'row',

@@ -139,7 +139,11 @@ const getPushTokens = async (req, res) => {
 const updatePreferences = async (req, res) => {
     try {
         const userId = req.user._id;
-        const { messages, dms, calls, mentions, invites } = req.body;
+        const {
+            messages, dms, calls, mentions, invites,
+            // Super Admin email notification preferences
+            systemAlerts, securityEvents, dailyReports, weeklyReports
+        } = req.body;
 
         const update = {};
         if (messages !== undefined) update['notificationPreferences.messages'] = messages;
@@ -147,6 +151,11 @@ const updatePreferences = async (req, res) => {
         if (calls !== undefined) update['notificationPreferences.calls'] = calls;
         if (mentions !== undefined) update['notificationPreferences.mentions'] = mentions;
         if (invites !== undefined) update['notificationPreferences.invites'] = invites;
+        // Super Admin email notification preferences
+        if (systemAlerts !== undefined) update['notificationPreferences.systemAlerts'] = systemAlerts;
+        if (securityEvents !== undefined) update['notificationPreferences.securityEvents'] = securityEvents;
+        if (dailyReports !== undefined) update['notificationPreferences.dailyReports'] = dailyReports;
+        if (weeklyReports !== undefined) update['notificationPreferences.weeklyReports'] = weeklyReports;
 
         await User.findByIdAndUpdate(userId, { $set: update });
 
@@ -177,6 +186,11 @@ const getPreferences = async (req, res) => {
                 calls: true,
                 mentions: true,
                 invites: true,
+                // Super Admin email notification defaults
+                systemAlerts: true,
+                securityEvents: true,
+                dailyReports: true,
+                weeklyReports: true,
             }
         });
     } catch (error) {
