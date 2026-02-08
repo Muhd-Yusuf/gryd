@@ -63,6 +63,7 @@ import {
     superAdminPatch,
     getNotificationPreferences,
     updateNotificationPreferences,
+    updateUserProfile,
 } from '../lib/api';
 import { useTheme } from '../lib/theme';
 import {
@@ -269,6 +270,7 @@ const SuperAdminDashboard = () => {
     const [adminLastName, setAdminLastName] = useState('');
     const [adminEmail, setAdminEmail] = useState('');
     const [adminUsername, setAdminUsername] = useState('');
+    const [savingAdminInfo, setSavingAdminInfo] = useState(false);
 
     // Team members
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -441,6 +443,29 @@ const SuperAdminDashboard = () => {
                 [key]: !newValue
             }));
             console.error('Failed to update notification preference:', err.message);
+        }
+    };
+
+    const handleSaveAdminInfo = async () => {
+        try {
+            setSavingAdminInfo(true);
+            setError('');
+            await updateUserProfile({
+                firstName: adminFirstName,
+                lastName: adminLastName,
+                username: adminUsername,
+            });
+            // Update local admin user state
+            setAdminUser(prev => prev ? {
+                ...prev,
+                firstName: adminFirstName,
+                lastName: adminLastName,
+                username: adminUsername,
+            } : prev);
+        } catch (err: any) {
+            setError(err.message || 'Failed to save admin info');
+        } finally {
+            setSavingAdminInfo(false);
         }
     };
 
@@ -1951,13 +1976,11 @@ const SuperAdminDashboard = () => {
                             <View style={styles.settingsFormGroup}>
                                 <Text style={styles.settingsLabel}>Account Email</Text>
                                 <TextInput
-                                    style={styles.settingsInput}
+                                    style={[styles.settingsInput, styles.settingsInputDisabled]}
                                     value={adminEmail}
-                                    onChangeText={setAdminEmail}
+                                    editable={false}
                                     placeholder="admin@syphor.com"
                                     placeholderTextColor={colors.textMuted}
-                                    keyboardType="email-address"
-                                    autoCapitalize="none"
                                 />
                             </View>
                             <View style={styles.settingsFormGroup}>
@@ -1973,10 +1996,18 @@ const SuperAdminDashboard = () => {
                             </View>
                         </View>
 
-                        <View style={styles.settingsPasswordSection}>
-                            <Text style={styles.settingsSectionTitle}>Reset Password</Text>
-                            <TouchableOpacity style={styles.changePasswordButton}>
-                                <Text style={styles.changePasswordButtonText}>Change Password</Text>
+                        {/* Save Button */}
+                        <View style={styles.settingsSaveSection}>
+                            <TouchableOpacity
+                                style={[styles.saveAdminInfoButton, savingAdminInfo && styles.saveAdminInfoButtonDisabled]}
+                                onPress={handleSaveAdminInfo}
+                                disabled={savingAdminInfo}
+                            >
+                                {savingAdminInfo ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.saveAdminInfoButtonText}>Save Changes</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -4539,20 +4570,29 @@ const createStyles = (colors: any) =>
             fontSize: 14,
             color: colors.text,
         },
-        settingsPasswordSection: {
+        settingsInputDisabled: {
+            backgroundColor: colors.surfaceMuted,
+            color: colors.textMuted,
+        },
+        settingsSaveSection: {
             marginTop: 24,
             paddingTop: 24,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
-        changePasswordButton: {
+        saveAdminInfoButton: {
             backgroundColor: colors.primary,
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 8,
             alignSelf: 'flex-start',
+            minWidth: 140,
+            alignItems: 'center',
         },
-        changePasswordButtonText: {
+        saveAdminInfoButtonDisabled: {
+            opacity: 0.7,
+        },
+        saveAdminInfoButtonText: {
             color: colors.primaryText,
             fontSize: 14,
             fontWeight: '500',

@@ -840,6 +840,10 @@ export const communityPut = (path, body) =>
 export const communityDelete = (path) =>
     apiFetch(`/community${path}`, { method: 'DELETE' });
 
+// Update current user profile
+export const updateUserProfile = (data: { firstName?: string; lastName?: string; email?: string; username?: string }) =>
+    communityPatch('/users/me', data);
+
 // Presence/Online Status Tracking
 // In-memory cache for user presence (updated via heartbeat or API polling)
 const presenceCache: Map<string, { online: boolean; lastSeen: number }> = new Map();
@@ -904,6 +908,63 @@ export const getOnlineStatus = async (userIds: string[], subgridId?: string): Pr
 export const setUserOnline = (userId: string, online: boolean = true) => {
     presenceCache.set(userId, { online, lastSeen: Date.now() });
 };
+
+// ===================
+// CUSTOM ROLES API
+// ===================
+
+export interface CustomRole {
+    _id: string;
+    subgridId: string;
+    name: string;
+    color: string;
+    icon?: string;
+    displayOrder: number;
+    isVisible: boolean;
+    canBeMessaged: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// Get all custom roles for a subgrid
+export const getCustomRoles = (subgridId: string) =>
+    communityGet(`/subgrids/${subgridId}/roles`);
+
+// Create a new custom role
+export const createCustomRole = (subgridId: string, data: {
+    name: string;
+    color?: string;
+    icon?: string;
+    displayOrder?: number;
+    isVisible?: boolean;
+    canBeMessaged?: boolean;
+}) => communityPost(`/subgrids/${subgridId}/roles`, data);
+
+// Update a custom role
+export const updateCustomRole = (subgridId: string, roleId: string, data: {
+    name?: string;
+    color?: string;
+    icon?: string;
+    displayOrder?: number;
+    isVisible?: boolean;
+    canBeMessaged?: boolean;
+}) => communityPatch(`/subgrids/${subgridId}/roles/${roleId}`, data);
+
+// Delete a custom role
+export const deleteCustomRole = (subgridId: string, roleId: string) =>
+    communityDelete(`/subgrids/${subgridId}/roles/${roleId}`);
+
+// Get members with a specific role
+export const getCustomRoleMembers = (subgridId: string, roleId: string) =>
+    communityGet(`/subgrids/${subgridId}/roles/${roleId}/members`);
+
+// Assign a custom role to a member
+export const assignCustomRole = (subgridId: string, memberId: string, roleId: string | null) =>
+    communityPost(`/subgrids/${subgridId}/members/${memberId}/role`, { roleId });
+
+// Remove custom role from a member
+export const removeCustomRole = (subgridId: string, memberId: string) =>
+    communityDelete(`/subgrids/${subgridId}/members/${memberId}/role`);
 
 // ===================
 // MEDIA API

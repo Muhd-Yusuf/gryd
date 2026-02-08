@@ -1331,7 +1331,22 @@ export default function DirectMessagesScreen() {
                     {/* Mobile Top Bar */}
                     {isMobile && (
                         <View style={styles.mobileTopBar}>
-                            <View style={styles.mobileTopBarLeft}>
+                            {/* Gryd Branding Row */}
+                            <View style={styles.mobileHeaderBrandRow}>
+                                <View style={styles.mobileGrydLogo}>
+                                    <View style={styles.mobileGrydLogoIcon}>
+                                        <Text style={styles.mobileGrydLogoHash}>#</Text>
+                                    </View>
+                                    <Text style={styles.mobileGrydLogoText}>THE GRYD</Text>
+                                </View>
+                                <View style={styles.mobileTopBarRight}>
+                                    <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
+                                        {mode === 'dark' ? <Sun size={16} color={colors.text} /> : <Moon size={16} color={colors.text} />}
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                            {/* Server Info Row */}
+                            <View style={styles.mobileServerInfoRow}>
                                 {activeSubgrid?.logoUrl ? (
                                     <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
                                 ) : (
@@ -1341,12 +1356,12 @@ export default function DirectMessagesScreen() {
                                         </Text>
                                     </View>
                                 )}
-                                <Text style={styles.mobileTopBarTitle} numberOfLines={1}>Direct Messages</Text>
-                            </View>
-                            <View style={styles.mobileTopBarRight}>
-                                <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
-                                    {mode === 'dark' ? <Sun size={16} color={colors.text} /> : <Moon size={16} color={colors.text} />}
-                                </TouchableOpacity>
+                                <View style={styles.mobileServerInfoText}>
+                                    <Text style={styles.mobileTopBarTitle} numberOfLines={1}>
+                                        {activeSubgrid?.name || 'Server'}
+                                    </Text>
+                                    <Text style={styles.mobileServerSubtitle}>Direct Messages</Text>
+                                </View>
                             </View>
                         </View>
                     )}
@@ -3006,14 +3021,44 @@ const createStyles = (colors: any) =>
             width: '100%',
         },
         mobileTopBar: {
+            flexDirection: 'column',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surface,
+            gap: 12,
+        },
+        mobileHeaderBrandRow: {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
+        },
+        mobileGrydLogo: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        mobileGrydLogoIcon: {
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            borderWidth: 2,
+            borderColor: colors.primary,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: colors.primary + '15',
+        },
+        mobileGrydLogoHash: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.primary,
+        },
+        mobileGrydLogoText: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.text,
+            letterSpacing: 1,
         },
         mobileTopBarLeft: {
             flexDirection: 'row',
@@ -3030,7 +3075,7 @@ const createStyles = (colors: any) =>
             width: 32,
             height: 32,
             borderRadius: 8,
-            backgroundColor: '#1E3A8A',
+            backgroundColor: colors.primary,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -3039,11 +3084,26 @@ const createStyles = (colors: any) =>
             fontWeight: '700',
             color: '#FFFFFF',
         },
+        mobileServerInfoRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            backgroundColor: colors.surfaceMuted,
+            padding: 10,
+            borderRadius: 10,
+        },
+        mobileServerInfoText: {
+            flex: 1,
+        },
         mobileTopBarTitle: {
             fontSize: 15,
             fontWeight: '600',
             color: colors.text,
-            flex: 1,
+        },
+        mobileServerSubtitle: {
+            fontSize: 12,
+            color: colors.textMuted,
+            marginTop: 2,
         },
         mobileTopBarRight: {
             flexDirection: 'row',
@@ -3054,7 +3114,7 @@ const createStyles = (colors: any) =>
             width: 34,
             height: 34,
             borderRadius: 8,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.surfaceMuted,
             alignItems: 'center',
             justifyContent: 'center',
         },

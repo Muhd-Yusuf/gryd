@@ -91,7 +91,7 @@ import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { communityGet, communityPost, communityPatch, communityPut, communityDelete, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile, getAuthUser, initiateChannelCall, logout, inviteStakeholder, StakeholderBadge, getNotificationPreferences, updateNotificationPreferences } from '../lib/api';
+import { communityGet, communityPost, communityPatch, communityPut, communityDelete, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile, getAuthUser, initiateChannelCall, logout, inviteStakeholder, StakeholderBadge, getNotificationPreferences, updateNotificationPreferences, getCustomRoles, createCustomRole, updateCustomRole, deleteCustomRole, assignCustomRole, removeCustomRole, CustomRole } from '../lib/api';
 import { useTheme } from '../lib/theme';
 import UserAvatar from './UserAvatar';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
@@ -182,6 +182,14 @@ type Member = {
     userRole?: string;
     stakeholderBadge?: StakeholderBadge;
     company?: string;
+    // Custom role assigned by CU Admin
+    customRole?: {
+        _id: string;
+        name: string;
+        color: string;
+    };
+    // Computed userName for display
+    userName?: string;
     // Nested user object (fallback)
     user?: {
         _id?: string;
@@ -336,6 +344,17 @@ const CreditUnionAdminScreen = () => {
     const [members, setMembers] = useState<Member[]>([]);
     const [memberOnlineStatuses, setMemberOnlineStatuses] = useState<Record<string, boolean>>({});
     const [error, setError] = useState('');
+
+    // Custom Roles State
+    const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
+    const [loadingRoles, setLoadingRoles] = useState(false);
+    const [createRoleModalOpen, setCreateRoleModalOpen] = useState(false);
+    const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
+    const [newRoleName, setNewRoleName] = useState('');
+    const [newRoleColor, setNewRoleColor] = useState('#3B82F6');
+    const [savingRole, setSavingRole] = useState(false);
+    const [assignRoleModalOpen, setAssignRoleModalOpen] = useState(false);
+    const [assigningMember, setAssigningMember] = useState<Member | null>(null);
 
     // UI State
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -625,7 +644,14 @@ const CreditUnionAdminScreen = () => {
                     }
                 }
                 if (membersRes.status === 'fulfilled') {
-                    const membersData = membersRes.value?.data || [];
+                    const membersData = (membersRes.value?.data || []).map((m: Member) => ({
+                        ...m,
+                        userName: m.firstName && m.lastName
+                            ? `${m.firstName} ${m.lastName}`
+                            : m.username || m.user?.firstName && m.user?.lastName
+                                ? `${m.user?.firstName} ${m.user?.lastName}`
+                                : m.user?.username || m.email || 'Unknown User',
+                    }));
                     setMembers(membersData);
                     // Cache members for offline access
                     cacheCUAdminMembers(activeSubgridId, membersData);
@@ -877,6 +903,13 @@ const CreditUnionAdminScreen = () => {
         };
         loadPreferences();
     }, [notificationSettingsModalOpen]);
+
+    // Load custom roles when roles tab is selected
+    useEffect(() => {
+        if (settingsTab === 'roles' && activeSubgridId) {
+            loadCustomRoles();
+        }
+    }, [settingsTab, activeSubgridId]);
 
     const handleSaveNotificationSettings = async () => {
         setNotificationSettingsSaving(true);
@@ -1558,6 +1591,115 @@ const CreditUnionAdminScreen = () => {
             console.error('[handleMemberAction] Error:', err);
             setError(err.message || `Failed to ${action} member`);
         }
+    };
+
+    // Custom Roles Functions
+    const loadCustomRoles = async () => {
+        if (!activeSubgridId) return;
+        setLoadingRoles(true);
+        try {
+            const response = await getCustomRoles(activeSubgridId);
+            setCustomRoles(response?.data || []);
+        } catch (err: any) {
+            console.error('Failed to load custom roles:', err);
+        } finally {
+            setLoadingRoles(false);
+        }
+    };
+
+    const handleCreateRole = async () => {
+        if (!activeSubgridId || !newRoleName.trim()) return;
+        setSavingRole(true);
+        try {
+            const response = await createCustomRole(activeSubgridId, {
+                name: newRoleName.trim(),
+                color: newRoleColor,
+            });
+            if (response?.data) {
+                setCustomRoles(prev => [...prev, response.data]);
+            }
+            setCreateRoleModalOpen(false);
+            setNewRoleName('');
+            setNewRoleColor('#3B82F6');
+            showSuccessModal('Role Created', `The "${newRoleName}" role has been created successfully.`);
+        } catch (err: any) {
+            setError(err.message || 'Failed to create role');
+        } finally {
+            setSavingRole(false);
+        }
+    };
+
+    const handleUpdateRole = async () => {
+        if (!activeSubgridId || !editingRole || !newRoleName.trim()) return;
+        setSavingRole(true);
+        try {
+            const response = await updateCustomRole(activeSubgridId, editingRole._id, {
+                name: newRoleName.trim(),
+                color: newRoleColor,
+            });
+            if (response?.data) {
+                setCustomRoles(prev => prev.map(r => r._id === editingRole._id ? response.data : r));
+            }
+            setEditingRole(null);
+            setCreateRoleModalOpen(false);
+            setNewRoleName('');
+            setNewRoleColor('#3B82F6');
+            showSuccessModal('Role Updated', 'The role has been updated successfully.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to update role');
+        } finally {
+            setSavingRole(false);
+        }
+    };
+
+    const handleDeleteRole = async (roleId: string, roleName: string) => {
+        if (!activeSubgridId) return;
+        try {
+            await deleteCustomRole(activeSubgridId, roleId);
+            setCustomRoles(prev => prev.filter(r => r._id !== roleId));
+            showSuccessModal('Role Deleted', `The "${roleName}" role has been deleted.`);
+        } catch (err: any) {
+            setError(err.message || 'Failed to delete role');
+        }
+    };
+
+    const handleAssignRole = async (memberId: string, roleId: string | null) => {
+        if (!activeSubgridId) return;
+        try {
+            if (roleId) {
+                await assignCustomRole(activeSubgridId, memberId, roleId);
+            } else {
+                await removeCustomRole(activeSubgridId, memberId);
+            }
+            // Refresh members to show updated role
+            const response = await communityGet(`/subgrids/${activeSubgridId}/members`);
+            const membersData = (response?.data || []).map((m: Member) => ({
+                ...m,
+                userName: m.firstName && m.lastName
+                    ? `${m.firstName} ${m.lastName}`
+                    : m.username || m.user?.firstName && m.user?.lastName
+                        ? `${m.user?.firstName} ${m.user?.lastName}`
+                        : m.user?.username || m.email || 'Unknown User',
+            }));
+            setMembers(membersData);
+            setAssignRoleModalOpen(false);
+            setAssigningMember(null);
+            showSuccessModal('Role Updated', 'Member role has been updated successfully.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to assign role');
+        }
+    };
+
+    const openEditRole = (role: CustomRole) => {
+        setEditingRole(role);
+        setNewRoleName(role.name);
+        setNewRoleColor(role.color);
+        setCreateRoleModalOpen(true);
+    };
+
+    const openAssignRole = (member: Member) => {
+        setAssigningMember(member);
+        setAssignRoleModalOpen(true);
     };
 
     const getChannelAccessLabel = (role?: string) => {
@@ -2637,10 +2779,31 @@ const CreditUnionAdminScreen = () => {
                 {/* Channel Sidebar - full width on mobile when not showing content */}
                 {(!isMobile || !mobileShowContent) && (
                 <View style={[styles.channelSidebar, isMobile && styles.channelSidebarMobile]}>
-                    {/* Mobile Top Bar - replaces icon rail on mobile */}
+                    {/* Mobile Top Bar - branded header with Gryd branding */}
                     {isMobile && (
                         <View style={styles.mobileTopBar}>
-                            <View style={styles.mobileTopBarLeft}>
+                            {/* Gryd Branding Row */}
+                            <View style={styles.mobileHeaderBrandRow}>
+                                <View style={styles.mobileGrydLogo}>
+                                    <View style={styles.mobileGrydLogoIcon}>
+                                        <Text style={styles.mobileGrydLogoHash}>#</Text>
+                                    </View>
+                                    <Text style={styles.mobileGrydLogoText}>THE GRYD</Text>
+                                </View>
+                                <View style={styles.mobileTopBarRight}>
+                                    <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
+                                        {mode === 'dark' ? <Sun size={16} color={colors.textMuted} /> : <Moon size={16} color={colors.textMuted} />}
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.mobileTopBarBtn} onPress={() => setServerSettingsModalOpen(true)}>
+                                        <Settings size={16} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.mobileExitButton} onPress={handleLogout}>
+                                        <X size={14} color="#FFFFFF" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                            {/* Server Info Row */}
+                            <View style={styles.mobileServerInfoRow}>
                                 {activeSubgrid?.logoUrl ? (
                                     <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
                                 ) : (
@@ -2650,20 +2813,12 @@ const CreditUnionAdminScreen = () => {
                                         </Text>
                                     </View>
                                 )}
-                                <Text style={styles.mobileTopBarTitle} numberOfLines={1}>
-                                    {activeSubgrid?.name || 'Server'}
-                                </Text>
-                            </View>
-                            <View style={styles.mobileTopBarRight}>
-                                <TouchableOpacity style={styles.mobileTopBarBtn} onPress={toggleTheme}>
-                                    {mode === 'dark' ? <Sun size={18} color={colors.textMuted} /> : <Moon size={18} color={colors.textMuted} />}
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.mobileTopBarBtn} onPress={() => setServerSettingsModalOpen(true)}>
-                                    <Settings size={18} color={colors.textMuted} />
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.mobileExitButton} onPress={handleLogout}>
-                                    <X size={16} color="#FFFFFF" />
-                                </TouchableOpacity>
+                                <View style={styles.mobileServerInfoText}>
+                                    <Text style={styles.mobileTopBarTitle} numberOfLines={1}>
+                                        {activeSubgrid?.name || 'Server'}
+                                    </Text>
+                                    <Text style={styles.mobileServerSubtitle}>Credit Union Admin</Text>
+                                </View>
                             </View>
                         </View>
                     )}
@@ -3117,6 +3272,11 @@ const CreditUnionAdminScreen = () => {
                                                                 </Text>
                                                             </View>
                                                         )}
+                                                        {authorMember?.customRole && (
+                                                            <View style={[styles.roleBadge, { backgroundColor: authorMember.customRole.color + '20', borderColor: authorMember.customRole.color }]}>
+                                                                <Text style={[styles.roleBadgeText, { color: authorMember.customRole.color }]}>{authorMember.customRole.name}</Text>
+                                                            </View>
+                                                        )}
                                                         <Text style={styles.postDate}>{formatDate(item.createdAt)}</Text>
                                                     </View>
                                                     {getMemberCompany(authorMember) && (
@@ -3408,6 +3568,120 @@ const CreditUnionAdminScreen = () => {
                 )}
             </View>
 
+
+            {/* Create/Edit Role Modal */}
+            <Modal visible={createRoleModalOpen} transparent animationType="fade" onRequestClose={() => setCreateRoleModalOpen(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <TouchableOpacity style={styles.modalClose} onPress={() => { setCreateRoleModalOpen(false); setEditingRole(null); }}>
+                            <X size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>{editingRole ? 'Edit Role' : 'Create Role'}</Text>
+                        <Text style={[styles.settingsPanelDesc, { marginBottom: 16 }]}>
+                            Create a role label that will display next to member names
+                        </Text>
+
+                        <Text style={styles.modalLabel}>ROLE NAME</Text>
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="e.g. Branch Manager, Loan Officer"
+                            placeholderTextColor={colors.textMuted}
+                            value={newRoleName}
+                            onChangeText={setNewRoleName}
+                            maxLength={30}
+                        />
+
+                        <Text style={[styles.modalLabel, { marginTop: 16 }]}>ROLE COLOR</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                            {['#3B82F6', '#22C55E', '#EAB308', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'].map((color) => (
+                                <TouchableOpacity
+                                    key={color}
+                                    onPress={() => setNewRoleColor(color)}
+                                    style={{
+                                        width: 40,
+                                        height: 40,
+                                        borderRadius: 20,
+                                        backgroundColor: color,
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        borderWidth: newRoleColor === color ? 3 : 0,
+                                        borderColor: '#FFFFFF',
+                                    }}
+                                >
+                                    {newRoleColor === color && <Check size={20} color="#FFFFFF" />}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 8 }}>
+                            <Text style={{ color: colors.text }}>Preview:</Text>
+                            <View style={[styles.roleBadge, { backgroundColor: newRoleColor + '20', borderColor: newRoleColor }]}>
+                                <Text style={[styles.roleBadgeText, { color: newRoleColor }]}>{newRoleName || 'Role Name'}</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => { setCreateRoleModalOpen(false); setEditingRole(null); }}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalConfirmBtn, (!newRoleName.trim() || savingRole) && { opacity: 0.5 }]}
+                                onPress={editingRole ? handleUpdateRole : handleCreateRole}
+                                disabled={!newRoleName.trim() || savingRole}
+                            >
+                                {savingRole ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.modalConfirmText}>{editingRole ? 'Save Changes' : 'Create Role'}</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Assign Role Modal */}
+            <Modal visible={assignRoleModalOpen} transparent animationType="fade" onRequestClose={() => setAssignRoleModalOpen(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <TouchableOpacity style={styles.modalClose} onPress={() => { setAssignRoleModalOpen(false); setAssigningMember(null); }}>
+                            <X size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <Text style={styles.modalTitle}>Assign Role</Text>
+                        {assigningMember && (
+                            <>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+                                    <UserAvatar userId={assigningMember.userId} userName={assigningMember.userName} size={40} />
+                                    <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{assigningMember.userName}</Text>
+                                </View>
+
+                                <Text style={styles.modalLabel}>SELECT ROLE</Text>
+                                <ScrollView style={{ maxHeight: 200 }}>
+                                    <TouchableOpacity
+                                        style={[styles.roleSelectItem, !assigningMember.customRole && styles.roleSelectItemActive]}
+                                        onPress={() => handleAssignRole(assigningMember._id, null)}
+                                    >
+                                        <View style={[styles.roleColor, { backgroundColor: colors.textMuted }]} />
+                                        <Text style={styles.roleName}>No Role</Text>
+                                        {!assigningMember.customRole && <Check size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />}
+                                    </TouchableOpacity>
+                                    {customRoles.map((role) => (
+                                        <TouchableOpacity
+                                            key={role._id}
+                                            style={[styles.roleSelectItem, assigningMember.customRole?._id === role._id && styles.roleSelectItemActive]}
+                                            onPress={() => handleAssignRole(assigningMember._id, role._id)}
+                                        >
+                                            <View style={[styles.roleColor, { backgroundColor: role.color }]} />
+                                            <Text style={styles.roleName}>{role.name}</Text>
+                                            {assigningMember.customRole?._id === role._id && <Check size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />}
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
 
             {/* Create Channel Modal */}
             <Modal visible={createChannelModalOpen} transparent animationType="fade">
@@ -4617,6 +4891,11 @@ const CreditUnionAdminScreen = () => {
                                                                             </Text>
                                                                         </View>
                                                                     )}
+                                                                    {member.customRole && (
+                                                                        <View style={[styles.roleBadge, { backgroundColor: member.customRole.color + '20', borderColor: member.customRole.color }]}>
+                                                                            <Text style={[styles.roleBadgeText, { color: member.customRole.color }]}>{member.customRole.name}</Text>
+                                                                        </View>
+                                                                    )}
                                                                 </View>
                                                                 {username && (
                                                                     <Text style={styles.stakeholderUsername}>@{username}</Text>
@@ -4686,39 +4965,85 @@ const CreditUnionAdminScreen = () => {
                             {settingsTab === 'roles' && (
                                 <View style={styles.settingsPanel}>
                                     <Text style={styles.settingsPanelTitle}>Roles & Permissions</Text>
-                                    <Text style={styles.settingsPanelDesc}>Create and manage server roles with specific permissions</Text>
+                                    <Text style={styles.settingsPanelDesc}>Create custom role labels that display next to member names (like staff badges)</Text>
 
-                                    <TouchableOpacity style={styles.createRoleBtn}>
+                                    <TouchableOpacity
+                                        style={styles.createRoleBtn}
+                                        onPress={() => {
+                                            setEditingRole(null);
+                                            setNewRoleName('');
+                                            setNewRoleColor('#3B82F6');
+                                            setCreateRoleModalOpen(true);
+                                        }}
+                                    >
                                         <Plus size={18} color="#FFFFFF" />
                                         <Text style={styles.createRoleBtnText}>Create Role</Text>
                                     </TouchableOpacity>
 
                                     <View style={styles.rolesList}>
-                                        <View style={styles.roleItem}>
-                                            <View style={[styles.roleColor, { backgroundColor: '#22C55E' }]} />
-                                            <Text style={styles.roleName}>Admin</Text>
-                                            <Text style={styles.roleMemberCount}>1 member</Text>
-                                            <TouchableOpacity>
-                                                <MoreVertical size={18} color={colors.textMuted} />
-                                            </TouchableOpacity>
-                                        </View>
-                                        <View style={styles.roleItem}>
-                                            <View style={[styles.roleColor, { backgroundColor: '#3B82F6' }]} />
-                                            <Text style={styles.roleName}>Moderator</Text>
-                                            <Text style={styles.roleMemberCount}>0 members</Text>
-                                            <TouchableOpacity>
-                                                <MoreVertical size={18} color={colors.textMuted} />
-                                            </TouchableOpacity>
-                                        </View>
-                                        <View style={styles.roleItem}>
-                                            <View style={[styles.roleColor, { backgroundColor: colors.textMuted }]} />
-                                            <Text style={styles.roleName}>@everyone</Text>
-                                            <Text style={styles.roleMemberCount}>{members.length} members</Text>
-                                            <TouchableOpacity>
-                                                <MoreVertical size={18} color={colors.textMuted} />
-                                            </TouchableOpacity>
-                                        </View>
+                                        {loadingRoles ? (
+                                            <View style={{ padding: 20, alignItems: 'center' }}>
+                                                <ActivityIndicator size="small" color={colors.primary} />
+                                                <Text style={{ color: colors.textMuted, marginTop: 8 }}>Loading roles...</Text>
+                                            </View>
+                                        ) : customRoles.length === 0 ? (
+                                            <View style={{ padding: 20, alignItems: 'center' }}>
+                                                <Award size={48} color={colors.textMuted} />
+                                                <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 16 }}>No custom roles yet</Text>
+                                                <Text style={{ color: colors.textMuted, marginTop: 4, fontSize: 14, textAlign: 'center' }}>
+                                                    Create roles like "Branch Manager" or "Loan Officer" to identify your staff members
+                                                </Text>
+                                            </View>
+                                        ) : (
+                                            customRoles.map((role) => (
+                                                <View key={role._id} style={styles.roleItem}>
+                                                    <View style={[styles.roleColor, { backgroundColor: role.color }]} />
+                                                    <Text style={styles.roleName}>{role.name}</Text>
+                                                    <View style={{ flexDirection: 'row', gap: 8, marginLeft: 'auto' }}>
+                                                        <TouchableOpacity
+                                                            onPress={() => openEditRole(role)}
+                                                            style={{ padding: 4 }}
+                                                        >
+                                                            <Edit size={16} color={colors.textMuted} />
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity
+                                                            onPress={() => handleDeleteRole(role._id, role.name)}
+                                                            style={{ padding: 4 }}
+                                                        >
+                                                            <Trash2 size={16} color="#EF4444" />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
+                                            ))
+                                        )}
                                     </View>
+
+                                    {/* Assign Roles Section */}
+                                    {customRoles.length > 0 && (
+                                        <View style={{ marginTop: 24 }}>
+                                            <Text style={styles.settingsPanelTitle}>Assign Roles to Members</Text>
+                                            <Text style={styles.settingsPanelDesc}>Click on a member to assign or remove their role badge</Text>
+
+                                            <ScrollView style={{ maxHeight: 300, marginTop: 12 }}>
+                                                {members.map((member) => (
+                                                    <TouchableOpacity
+                                                        key={member._id}
+                                                        style={[styles.roleItem, { paddingVertical: 12 }]}
+                                                        onPress={() => openAssignRole(member)}
+                                                    >
+                                                        <UserAvatar userId={member.userId} userName={member.userName} size={32} />
+                                                        <Text style={[styles.roleName, { marginLeft: 12 }]}>{member.userName}</Text>
+                                                        {member.customRole && (
+                                                            <View style={[styles.roleBadge, { backgroundColor: member.customRole.color + '20', borderColor: member.customRole.color }]}>
+                                                                <Text style={[styles.roleBadgeText, { color: member.customRole.color }]}>{member.customRole.name}</Text>
+                                                            </View>
+                                                        )}
+                                                        <ChevronRight size={16} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </ScrollView>
+                                        </View>
+                                    )}
                                 </View>
                             )}
 
@@ -5792,6 +6117,11 @@ const CreditUnionAdminScreen = () => {
                                                 </Text>
                                             </View>
                                         )}
+                                        {selectedStakeholder.customRole && (
+                                            <View style={[styles.roleBadge, { backgroundColor: selectedStakeholder.customRole.color + '20', borderColor: selectedStakeholder.customRole.color }]}>
+                                                <Text style={[styles.roleBadgeText, { color: selectedStakeholder.customRole.color }]}>{selectedStakeholder.customRole.name}</Text>
+                                            </View>
+                                        )}
                                     </View>
                                     {username && <Text style={[styles.stakeholderUsername, { marginBottom: 8 }]}>@{username}</Text>}
 
@@ -6149,10 +6479,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 24,
         },
         tab: {
-            paddingVertical: 4,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 8,
         },
         tabActive: {
-            paddingVertical: 4,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 8,
+            backgroundColor: colors.primary + '15',
         },
         tabText: {
             fontSize: 14,
@@ -6160,8 +6495,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         tabTextActive: {
             fontSize: 14,
-            fontWeight: '500',
-            color: colors.text,
+            fontWeight: '600',
+            color: colors.primary,
         },
         mainArea: {
             flex: 1,
@@ -6226,36 +6561,76 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             borderRightWidth: 0,
         },
         mobileTopBar: {
+            flexDirection: 'column',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+            backgroundColor: colors.surface,
+            gap: 12,
+        },
+        mobileHeaderBrandRow: {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
         },
-        mobileTopBarLeft: {
+        mobileGrydLogo: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 10,
+            gap: 8,
+        },
+        mobileGrydLogoIcon: {
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            borderWidth: 2,
+            borderColor: colors.primary,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: colors.primary + '15',
+        },
+        mobileGrydLogoHash: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.primary,
+        },
+        mobileGrydLogoText: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.text,
+            letterSpacing: 1,
+        },
+        mobileServerInfoRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            backgroundColor: colors.surfaceMuted,
+            padding: 10,
+            borderRadius: 12,
+        },
+        mobileServerInfoText: {
             flex: 1,
         },
+        mobileServerSubtitle: {
+            fontSize: 11,
+            color: colors.textMuted,
+            marginTop: 2,
+        },
         mobileTopBarLogo: {
-            width: 32,
-            height: 32,
-            borderRadius: 8,
+            width: 36,
+            height: 36,
+            borderRadius: 10,
         },
         mobileTopBarLogoPlaceholder: {
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            backgroundColor: '#1E3A8A',
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: colors.primary,
             alignItems: 'center',
             justifyContent: 'center',
         },
         mobileTopBarLogoText: {
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: '700',
             color: '#FFFFFF',
         },
@@ -6263,25 +6638,26 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 15,
             fontWeight: '600',
             color: colors.text,
-            flex: 1,
         },
         mobileTopBarRight: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
+            gap: 6,
         },
         mobileTopBarBtn: {
-            width: 34,
-            height: 34,
+            width: 32,
+            height: 32,
             borderRadius: 8,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.surfaceMuted,
             alignItems: 'center',
             justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: colors.border,
         },
         mobileExitButton: {
-            width: 30,
-            height: 30,
-            borderRadius: 15,
+            width: 28,
+            height: 28,
+            borderRadius: 14,
             backgroundColor: '#EF4444',
             alignItems: 'center',
             justifyContent: 'center',
@@ -6291,12 +6667,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             padding: 2,
         },
         topNavMobile: {
-            paddingHorizontal: 8,
-            justifyContent: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            height: 'auto',
+            backgroundColor: colors.surface,
         },
         topNavTabsMobile: {
             marginLeft: 0,
-            gap: 16,
+            gap: 8,
             paddingHorizontal: 4,
         },
         mainContentMobile: {
@@ -6540,12 +6918,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         channelItem: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
-            padding: 8,
-            borderRadius: 6,
+            gap: 10,
+            padding: 10,
+            borderRadius: 10,
+            marginBottom: 2,
         },
         channelItemActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.primary + '15',
         },
         channelName: {
             flex: 1,
@@ -6553,8 +6932,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.textMuted,
         },
         channelNameActive: {
-            color: colors.text,
-            fontWeight: '500',
+            color: colors.primary,
+            fontWeight: '600',
         },
         channelActions: {
             flexDirection: 'row',
@@ -6764,37 +7143,42 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: 12,
+            padding: 14,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
+            backgroundColor: colors.surface,
         },
         contentHeaderLeft: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
+            gap: 10,
         },
         contentTitle: {
-            fontSize: 15,
+            fontSize: 16,
             fontWeight: '600',
             color: colors.text,
         },
         contentHeaderRight: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 12,
+            gap: 10,
         },
         headerIcon: {
-            padding: 4,
+            padding: 6,
+            borderRadius: 8,
+            backgroundColor: colors.surfaceMuted,
         },
         searchBox: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
             backgroundColor: colors.surfaceMuted,
-            borderRadius: 6,
+            borderRadius: 10,
             minWidth: 180,
+            borderWidth: 1,
+            borderColor: colors.border,
         },
         searchInput: {
             flex: 1,
@@ -7357,32 +7741,36 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             backgroundColor: colors.surfaceMuted,
-            borderRadius: 8,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderWidth: 1,
+            borderColor: colors.border,
         },
         inputIcon: {
-            padding: 4,
+            padding: 6,
+            borderRadius: 8,
         },
         messageInput: {
             flex: 1,
-            fontSize: 14,
+            fontSize: 15,
             color: colors.text,
-            paddingVertical: 4,
+            paddingVertical: 6,
         },
         messageInputActions: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 4,
+            gap: 6,
         },
         inputActionIcon: {
-            padding: 6,
+            padding: 8,
+            borderRadius: 8,
         },
         sendBtn: {
-            backgroundColor: '#5865F2',
-            borderRadius: 6,
-            padding: 8,
-            marginLeft: 4,
+            backgroundColor: colors.primary,
+            borderRadius: 10,
+            padding: 10,
+            marginLeft: 6,
         },
         membersSidebar: {
             width: 200,
@@ -8681,6 +9069,27 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 13,
             color: colors.textMuted,
             marginRight: 12,
+        },
+        roleBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 12,
+            borderWidth: 1,
+            marginLeft: 8,
+        },
+        roleBadgeText: {
+            fontSize: 12,
+            fontWeight: '600',
+        },
+        roleSelectItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: 12,
+            borderRadius: 8,
+            marginBottom: 4,
+        },
+        roleSelectItemActive: {
+            backgroundColor: colors.surfaceHover,
         },
         createInviteBtn: {
             flexDirection: 'row',
