@@ -1286,6 +1286,11 @@ export const updateNotificationPreferences = (prefs: {
     calls?: boolean;
     mentions?: boolean;
     invites?: boolean;
+    // Super Admin email notification preferences
+    systemAlerts?: boolean;
+    securityEvents?: boolean;
+    dailyReports?: boolean;
+    weeklyReports?: boolean;
 }) => notificationsPatch('/preferences', prefs);
 
 // Get in-app notification inbox
@@ -1397,3 +1402,11 @@ export const getSuperAdminTeamMembers = (options?: { q?: string; limit?: number;
 // Invite a new team member
 export const inviteSuperAdminTeamMember = (data: { email: string; firstName?: string; lastName?: string; role?: string }) =>
     superAdminPost('/team/invite', data);
+
+// Delete a team member
+export const deleteSuperAdminTeamMember = (userId: string) =>
+    superAdminPost(`/team/${userId}/delete`);
+
+// Suspend or unsuspend a team member
+export const suspendSuperAdminTeamMember = (userId: string, suspend: boolean) =>
+    superAdminPost(`/team/${userId}/suspend`, { suspend });

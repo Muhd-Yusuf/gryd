@@ -1047,3 +1047,47 @@ exports.deleteTeamMember = async (req, res) => {
         return res.status(500).json({ message: 'Failed to delete team member', error: error.message });
     }
 };
+
+/**
+ * Suspend or unsuspend a team member
+ * POST /api/super-admin/team/:userId/suspend
+ */
+exports.suspendTeamMember = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { suspend } = req.body; // true to suspend, false to unsuspend
+
+        if (!mongoose.isValidObjectId(userId)) {
+            return res.status(400).json({ message: 'Invalid user id' });
+        }
+
+        // Check if user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Verify user is actually a team member (admin or super_admin)
+        if (!['admin', 'super_admin'].includes(user.role)) {
+            return res.status(400).json({ message: 'User is not a team member' });
+        }
+
+        // Prevent suspending yourself
+        if (req.user && String(req.user._id) === String(userId)) {
+            return res.status(400).json({ message: 'You cannot suspend your own account' });
+        }
+
+        // Update the user's status
+        const newStatus = suspend ? 'suspended' : 'active';
+        await User.findByIdAndUpdate(userId, { status: newStatus });
+
+        return res.status(200).json({
+            success: true,
+            message: `Team member ${suspend ? 'suspended' : 'reactivated'} successfully`,
+            data: { status: newStatus },
+        });
+    } catch (error) {
+        console.error('[superAdmin.suspendTeamMember] Error:', error.message);
+        return res.status(500).json({ message: 'Failed to update team member status', error: error.message });
+    }
+};

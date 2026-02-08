@@ -82,6 +82,12 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null,
     },
+    // Account status for team members (active, suspended)
+    status: {
+        type: String,
+        enum: ['active', 'suspended'],
+        default: 'active',
+    },
     createdAt: {
         type: Date,
         default: Date.now,

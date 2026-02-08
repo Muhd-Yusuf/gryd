@@ -43,6 +43,8 @@ import {
 } from 'lucide-react-native';
 import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-native-svg';
 import { useRouter } from 'expo-router';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import {
     getSuperAdminOverview,
     getSuperAdminCustomers,
@@ -53,6 +55,8 @@ import {
     updateSuperAdminConfig,
     getSuperAdminTeamMembers,
     inviteSuperAdminTeamMember,
+    deleteSuperAdminTeamMember,
+    suspendSuperAdminTeamMember,
     getAuthUser,
     logout,
     superAdminPost,
@@ -275,6 +279,22 @@ const SuperAdminDashboard = () => {
     const [inviteRole, setInviteRole] = useState('admin');
     const [invitingMember, setInvitingMember] = useState(false);
 
+    // Team member action menu
+    const [teamActionMenuOpen, setTeamActionMenuOpen] = useState<string | null>(null);
+    const [teamActionMember, setTeamActionMember] = useState<TeamMember | null>(null);
+
+    // Team member suspend modal
+    const [teamSuspendModalOpen, setTeamSuspendModalOpen] = useState(false);
+    const [teamSuspendMemberId, setTeamSuspendMemberId] = useState<string | null>(null);
+    const [teamSuspendConfirmChecked, setTeamSuspendConfirmChecked] = useState(false);
+    const [suspendingTeamMember, setSuspendingTeamMember] = useState(false);
+
+    // Team member delete modal
+    const [teamDeleteModalOpen, setTeamDeleteModalOpen] = useState(false);
+    const [teamDeleteMemberId, setTeamDeleteMemberId] = useState<string | null>(null);
+    const [teamDeleteConfirmChecked, setTeamDeleteConfirmChecked] = useState(false);
+    const [deletingTeamMember, setDeletingTeamMember] = useState(false);
+
     // Notification settings
     const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
         systemAlerts: true,
@@ -335,6 +355,13 @@ const SuperAdminDashboard = () => {
         }
     }, [activeNav, customerSearch, customerStatusFilter, moderationStatusFilter, currentPage, rowsPerPage, growthRange]);
 
+    // Load notification preferences when notifications tab is selected
+    useEffect(() => {
+        if (settingsTab === 'notifications') {
+            loadNotificationPreferences();
+        }
+    }, [settingsTab]);
+
     const loadInitialData = async () => {
         try {
             const user = await getAuthUser();
@@ -366,7 +393,7 @@ const SuperAdminDashboard = () => {
                     name: [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Unknown',
                     email: user.email,
                     role: user.role || 'admin',
-                    status: 'active', // Team members are always active
+                    status: user.status || 'active',
                     avatar: user.avatarUrl,
                 }));
                 setTeamMembers(members);
@@ -375,6 +402,45 @@ const SuperAdminDashboard = () => {
         } catch (err: any) {
             console.error('Failed to load team members:', err.message);
             // Keep cached data on error
+        }
+    };
+
+    // Load notification preferences from API
+    const loadNotificationPreferences = async () => {
+        try {
+            const response = await getNotificationPreferences();
+            if (response?.data) {
+                setNotificationSettings({
+                    systemAlerts: response.data.systemAlerts ?? true,
+                    securityEvents: response.data.securityEvents ?? true,
+                    dailyReports: response.data.dailyReports ?? true,
+                    weeklyReports: response.data.weeklyReports ?? true,
+                });
+            }
+        } catch (err: any) {
+            console.error('Failed to load notification preferences:', err.message);
+        }
+    };
+
+    // Handle notification toggle - update local state and save to API
+    const handleNotificationToggle = async (key: keyof NotificationSettings) => {
+        const newValue = !notificationSettings[key];
+
+        // Optimistic update
+        setNotificationSettings(prev => ({
+            ...prev,
+            [key]: newValue
+        }));
+
+        try {
+            await updateNotificationPreferences({ [key]: newValue });
+        } catch (err: any) {
+            // Revert on error
+            setNotificationSettings(prev => ({
+                ...prev,
+                [key]: !newValue
+            }));
+            console.error('Failed to update notification preference:', err.message);
         }
     };
 
@@ -404,6 +470,71 @@ const SuperAdminDashboard = () => {
         } finally {
             setInvitingMember(false);
         }
+    };
+
+    const handleDeleteTeamMember = async () => {
+        if (!teamDeleteMemberId || !teamDeleteConfirmChecked) return;
+
+        try {
+            setDeletingTeamMember(true);
+            setError('');
+            await deleteSuperAdminTeamMember(teamDeleteMemberId);
+            setTeamDeleteModalOpen(false);
+            setTeamDeleteMemberId(null);
+            setTeamDeleteConfirmChecked(false);
+            setTeamActionMember(null);
+            await loadTeamMembers();
+        } catch (err: any) {
+            setError(err.message || 'Failed to delete team member');
+        } finally {
+            setDeletingTeamMember(false);
+        }
+    };
+
+    const handleSuspendTeamMember = async () => {
+        if (!teamSuspendMemberId || !teamSuspendConfirmChecked) return;
+
+        const member = teamMembers.find(m => m._id === teamSuspendMemberId);
+        const shouldSuspend = member?.status !== 'suspended';
+
+        try {
+            setSuspendingTeamMember(true);
+            setError('');
+            await suspendSuperAdminTeamMember(teamSuspendMemberId, shouldSuspend);
+            setTeamSuspendModalOpen(false);
+            setTeamSuspendMemberId(null);
+            setTeamSuspendConfirmChecked(false);
+            setTeamActionMember(null);
+            await loadTeamMembers();
+        } catch (err: any) {
+            setError(err.message || 'Failed to update team member status');
+        } finally {
+            setSuspendingTeamMember(false);
+        }
+    };
+
+    const openTeamMemberActionMenu = (member: TeamMember) => {
+        setTeamActionMenuOpen(member._id);
+        setTeamActionMember(member);
+    };
+
+    const closeTeamMemberActionMenu = () => {
+        setTeamActionMenuOpen(null);
+        setTeamActionMember(null);
+    };
+
+    const openTeamSuspendModal = (member: TeamMember) => {
+        setTeamSuspendMemberId(member._id);
+        setTeamActionMember(member);
+        setTeamSuspendModalOpen(true);
+        closeTeamMemberActionMenu();
+    };
+
+    const openTeamDeleteModal = (member: TeamMember) => {
+        setTeamDeleteMemberId(member._id);
+        setTeamActionMember(member);
+        setTeamDeleteModalOpen(true);
+        closeTeamMemberActionMenu();
     };
 
     const loadOverviewData = async () => {
@@ -750,7 +881,7 @@ const SuperAdminDashboard = () => {
     };
 
     // Handle export customers as CSV
-    const handleExportCSV = () => {
+    const handleExportCSV = async () => {
         if (customers.length === 0) {
             setError('No customers to export');
             return;
@@ -776,22 +907,38 @@ const SuperAdminDashboard = () => {
                 ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
             ].join('\n');
 
+            const fileName = `customers_${new Date().toISOString().split('T')[0]}.csv`;
+
             // Create download for web
             if (Platform.OS === 'web') {
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.setAttribute('href', url);
-                link.setAttribute('download', `customers_${new Date().toISOString().split('T')[0]}.csv`);
+                link.setAttribute('download', fileName);
                 link.style.visibility = 'hidden';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
             } else {
-                // For mobile, we'd use expo-file-system and expo-sharing
-                // For now, show a message
-                setError('CSV export is available on web only');
+                // For mobile, use expo-file-system and expo-sharing
+                const fileUri = FileSystem.documentDirectory + fileName;
+                await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+                    encoding: FileSystem.EncodingType.UTF8,
+                });
+
+                // Check if sharing is available
+                const isSharingAvailable = await Sharing.isAvailableAsync();
+                if (isSharingAvailable) {
+                    await Sharing.shareAsync(fileUri, {
+                        mimeType: 'text/csv',
+                        dialogTitle: 'Export Customers CSV',
+                        UTI: 'public.comma-separated-values-text',
+                    });
+                } else {
+                    setError('Sharing is not available on this device');
+                }
             }
         } catch (err: any) {
             console.error('Failed to export CSV:', err);
@@ -995,47 +1142,68 @@ const SuperAdminDashboard = () => {
     // Render top bar
     const renderTopBar = () => (
         <View style={[styles.topBar, isMobile && styles.topBarMobile]}>
+            {/* Mobile: Show Gryd branding at top */}
+            {isMobile && (
+                <View style={styles.mobileHeaderRow}>
+                    <View style={styles.mobileLogoContainer}>
+                        <View style={styles.mobileLogoIcon}>
+                            <Text style={styles.mobileLogoHash}>#</Text>
+                        </View>
+                        <Text style={styles.mobileLogoText}>THE GRYD</Text>
+                    </View>
+                    <View style={styles.mobileHeaderActions}>
+                        <TouchableOpacity style={styles.topBarIconButton}>
+                            <Bell size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.topBarIconButton} onPress={toggleTheme}>
+                            {mode === 'dark' ? <Sun size={18} color={colors.textMuted} /> : <Moon size={18} color={colors.textMuted} />}
+                        </TouchableOpacity>
+                        <View style={styles.profileAvatar}>
+                            <Text style={styles.profileAvatarText}>
+                                {adminUser?.firstName?.[0] || 'J'}
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            )}
+
+            {/* Search bar - full width on mobile, partial on desktop */}
             <View style={[styles.searchContainer, isMobile && styles.searchContainerMobile]}>
-                <Search size={20} color={colors.textMuted} />
+                <Search size={18} color={colors.textMuted} />
                 <TextInput
                     style={styles.searchInput}
-                    placeholder="Search anything here"
+                    placeholder={isMobile ? "Search..." : "Search anything here"}
                     placeholderTextColor={colors.textMuted}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />
             </View>
 
-            <View style={styles.topBarRight}>
-                <View style={styles.topBarIconGroup}>
-                    <TouchableOpacity style={styles.topBarIconButton}>
-                        <Bell size={20} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.topBarIconButton} onPress={toggleTheme}>
-                        {mode === 'dark' ? <Sun size={20} color={colors.textMuted} /> : <Moon size={20} color={colors.textMuted} />}
-                    </TouchableOpacity>
-                    {/* Logout button for mobile */}
-                    {isMobile && (
-                        <TouchableOpacity style={styles.topBarIconButton} onPress={handleLogout}>
-                            <LogOut size={20} color={colors.error || '#EF4444'} />
+            {/* Desktop: Show full header with icons and profile */}
+            {!isMobile && (
+                <View style={styles.topBarRight}>
+                    <View style={styles.topBarIconGroup}>
+                        <TouchableOpacity style={styles.topBarIconButton}>
+                            <Bell size={20} color={colors.textMuted} />
                         </TouchableOpacity>
-                    )}
-                </View>
-                {!isMobile && <View style={styles.topBarDivider} />}
-                <View style={styles.profileSection}>
-                    <View style={styles.profileAvatar}>
-                        <Text style={styles.profileAvatarText}>
-                            {adminUser?.firstName?.[0] || 'J'}
-                        </Text>
+                        <TouchableOpacity style={styles.topBarIconButton} onPress={toggleTheme}>
+                            {mode === 'dark' ? <Sun size={20} color={colors.textMuted} /> : <Moon size={20} color={colors.textMuted} />}
+                        </TouchableOpacity>
                     </View>
-                    {!isMobile && (
+                    <View style={styles.topBarDivider} />
+                    <View style={styles.profileSection}>
+                        <View style={styles.profileAvatar}>
+                            <Text style={styles.profileAvatarText}>
+                                {adminUser?.firstName?.[0] || 'J'}
+                            </Text>
+                        </View>
                         <View style={styles.profileInfo}>
                             <Text style={styles.profileName}>{adminUser?.firstName || 'James'} {adminUser?.lastName || 'Bryce'}</Text>
                             <Text style={styles.profileRole}>Admin Account</Text>
                         </View>
-                    )}
+                    </View>
                 </View>
-            </View>
+            )}
         </View>
     );
 
@@ -1254,9 +1422,10 @@ const SuperAdminDashboard = () => {
     const renderCustomersPage = () => (
         <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
             <View style={[styles.customersHeader, isMobile && styles.customersHeaderMobile]}>
-                <Text style={styles.pageTitle}>Customers</Text>
-                <TouchableOpacity style={[styles.addCustomerButton, isMobile && { alignItems: 'center' as const }]} onPress={() => setAddCustomerModalOpen(true)}>
-                    <Text style={styles.addCustomerButtonText}>Add New Customer</Text>
+                <Text style={[styles.pageTitle, isMobile && styles.pageTitleMobile]}>Customers</Text>
+                <TouchableOpacity style={[styles.addCustomerButton, isMobile && styles.addCustomerButtonMobile]} onPress={() => setAddCustomerModalOpen(true)}>
+                    <Plus size={16} color="#fff" style={{ marginRight: 4 }} />
+                    <Text style={styles.addCustomerButtonText}>{isMobile ? 'Add' : 'Add New Customer'}</Text>
                 </TouchableOpacity>
             </View>
 
@@ -1300,7 +1469,7 @@ const SuperAdminDashboard = () => {
                             />
                         </View>
 
-                        <View style={{ position: 'relative' }}>
+                        <View style={styles.filterDropdownWrapper}>
                             <TouchableOpacity
                                 style={styles.filterDropdown}
                                 onPress={() => setCustomerFilterDropdownOpen(!customerFilterDropdownOpen)}
@@ -1613,8 +1782,8 @@ const SuperAdminDashboard = () => {
     // Render Moderation Page
     const renderModerationPage = () => (
         <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
-            <View style={styles.pageHeader}>
-                <Text style={styles.pageTitle}>Moderation & Safety</Text>
+            <View style={[styles.pageHeader, isMobile && styles.pageHeaderMobile]}>
+                <Text style={[styles.pageTitle, isMobile && styles.pageTitleMobile]}>Moderation & Safety</Text>
             </View>
 
             {/* Auto-flag severe content */}
@@ -1723,8 +1892,8 @@ const SuperAdminDashboard = () => {
 
         return (
             <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
-                <View style={styles.pageHeader}>
-                    <Text style={styles.pageTitle}>Settings</Text>
+                <View style={[styles.pageHeader, isMobile && styles.pageHeaderMobile]}>
+                    <Text style={[styles.pageTitle, isMobile && styles.pageTitleMobile]}>Settings</Text>
                 </View>
 
                 {/* Settings Tabs */}
@@ -1854,9 +2023,38 @@ const SuperAdminDashboard = () => {
                                                         <Text style={[styles.customerEmail, { marginTop: 2 }]}>{member.email}</Text>
                                                     </View>
                                                 </View>
-                                                <TouchableOpacity style={styles.teamActionButton}>
-                                                    <MoreVertical size={20} color={colors.textMuted} />
-                                                </TouchableOpacity>
+                                                <View style={{ position: 'relative' }}>
+                                                    <TouchableOpacity
+                                                        style={styles.teamActionButton}
+                                                        onPress={() => openTeamMemberActionMenu(member)}
+                                                    >
+                                                        <MoreVertical size={20} color={colors.textMuted} />
+                                                    </TouchableOpacity>
+                                                    {teamActionMenuOpen === member._id && (
+                                                        <View style={styles.actionMenuDropdown}>
+                                                            <TouchableOpacity
+                                                                style={styles.actionMenuItem}
+                                                                onPress={() => openTeamSuspendModal(member)}
+                                                            >
+                                                                {member.status === 'suspended' ? (
+                                                                    <PlayCircle size={16} color={colors.text} />
+                                                                ) : (
+                                                                    <PauseCircle size={16} color={colors.text} />
+                                                                )}
+                                                                <Text style={styles.actionMenuItemText}>
+                                                                    {member.status === 'suspended' ? 'Reactivate' : 'Suspend'}
+                                                                </Text>
+                                                            </TouchableOpacity>
+                                                            <TouchableOpacity
+                                                                style={[styles.actionMenuItem, styles.actionMenuItemDanger]}
+                                                                onPress={() => openTeamDeleteModal(member)}
+                                                            >
+                                                                <Trash2 size={16} color="#EF4444" />
+                                                                <Text style={[styles.actionMenuItemText, { color: '#EF4444' }]}>Delete</Text>
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    )}
+                                                </View>
                                             </View>
                                             <View style={styles.mobileCardRow}>
                                                 <View style={styles.mobileCardField}>
@@ -1917,9 +2115,38 @@ const SuperAdminDashboard = () => {
                                                     </Text>
                                                 </View>
                                             </View>
-                                            <TouchableOpacity style={styles.teamActionButton}>
-                                                <MoreVertical size={20} color={colors.textMuted} />
-                                            </TouchableOpacity>
+                                            <View style={{ position: 'relative' }}>
+                                                <TouchableOpacity
+                                                    style={styles.teamActionButton}
+                                                    onPress={() => openTeamMemberActionMenu(member)}
+                                                >
+                                                    <MoreVertical size={20} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                                {teamActionMenuOpen === member._id && (
+                                                    <View style={styles.actionMenuDropdown}>
+                                                        <TouchableOpacity
+                                                            style={styles.actionMenuItem}
+                                                            onPress={() => openTeamSuspendModal(member)}
+                                                        >
+                                                            {member.status === 'suspended' ? (
+                                                                <PlayCircle size={16} color={colors.text} />
+                                                            ) : (
+                                                                <PauseCircle size={16} color={colors.text} />
+                                                            )}
+                                                            <Text style={styles.actionMenuItemText}>
+                                                                {member.status === 'suspended' ? 'Reactivate' : 'Suspend'}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity
+                                                            style={[styles.actionMenuItem, styles.actionMenuItemDanger]}
+                                                            onPress={() => openTeamDeleteModal(member)}
+                                                        >
+                                                            <Trash2 size={16} color="#EF4444" />
+                                                            <Text style={[styles.actionMenuItemText, { color: '#EF4444' }]}>Delete</Text>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                )}
+                                            </View>
                                         </View>
                                     );
                                 })}
@@ -1950,10 +2177,7 @@ const SuperAdminDashboard = () => {
                                 </View>
                                 <TouchableOpacity
                                     style={[styles.toggle, notificationSettings.systemAlerts && styles.toggleActive]}
-                                    onPress={() => setNotificationSettings(prev => ({
-                                        ...prev,
-                                        systemAlerts: !prev.systemAlerts
-                                    }))}
+                                    onPress={() => handleNotificationToggle('systemAlerts')}
                                 >
                                     <View style={[styles.toggleKnob, notificationSettings.systemAlerts && styles.toggleKnobActive]} />
                                 </TouchableOpacity>
@@ -1969,10 +2193,7 @@ const SuperAdminDashboard = () => {
                                 </View>
                                 <TouchableOpacity
                                     style={[styles.toggle, notificationSettings.securityEvents && styles.toggleActive]}
-                                    onPress={() => setNotificationSettings(prev => ({
-                                        ...prev,
-                                        securityEvents: !prev.securityEvents
-                                    }))}
+                                    onPress={() => handleNotificationToggle('securityEvents')}
                                 >
                                     <View style={[styles.toggleKnob, notificationSettings.securityEvents && styles.toggleKnobActive]} />
                                 </TouchableOpacity>
@@ -1988,10 +2209,7 @@ const SuperAdminDashboard = () => {
                                 </View>
                                 <TouchableOpacity
                                     style={[styles.toggle, notificationSettings.dailyReports && styles.toggleActive]}
-                                    onPress={() => setNotificationSettings(prev => ({
-                                        ...prev,
-                                        dailyReports: !prev.dailyReports
-                                    }))}
+                                    onPress={() => handleNotificationToggle('dailyReports')}
                                 >
                                     <View style={[styles.toggleKnob, notificationSettings.dailyReports && styles.toggleKnobActive]} />
                                 </TouchableOpacity>
@@ -2007,10 +2225,7 @@ const SuperAdminDashboard = () => {
                                 </View>
                                 <TouchableOpacity
                                     style={[styles.toggle, notificationSettings.weeklyReports && styles.toggleActive]}
-                                    onPress={() => setNotificationSettings(prev => ({
-                                        ...prev,
-                                        weeklyReports: !prev.weeklyReports
-                                    }))}
+                                    onPress={() => handleNotificationToggle('weeklyReports')}
                                 >
                                     <View style={[styles.toggleKnob, notificationSettings.weeklyReports && styles.toggleKnobActive]} />
                                 </TouchableOpacity>
@@ -2318,6 +2533,193 @@ const SuperAdminDashboard = () => {
         </Modal>
     );
 
+    // Render Team Member Suspend Modal
+    const renderTeamSuspendModal = () => {
+        const member = teamMembers.find(m => m._id === teamSuspendMemberId);
+        const isSuspended = member?.status === 'suspended';
+
+        return (
+            <Modal
+                visible={teamSuspendModalOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => {
+                    setTeamSuspendModalOpen(false);
+                    setTeamSuspendConfirmChecked(false);
+                }}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => {
+                        setTeamSuspendModalOpen(false);
+                        setTeamSuspendConfirmChecked(false);
+                    }}
+                >
+                    <Pressable style={styles.suspendModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.suspendModalHeader}>
+                            <View style={[styles.suspendIconContainer, isSuspended && { backgroundColor: 'rgba(34, 197, 94, 0.1)' }]}>
+                                {isSuspended ? (
+                                    <PlayCircle size={32} color="#22c55e" />
+                                ) : (
+                                    <PauseCircle size={32} color="#f59e0b" />
+                                )}
+                            </View>
+                            <TouchableOpacity
+                                style={styles.suspendCloseButton}
+                                onPress={() => {
+                                    setTeamSuspendModalOpen(false);
+                                    setTeamSuspendConfirmChecked(false);
+                                }}
+                            >
+                                <X size={24} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.suspendModalTitle}>
+                            {isSuspended ? 'Reactivate Team Member' : 'Suspend Team Member'}
+                        </Text>
+                        <Text style={styles.suspendModalSubtitle}>
+                            {isSuspended
+                                ? `Are you sure you want to reactivate ${member?.name || 'this team member'}? They will regain access to the platform.`
+                                : `Are you sure you want to suspend ${member?.name || 'this team member'}? They will lose access to the platform until reactivated.`
+                            }
+                        </Text>
+
+                        <TouchableOpacity
+                            style={styles.suspendConfirmRow}
+                            onPress={() => setTeamSuspendConfirmChecked(!teamSuspendConfirmChecked)}
+                        >
+                            <View style={[styles.suspendCheckbox, teamSuspendConfirmChecked && styles.suspendCheckboxChecked]}>
+                                {teamSuspendConfirmChecked && <Check size={14} color="#fff" />}
+                            </View>
+                            <Text style={styles.suspendConfirmText}>
+                                {isSuspended
+                                    ? 'I confirm I want to reactivate this team member'
+                                    : 'I understand this will immediately revoke their access'
+                                }
+                            </Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.suspendModalActions}>
+                            <TouchableOpacity
+                                style={styles.suspendCancelButton}
+                                onPress={() => {
+                                    setTeamSuspendModalOpen(false);
+                                    setTeamSuspendConfirmChecked(false);
+                                }}
+                            >
+                                <Text style={styles.suspendCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    styles.suspendSubmitButton,
+                                    !teamSuspendConfirmChecked && styles.suspendSubmitButtonDisabled,
+                                    isSuspended && { backgroundColor: '#22c55e' }
+                                ]}
+                                onPress={handleSuspendTeamMember}
+                                disabled={!teamSuspendConfirmChecked || suspendingTeamMember}
+                            >
+                                {suspendingTeamMember ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.suspendSubmitText}>
+                                        {isSuspended ? 'Reactivate' : 'Suspend'}
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+        );
+    };
+
+    // Render Team Member Delete Modal
+    const renderTeamDeleteModal = () => {
+        const member = teamMembers.find(m => m._id === teamDeleteMemberId);
+
+        return (
+            <Modal
+                visible={teamDeleteModalOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => {
+                    setTeamDeleteModalOpen(false);
+                    setTeamDeleteConfirmChecked(false);
+                }}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => {
+                        setTeamDeleteModalOpen(false);
+                        setTeamDeleteConfirmChecked(false);
+                    }}
+                >
+                    <Pressable style={styles.suspendModal} onPress={(e) => e.stopPropagation()}>
+                        <View style={styles.suspendModalHeader}>
+                            <View style={[styles.suspendIconContainer, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+                                <Trash2 size={32} color="#EF4444" />
+                            </View>
+                            <TouchableOpacity
+                                style={styles.suspendCloseButton}
+                                onPress={() => {
+                                    setTeamDeleteModalOpen(false);
+                                    setTeamDeleteConfirmChecked(false);
+                                }}
+                            >
+                                <X size={24} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.suspendModalTitle}>Delete Team Member</Text>
+                        <Text style={styles.suspendModalSubtitle}>
+                            Are you sure you want to permanently delete {member?.name || 'this team member'}? This action cannot be undone.
+                        </Text>
+
+                        <TouchableOpacity
+                            style={styles.suspendConfirmRow}
+                            onPress={() => setTeamDeleteConfirmChecked(!teamDeleteConfirmChecked)}
+                        >
+                            <View style={[styles.suspendCheckbox, teamDeleteConfirmChecked && styles.suspendCheckboxChecked, teamDeleteConfirmChecked && { backgroundColor: '#EF4444' }]}>
+                                {teamDeleteConfirmChecked && <Check size={14} color="#fff" />}
+                            </View>
+                            <Text style={styles.suspendConfirmText}>
+                                I understand this action is permanent and cannot be undone
+                            </Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.suspendModalActions}>
+                            <TouchableOpacity
+                                style={styles.suspendCancelButton}
+                                onPress={() => {
+                                    setTeamDeleteModalOpen(false);
+                                    setTeamDeleteConfirmChecked(false);
+                                }}
+                            >
+                                <Text style={styles.suspendCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    styles.suspendSubmitButton,
+                                    { backgroundColor: '#EF4444' },
+                                    !teamDeleteConfirmChecked && styles.suspendSubmitButtonDisabled
+                                ]}
+                                onPress={handleDeleteTeamMember}
+                                disabled={!teamDeleteConfirmChecked || deletingTeamMember}
+                            >
+                                {deletingTeamMember ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.suspendSubmitText}>Delete</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+        );
+    };
+
     // Render mobile bottom navigation
     const renderMobileBottomNav = () => (
         <View style={[styles.mobileBottomNav, styles.mobileBottomNavSafe]}>
@@ -2392,6 +2794,12 @@ const SuperAdminDashboard = () => {
 
             {/* Invite Team Member Modal */}
             {renderInviteModal()}
+
+            {/* Team Member Suspend Modal */}
+            {renderTeamSuspendModal()}
+
+            {/* Team Member Delete Modal */}
+            {renderTeamDeleteModal()}
 
             {/* Action Menu Overlay and Dropdown */}
             {actionMenuOpen && actionMenuCustomer && (
@@ -2480,6 +2888,14 @@ const SuperAdminDashboard = () => {
                         </Pressable>
                     </Modal>
                 )
+            )}
+
+            {/* Team Action Menu Overlay */}
+            {teamActionMenuOpen && (
+                <Pressable
+                    style={styles.actionMenuOverlay}
+                    onPress={closeTeamMemberActionMenu}
+                />
             )}
         </View>
     );
@@ -2719,11 +3135,50 @@ const createStyles = (colors: any) =>
             marginHorizontal: 0,
             marginTop: 0,
             marginBottom: 8,
-            paddingHorizontal: 12,
-            paddingVertical: 10,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
             borderRadius: 0,
             borderLeftWidth: 0,
             borderRightWidth: 0,
+            flexDirection: 'column',
+            gap: 12,
+        },
+        // Mobile header branding row
+        mobileHeaderRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+        },
+        mobileLogoContainer: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        mobileLogoIcon: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            borderWidth: 2,
+            borderColor: colors.primary,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: colors.primary + '15',
+        },
+        mobileLogoHash: {
+            fontSize: 16,
+            fontWeight: '700',
+            color: colors.primary,
+        },
+        mobileLogoText: {
+            fontSize: 16,
+            fontWeight: '700',
+            color: colors.text,
+            letterSpacing: 1,
+        },
+        mobileHeaderActions: {
+            flexDirection: 'row',
+            alignItems: 'center',
             gap: 8,
         },
         searchContainer: {
@@ -2819,17 +3274,23 @@ const createStyles = (colors: any) =>
             paddingBottom: 24,
         },
         pageContentMobile: {
-            paddingHorizontal: 12,
+            paddingHorizontal: 16,
             paddingBottom: 16,
         },
         pageHeader: {
             marginBottom: 24,
+        },
+        pageHeaderMobile: {
+            marginBottom: 16,
         },
         pageTitle: {
             fontSize: 24,
             fontWeight: '700',
             color: colors.text,
             marginBottom: 4,
+        },
+        pageTitleMobile: {
+            fontSize: 20,
         },
         pageSubtitle: {
             fontSize: 14,
@@ -2924,10 +3385,16 @@ const createStyles = (colors: any) =>
             marginBottom: 24,
         },
         addCustomerButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
             backgroundColor: colors.primary,
             paddingHorizontal: 20,
             paddingVertical: 12,
             borderRadius: 8,
+        },
+        addCustomerButtonMobile: {
+            paddingHorizontal: 14,
+            paddingVertical: 10,
         },
         addCustomerButtonText: {
             color: colors.primaryText,
@@ -2977,6 +3444,7 @@ const createStyles = (colors: any) =>
             padding: 16,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
+            zIndex: 50,
         },
         customerTableTitle: {
             fontSize: 16,
@@ -2987,6 +3455,7 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 12,
+            zIndex: 50,
         },
         tableSearchContainer: {
             flexDirection: 'row',
@@ -3005,6 +3474,10 @@ const createStyles = (colors: any) =>
             marginLeft: 8,
             fontSize: 14,
             color: colors.text,
+        },
+        filterDropdownWrapper: {
+            position: 'relative',
+            zIndex: 100,
         },
         filterDropdown: {
             flexDirection: 'row',
@@ -3230,9 +3703,35 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 16,
             paddingVertical: 12,
         },
+        actionMenuItemDanger: {
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
+        actionMenuItemText: {
+            fontSize: 14,
+            color: colors.text,
+            marginLeft: 8,
+        },
         actionMenuText: {
             fontSize: 14,
             color: colors.text,
+        },
+        actionMenuDropdown: {
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            backgroundColor: colors.surface,
+            borderRadius: 8,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.15,
+            shadowRadius: 12,
+            elevation: 10,
+            minWidth: 150,
+            zIndex: 9999,
+            borderWidth: 1,
+            borderColor: colors.border,
+            paddingVertical: 4,
         },
         actionMenuOverlay: {
             position: 'fixed' as any,

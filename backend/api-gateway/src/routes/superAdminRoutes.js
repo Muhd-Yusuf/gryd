@@ -59,5 +59,6 @@ router.post('/users/invite', inviteUser);
 router.get('/team', getTeamMembers);
 router.post('/team/invite', inviteTeamMember);
 router.post('/team/:userId/delete', require('../controllers/superAdminController').deleteTeamMember);
+router.post('/team/:userId/suspend', require('../controllers/superAdminController').suspendTeamMember);
 
 module.exports = router;
