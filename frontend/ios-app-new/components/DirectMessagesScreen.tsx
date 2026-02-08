@@ -166,6 +166,7 @@ export default function DirectMessagesScreen() {
     const [activeSubgridId, setActiveSubgridId] = useState<string | null>(null);
     const [friends, setFriends] = useState<string[]>([]);
     const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>({});
+    const [lastMessages, setLastMessages] = useState<Record<string, DirectMessage>>({});
     const [members, setMembers] = useState<Member[]>([]);
     const [channels, setChannels] = useState<Channel[]>([]);
     const [mutualFriends, setMutualFriends] = useState<string[]>([]);
@@ -213,6 +214,48 @@ export default function DirectMessagesScreen() {
         () => subgrids.find((s) => s._id === activeSubgridId) || null,
         [subgrids, activeSubgridId]
     );
+
+    // Sort friends by last message timestamp (most recent first) - WhatsApp-like behavior
+    const sortedFriends = useMemo(() => {
+        return [...friends].sort((a, b) => {
+            const lastMsgA = lastMessages[a];
+            const lastMsgB = lastMessages[b];
+
+            // Friends with messages come first
+            if (!lastMsgA && !lastMsgB) return 0;
+            if (!lastMsgA) return 1;
+            if (!lastMsgB) return -1;
+
+            // Sort by most recent message
+            const dateA = new Date(lastMsgA.createdAt || 0).getTime();
+            const dateB = new Date(lastMsgB.createdAt || 0).getTime();
+            return dateB - dateA;
+        });
+    }, [friends, lastMessages]);
+
+    // Format relative time for last message (WhatsApp style)
+    const formatLastMessageTime = useCallback((dateStr?: string): string => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'now';
+        if (diffMins < 60) return `${diffMins}m`;
+        if (diffHours < 24) return `${diffHours}h`;
+        if (diffDays < 7) return `${diffDays}d`;
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }, []);
+
+    // Truncate message preview
+    const truncateMessage = useCallback((text?: string, maxLen = 30): string => {
+        if (!text) return '';
+        if (text.length <= maxLen) return text;
+        return text.substring(0, maxLen) + '...';
+    }, []);
 
     // Agora call hook for inline calling (matching member dashboard behavior)
     const { startActiveCall, markCallConnected, endCall: contextEndCall } = useCallContext();
@@ -309,6 +352,28 @@ export default function DirectMessagesScreen() {
             console.log('[DirectMessages] refreshFriends loaded:', normalizedIds.length, 'friends');
             setFriends(normalizedIds);
             setFriendUsers(users);
+
+            // Fetch last message for each friend to enable sorting by recent activity
+            if (normalizedIds.length > 0) {
+                const lastMsgsPromises = normalizedIds.map(async (friendId: string) => {
+                    try {
+                        const msgRes = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${friendId}&limit=1`);
+                        const msgs = msgRes?.data || [];
+                        return { friendId, lastMsg: msgs[msgs.length - 1] || null };
+                    } catch {
+                        return { friendId, lastMsg: null };
+                    }
+                });
+                const results = await Promise.all(lastMsgsPromises);
+                const lastMsgsMap: Record<string, DirectMessage> = {};
+                results.forEach(({ friendId, lastMsg }) => {
+                    if (lastMsg) {
+                        lastMsgsMap[friendId] = lastMsg;
+                    }
+                });
+                setLastMessages(lastMsgsMap);
+            }
+
             // Only clear selection if previously selected friend is no longer in list
             setSelectedFriendId((prev) => {
                 if (prev && !normalizedIds.includes(prev)) {
@@ -428,6 +493,15 @@ export default function DirectMessagesScreen() {
                     setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
                     }, 100);
+                }
+
+                // Update lastMessages for conversation list sorting (WhatsApp-like)
+                const otherUserId = msgSenderId === myUserId ? msgRecipientId : msgSenderId;
+                if (otherUserId) {
+                    setLastMessages((prev) => ({
+                        ...prev,
+                        [otherUserId]: data.message,
+                    }));
                 }
             }
         });
@@ -854,6 +928,11 @@ export default function DirectMessagesScreen() {
                     }
                     return [...prev, response.data];
                 });
+                // Update lastMessages for conversation list sorting (WhatsApp-like)
+                setLastMessages((prev) => ({
+                    ...prev,
+                    [selectedFriendId]: response.data,
+                }));
             }
             setTimeout(() => {
                 scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -1375,18 +1454,28 @@ export default function DirectMessagesScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Friends List */}
+                    {/* Friends List - Sorted by most recent message (WhatsApp-like) */}
                     <ScrollView style={styles.friendsList} showsVerticalScrollIndicator={false}>
-                        {(friends || []).length === 0 ? (
+                        {(sortedFriends || []).length === 0 ? (
                             <View style={styles.emptyFriendsList}>
                                 <UserPlus size={40} color={colors.textSubtle} />
                                 <Text style={styles.emptyFriendsTitle}>No friends yet</Text>
                                 <Text style={styles.emptyFriendsText}>Tap the + button above to add friends and start messaging</Text>
                             </View>
                         ) : (
-                            (friends || []).map((friendId, index) => {
+                            (sortedFriends || []).map((friendId, index) => {
                                 const isActive = selectedFriendId === friendId;
                                 const name = getFriendName(friendId);
+                                const lastMsg = lastMessages[friendId];
+                                const lastMsgPreview = lastMsg?.body
+                                    ? truncateMessage(lastMsg.body)
+                                    : lastMsg?.attachments?.length
+                                        ? '📎 Attachment'
+                                        : lastMsg?.callType
+                                            ? `📞 ${lastMsg.callType === 'video' ? 'Video' : 'Voice'} call`
+                                            : '';
+                                const lastMsgTime = formatLastMessageTime(lastMsg?.createdAt);
+                                const isSentByMe = lastMsg?.senderId === currentUserId;
                                 return (
                                     <TouchableOpacity
                                         key={friendId}
@@ -1398,7 +1487,19 @@ export default function DirectMessagesScreen() {
                                             name={getFriendName(friendId)}
                                             style={styles.friendAvatar}
                                         />
-                                        <Text style={[styles.friendName, isActive && styles.friendNameActive]}>{name}</Text>
+                                        <View style={styles.friendInfo}>
+                                            <View style={styles.friendNameRow}>
+                                                <Text style={[styles.friendName, isActive && styles.friendNameActive]} numberOfLines={1}>{name}</Text>
+                                                {lastMsgTime ? (
+                                                    <Text style={styles.friendLastMsgTime}>{lastMsgTime}</Text>
+                                                ) : null}
+                                            </View>
+                                            {lastMsgPreview ? (
+                                                <Text style={styles.friendLastMsgPreview} numberOfLines={1}>
+                                                    {isSentByMe ? 'You: ' : ''}{lastMsgPreview}
+                                                </Text>
+                                            ) : null}
+                                        </View>
                                     </TouchableOpacity>
                                 );
                             })
@@ -2102,25 +2203,48 @@ const createStyles = (colors: any) =>
         friendItem: {
             flexDirection: 'row',
             alignItems: 'center',
-            padding: 8,
-            borderRadius: 6,
+            padding: 10,
+            borderRadius: 10,
+            marginBottom: 2,
         },
         friendItemActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.primary + '15',
         },
         friendAvatar: {
-            width: 32,
-            height: 32,
-            borderRadius: 16,
+            width: 48,
+            height: 48,
+            borderRadius: 24,
             marginRight: 12,
         },
+        friendInfo: {
+            flex: 1,
+            justifyContent: 'center',
+        },
+        friendNameRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 2,
+        },
         friendName: {
-            fontSize: 14,
-            color: colors.textMuted,
+            fontSize: 15,
+            fontWeight: '500',
+            color: colors.text,
+            flex: 1,
         },
         friendNameActive: {
-            color: colors.text,
-            fontWeight: '500',
+            color: colors.primary,
+            fontWeight: '600',
+        },
+        friendLastMsgTime: {
+            fontSize: 11,
+            color: colors.textMuted,
+            marginLeft: 8,
+        },
+        friendLastMsgPreview: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginTop: 2,
         },
         // User Profile (matching Server screen)
         userProfile: {
