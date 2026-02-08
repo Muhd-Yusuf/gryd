@@ -2519,7 +2519,7 @@ const SuperAdminDashboard = () => {
                                     <ChevronDown size={20} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 {inviteRoleDropdownOpen && (
-                                    <View style={[styles.inviteRoleDropdownMenu, { position: 'absolute', top: 70, left: 0, right: 0, zIndex: 100 }]}>
+                                    <View style={[styles.inviteRoleDropdownMenu, { position: 'absolute', top: 70, left: 0, right: 0, zIndex: 9999 }]}>
                                         <TouchableOpacity
                                             style={[styles.inviteRoleOption, inviteRole === 'admin' && styles.inviteRoleOptionActive]}
                                             onPress={() => { setInviteRole('admin'); setInviteRoleDropdownOpen(false); }}
@@ -4778,6 +4778,8 @@ const createStyles = (colors: any) =>
         },
         inviteRoleGroup: {
             flex: 1,
+            position: 'relative',
+            zIndex: 1000,
         },
         inviteLabel: {
             fontSize: 14,
@@ -4817,10 +4819,11 @@ const createStyles = (colors: any) =>
             borderRadius: 8,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 4,
+            shadowOpacity: 0.15,
+            shadowRadius: 12,
+            elevation: 10,
             overflow: 'hidden',
+            zIndex: 9999,
         },
         inviteRoleOption: {
             paddingHorizontal: 16,
@@ -4856,6 +4859,7 @@ const createStyles = (colors: any) =>
             justifyContent: 'flex-end',
             gap: 12,
             marginTop: 24,
+            zIndex: 1,
         },
         inviteCancelButton: {
             paddingHorizontal: 24,
