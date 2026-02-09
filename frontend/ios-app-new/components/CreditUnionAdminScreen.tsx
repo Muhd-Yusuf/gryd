@@ -2825,15 +2825,14 @@ const CreditUnionAdminScreen = () => {
     return (
         <View style={styles.container}>
             <View pointerEvents="none" style={styles.gridBackground} />
-            {/* Top Navigation */}
-            <View style={[styles.topNav, isMobile && styles.topNavMobile]}>
-                {!isMobile && (
+            {/* Top Navigation - hidden on mobile, shown in mobileTopBar instead */}
+            {!isMobile && (
+            <View style={styles.topNav}>
                 <View style={styles.topNavLeft}>
                     <Hash size={24} color={colors.text} />
                     <Text style={styles.logoText}>THE GRYD</Text>
                 </View>
-                )}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.topNavTabs, isMobile && styles.topNavTabsMobile]}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topNavTabs}>
                     <TouchableOpacity style={styles.tabActive}>
                         <Text style={styles.tabTextActive}>Server</Text>
                     </TouchableOpacity>
@@ -2845,6 +2844,7 @@ const CreditUnionAdminScreen = () => {
                     </TouchableOpacity>
                 </ScrollView>
             </View>
+            )}
 
             <View style={styles.mainArea}>
                 {/* Left Icon Rail - hidden on mobile */}
@@ -2925,6 +2925,18 @@ const CreditUnionAdminScreen = () => {
                                     <Text style={styles.mobileServerSubtitle}>Credit Union Admin</Text>
                                 </View>
                             </View>
+                            {/* Mobile Navigation Tabs */}
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileNavTabs}>
+                                <TouchableOpacity style={styles.mobileNavTabActive}>
+                                    <Text style={styles.mobileNavTabTextActive}>Server</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin/messages')}>
+                                    <Text style={styles.mobileNavTabText}>Messages</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin/contributors')}>
+                                    <Text style={styles.mobileNavTabText}>Top Contributors</Text>
+                                </TouchableOpacity>
+                            </ScrollView>
                         </View>
                     )}
                     {/* Server Header with Dropdown */}
@@ -6825,6 +6837,32 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 11,
             color: colors.textMuted,
             marginTop: 2,
+        },
+        mobileNavTabs: {
+            flexDirection: 'row',
+            gap: 8,
+        },
+        mobileNavTab: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: colors.surfaceMuted,
+        },
+        mobileNavTabActive: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: colors.primary,
+        },
+        mobileNavTabText: {
+            fontSize: 14,
+            fontWeight: '500',
+            color: colors.textMuted,
+        },
+        mobileNavTabTextActive: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         mobileTopBarLogo: {
             width: 36,

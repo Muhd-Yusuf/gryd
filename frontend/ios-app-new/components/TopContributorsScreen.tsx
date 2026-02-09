@@ -736,6 +736,32 @@ export default function TopContributorsScreen() {
             color: colors.textMuted,
             marginTop: 2,
         },
+        mobileNavTabs: {
+            flexDirection: 'row',
+            gap: 8,
+        },
+        mobileNavTab: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: colors.surfaceMuted,
+        },
+        mobileNavTabActive: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: colors.primary,
+        },
+        mobileNavTabText: {
+            fontSize: 14,
+            fontWeight: '500',
+            color: colors.textMuted,
+        },
+        mobileNavTabTextActive: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
         mobileTopBarRight: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -786,15 +812,14 @@ export default function TopContributorsScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Top Navigation */}
-            <View style={[styles.topNav, isMobile && styles.topNavMobile]}>
-                {!isMobile && (
-                    <View style={styles.logo}>
-                        <Text style={styles.logoIcon}>#</Text>
-                        <Text style={styles.logoText}>The Gryd</Text>
-                    </View>
-                )}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.navTabs, isMobile && styles.navTabsMobile]}>
+            {/* Top Navigation - hidden on mobile, shown in mobileTopBar instead */}
+            {!isMobile && (
+            <View style={styles.topNav}>
+                <View style={styles.logo}>
+                    <Text style={styles.logoIcon}>#</Text>
+                    <Text style={styles.logoText}>The Gryd</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navTabs}>
                     <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin')}>
                         <Text style={styles.navTabText}>Server</Text>
                     </TouchableOpacity>
@@ -806,6 +831,7 @@ export default function TopContributorsScreen() {
                     </TouchableOpacity>
                 </ScrollView>
             </View>
+            )}
 
             <View style={styles.mainContent}>
                 {/* Icon Rail - hidden on mobile */}
@@ -877,6 +903,18 @@ export default function TopContributorsScreen() {
                                     <Text style={styles.mobileServerSubtitle}>Top Contributors</Text>
                                 </View>
                             </View>
+                            {/* Mobile Navigation Tabs */}
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileNavTabs}>
+                                <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin')}>
+                                    <Text style={styles.mobileNavTabText}>Server</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin/messages')}>
+                                    <Text style={styles.mobileNavTabText}>Messages</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.mobileNavTabActive}>
+                                    <Text style={styles.mobileNavTabTextActive}>Top Contributors</Text>
+                                </TouchableOpacity>
+                            </ScrollView>
                         </View>
                     )}
                     <View style={styles.sidebarHeader}>

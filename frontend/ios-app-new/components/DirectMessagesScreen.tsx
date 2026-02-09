@@ -1459,6 +1459,18 @@ export default function DirectMessagesScreen() {
                                     <Text style={styles.mobileServerSubtitle}>Direct Messages</Text>
                                 </View>
                             </View>
+                            {/* Mobile Navigation Tabs */}
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileNavTabs}>
+                                <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin')}>
+                                    <Text style={styles.mobileNavTabText}>Server</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.mobileNavTabActive}>
+                                    <Text style={styles.mobileNavTabTextActive}>Messages</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin/contributors')}>
+                                    <Text style={styles.mobileNavTabText}>Top Contributors</Text>
+                                </TouchableOpacity>
+                            </ScrollView>
                         </View>
                     )}
                     {/* Sidebar Header */}
@@ -3317,6 +3329,32 @@ const createStyles = (colors: any) =>
             fontSize: 12,
             color: colors.textMuted,
             marginTop: 2,
+        },
+        mobileNavTabs: {
+            flexDirection: 'row',
+            gap: 8,
+        },
+        mobileNavTab: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: colors.surfaceMuted,
+        },
+        mobileNavTabActive: {
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            backgroundColor: colors.primary,
+        },
+        mobileNavTabText: {
+            fontSize: 14,
+            fontWeight: '500',
+            color: colors.textMuted,
+        },
+        mobileNavTabTextActive: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         mobileTopBarRight: {
             flexDirection: 'row',
