@@ -777,12 +777,29 @@ exports.listSubgridMembers = async (req, res) => {
             .populate('customRoleId')
             .lean();
 
+        console.log('[listSubgridMembers] Found', members.length, 'memberships for subgrid', subgridId);
+        if (members.length > 0) {
+            console.log('[listSubgridMembers] Sample membership:', JSON.stringify(members[0], null, 2));
+        }
+
         // Populate user profile data for each member
         const User = require('../models/User');
         const userIds = members.map(m => m.userId);
+        console.log('[listSubgridMembers] Looking up userIds:', userIds.map(id => id?.toString()));
+
         const users = await User.find({ _id: { $in: userIds } })
             .select('_id firstName lastName email username avatarUrl bannerUrl createdAt role stakeholderBadge company')
             .lean();
+
+        console.log('[listSubgridMembers] Found', users.length, 'users out of', userIds.length, 'userIds');
+        if (users.length > 0) {
+            console.log('[listSubgridMembers] Sample user:', JSON.stringify(users[0], null, 2));
+        }
+        if (users.length < userIds.length) {
+            const foundIds = new Set(users.map(u => u._id.toString()));
+            const missingIds = userIds.filter(id => !foundIds.has(id?.toString()));
+            console.log('[listSubgridMembers] Missing userIds (not found in User collection):', missingIds.map(id => id?.toString()));
+        }
 
         const userMap = {};
         users.forEach(u => {
@@ -821,6 +838,16 @@ exports.listSubgridMembers = async (req, res) => {
                 customRole: m.customRoleId || null,
             };
         });
+
+        if (enrichedMembers.length > 0) {
+            console.log('[listSubgridMembers] Sample enriched member:', JSON.stringify({
+                userId: enrichedMembers[0].userId,
+                firstName: enrichedMembers[0].firstName,
+                lastName: enrichedMembers[0].lastName,
+                email: enrichedMembers[0].email,
+                user: enrichedMembers[0].user,
+            }, null, 2));
+        }
 
         return res.status(200).json({ success: true, data: enrichedMembers });
     } catch (error) {
@@ -4506,9 +4533,18 @@ exports.testContentFilter = async (req, res) => {
 
         const result = await contentFilterService.filterContent(content, subgridId);
 
+        // Transform to match frontend expected format
+        // Frontend expects: { isProhibited, matchedWords, filteredContent }
+        // Backend returns: { allowed, matches, censoredContent }
+        const transformedResult = {
+            isProhibited: !result.allowed,
+            matchedWords: result.matches || [],
+            filteredContent: result.censoredContent || content,
+        };
+
         return res.status(200).json({
             success: true,
-            data: result,
+            data: transformedResult,
         });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to test content filter', error: error.message });
