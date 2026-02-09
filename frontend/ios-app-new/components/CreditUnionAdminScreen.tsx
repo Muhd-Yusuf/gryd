@@ -1797,8 +1797,12 @@ const CreditUnionAdminScreen = () => {
     };
 
     const openAssignRole = (member: Member) => {
-        setAssigningMember(member);
-        setAssignRoleModalOpen(true);
+        // Toggle inline role selector - if clicking same member, close it
+        if (assigningMember?._id === member._id) {
+            setAssigningMember(null);
+        } else {
+            setAssigningMember(member);
+        }
     };
 
     const getChannelAccessLabel = (role?: string) => {
@@ -5150,7 +5154,7 @@ const CreditUnionAdminScreen = () => {
                                                 )}
                                             </View>
 
-                                            <ScrollView style={{ maxHeight: 300, marginTop: 12 }}>
+                                            <ScrollView style={{ maxHeight: 400, marginTop: 12 }}>
                                                 {members
                                                     .filter((member) => {
                                                         if (!memberSearchQuery.trim()) return true;
@@ -5161,26 +5165,64 @@ const CreditUnionAdminScreen = () => {
                                                         return name.includes(query) || email.includes(query) || username.includes(query);
                                                     })
                                                     .map((member) => (
-                                                    <TouchableOpacity
-                                                        key={member._id}
-                                                        style={[styles.roleItem, { paddingVertical: 12, cursor: 'pointer' } as any]}
-                                                        onPress={() => openAssignRole(member)}
-                                                        activeOpacity={0.7}
-                                                    >
-                                                        <UserAvatar userId={member.userId} userName={member.userName} size={32} />
-                                                        <View style={{ flex: 1, marginLeft: 12 }}>
-                                                            <Text style={[styles.roleName, { marginLeft: 0 }]}>{member.userName}</Text>
-                                                            {member.email && (
-                                                                <Text style={{ fontSize: 12, color: colors.textMuted }}>{member.email}</Text>
+                                                    <View key={member._id}>
+                                                        <TouchableOpacity
+                                                            style={[styles.roleItem, { paddingVertical: 12, cursor: 'pointer', backgroundColor: assigningMember?._id === member._id ? colors.surfaceHover : 'transparent' } as any]}
+                                                            onPress={() => openAssignRole(member)}
+                                                            activeOpacity={0.7}
+                                                        >
+                                                            <UserAvatar userId={member.userId} userName={member.userName} size={32} />
+                                                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                                                <Text style={[styles.roleName, { marginLeft: 0 }]}>{member.userName}</Text>
+                                                                {member.email && (
+                                                                    <Text style={{ fontSize: 12, color: colors.textMuted }}>{member.email}</Text>
+                                                                )}
+                                                            </View>
+                                                            {member.customRole && (
+                                                                <View style={[styles.roleBadge, { backgroundColor: member.customRole.color + '20', borderColor: member.customRole.color }]}>
+                                                                    <Text style={[styles.roleBadgeText, { color: member.customRole.color }]}>{member.customRole.name}</Text>
+                                                                </View>
                                                             )}
-                                                        </View>
-                                                        {member.customRole && (
-                                                            <View style={[styles.roleBadge, { backgroundColor: member.customRole.color + '20', borderColor: member.customRole.color }]}>
-                                                                <Text style={[styles.roleBadgeText, { color: member.customRole.color }]}>{member.customRole.name}</Text>
+                                                            <ChevronRight size={16} color={colors.textMuted} style={{ marginLeft: 8, transform: [{ rotate: assigningMember?._id === member._id ? '90deg' : '0deg' }] }} />
+                                                        </TouchableOpacity>
+                                                        {/* Inline Role Selector */}
+                                                        {assigningMember?._id === member._id && (
+                                                            <View style={{ backgroundColor: colors.surfaceHover, padding: 12, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, marginBottom: 8 }}>
+                                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 8, textTransform: 'uppercase' }}>Select Role</Text>
+                                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                                                    <TouchableOpacity
+                                                                        style={{
+                                                                            paddingVertical: 6,
+                                                                            paddingHorizontal: 12,
+                                                                            borderRadius: 16,
+                                                                            backgroundColor: !member.customRole ? colors.primary : colors.surface,
+                                                                            borderWidth: 1,
+                                                                            borderColor: !member.customRole ? colors.primary : colors.border,
+                                                                        }}
+                                                                        onPress={() => handleAssignRole(member.userId || member._id, null)}
+                                                                    >
+                                                                        <Text style={{ color: !member.customRole ? '#fff' : colors.text, fontSize: 13 }}>No Role</Text>
+                                                                    </TouchableOpacity>
+                                                                    {customRoles.map((role) => (
+                                                                        <TouchableOpacity
+                                                                            key={role._id}
+                                                                            style={{
+                                                                                paddingVertical: 6,
+                                                                                paddingHorizontal: 12,
+                                                                                borderRadius: 16,
+                                                                                backgroundColor: member.customRole?._id === role._id ? role.color : colors.surface,
+                                                                                borderWidth: 1,
+                                                                                borderColor: role.color,
+                                                                            }}
+                                                                            onPress={() => handleAssignRole(member.userId || member._id, role._id)}
+                                                                        >
+                                                                            <Text style={{ color: member.customRole?._id === role._id ? '#fff' : role.color, fontSize: 13 }}>{role.name}</Text>
+                                                                        </TouchableOpacity>
+                                                                    ))}
+                                                                </View>
                                                             </View>
                                                         )}
-                                                        <ChevronRight size={16} color={colors.textMuted} style={{ marginLeft: 8 }} />
-                                                    </TouchableOpacity>
+                                                    </View>
                                                 ))}
                                                 {members.filter((member) => {
                                                     if (!memberSearchQuery.trim()) return true;
