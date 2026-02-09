@@ -1183,6 +1183,9 @@ const SuperAdminDashboard = () => {
                         <TouchableOpacity style={styles.topBarIconButton} onPress={toggleTheme}>
                             {mode === 'dark' ? <Sun size={18} color={colors.textMuted} /> : <Moon size={18} color={colors.textMuted} />}
                         </TouchableOpacity>
+                        <TouchableOpacity style={styles.topBarIconButton} onPress={handleLogout}>
+                            <LogOut size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
                         <View style={styles.profileAvatar}>
                             <Text style={styles.profileAvatarText}>
                                 {adminUser?.firstName?.[0] || 'J'}
