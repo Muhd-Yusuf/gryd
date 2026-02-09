@@ -362,6 +362,7 @@ const CreditUnionAdminScreen = () => {
     const [savingRole, setSavingRole] = useState(false);
     const [assignRoleModalOpen, setAssignRoleModalOpen] = useState(false);
     const [assigningMember, setAssigningMember] = useState<Member | null>(null);
+    const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
     // UI State
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -5077,23 +5078,83 @@ const CreditUnionAdminScreen = () => {
                                             <Text style={styles.settingsPanelTitle}>Assign Roles to Members</Text>
                                             <Text style={styles.settingsPanelDesc}>Click on a member to assign or remove their role badge</Text>
 
+                                            {/* Search Input */}
+                                            <View style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                backgroundColor: colors.inputBg,
+                                                borderRadius: 8,
+                                                paddingHorizontal: 12,
+                                                marginTop: 12,
+                                                borderWidth: 1,
+                                                borderColor: colors.border,
+                                            }}>
+                                                <Search size={18} color={colors.textMuted} />
+                                                <TextInput
+                                                    style={{
+                                                        flex: 1,
+                                                        paddingVertical: 10,
+                                                        paddingHorizontal: 8,
+                                                        color: colors.text,
+                                                        fontSize: 14,
+                                                    }}
+                                                    placeholder="Search by name, email, or username..."
+                                                    placeholderTextColor={colors.textMuted}
+                                                    value={memberSearchQuery}
+                                                    onChangeText={setMemberSearchQuery}
+                                                />
+                                                {memberSearchQuery.length > 0 && (
+                                                    <TouchableOpacity onPress={() => setMemberSearchQuery('')}>
+                                                        <XCircle size={18} color={colors.textMuted} />
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+
                                             <ScrollView style={{ maxHeight: 300, marginTop: 12 }}>
-                                                {members.map((member) => (
+                                                {members
+                                                    .filter((member) => {
+                                                        if (!memberSearchQuery.trim()) return true;
+                                                        const query = memberSearchQuery.toLowerCase();
+                                                        const name = (member.userName || '').toLowerCase();
+                                                        const email = (member.email || '').toLowerCase();
+                                                        const username = (member.username || '').toLowerCase();
+                                                        return name.includes(query) || email.includes(query) || username.includes(query);
+                                                    })
+                                                    .map((member) => (
                                                     <TouchableOpacity
                                                         key={member._id}
-                                                        style={[styles.roleItem, { paddingVertical: 12 }]}
+                                                        style={[styles.roleItem, { paddingVertical: 12, cursor: 'pointer' } as any]}
                                                         onPress={() => openAssignRole(member)}
+                                                        activeOpacity={0.7}
                                                     >
                                                         <UserAvatar userId={member.userId} userName={member.userName} size={32} />
-                                                        <Text style={[styles.roleName, { marginLeft: 12 }]}>{member.userName}</Text>
+                                                        <View style={{ flex: 1, marginLeft: 12 }}>
+                                                            <Text style={[styles.roleName, { marginLeft: 0 }]}>{member.userName}</Text>
+                                                            {member.email && (
+                                                                <Text style={{ fontSize: 12, color: colors.textMuted }}>{member.email}</Text>
+                                                            )}
+                                                        </View>
                                                         {member.customRole && (
                                                             <View style={[styles.roleBadge, { backgroundColor: member.customRole.color + '20', borderColor: member.customRole.color }]}>
                                                                 <Text style={[styles.roleBadgeText, { color: member.customRole.color }]}>{member.customRole.name}</Text>
                                                             </View>
                                                         )}
-                                                        <ChevronRight size={16} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
+                                                        <ChevronRight size={16} color={colors.textMuted} style={{ marginLeft: 8 }} />
                                                     </TouchableOpacity>
                                                 ))}
+                                                {members.filter((member) => {
+                                                    if (!memberSearchQuery.trim()) return true;
+                                                    const query = memberSearchQuery.toLowerCase();
+                                                    const name = (member.userName || '').toLowerCase();
+                                                    const email = (member.email || '').toLowerCase();
+                                                    const username = (member.username || '').toLowerCase();
+                                                    return name.includes(query) || email.includes(query) || username.includes(query);
+                                                }).length === 0 && (
+                                                    <View style={{ padding: 20, alignItems: 'center' }}>
+                                                        <SearchX size={32} color={colors.textMuted} />
+                                                        <Text style={{ color: colors.textMuted, marginTop: 8 }}>No members found</Text>
+                                                    </View>
+                                                )}
                                             </ScrollView>
                                         </View>
                                     )}
