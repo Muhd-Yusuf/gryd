@@ -4513,9 +4513,18 @@ exports.testContentFilter = async (req, res) => {
 
         const result = await contentFilterService.filterContent(content, subgridId);
 
+        // Transform to match frontend expected format
+        // Frontend expects: { isProhibited, matchedWords, filteredContent }
+        // Backend returns: { allowed, matches, censoredContent }
+        const transformedResult = {
+            isProhibited: !result.allowed,
+            matchedWords: result.matches || [],
+            filteredContent: result.censoredContent || content,
+        };
+
         return res.status(200).json({
             success: true,
-            data: result,
+            data: transformedResult,
         });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to test content filter', error: error.message });
