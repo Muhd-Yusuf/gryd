@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const TenantMembership = require('../models/TenantMembership');
 const SubgridMembership = require('../models/SubgridMembership');
+const CustomRole = require('../models/CustomRole');
 const InviteLink = require('../models/InviteLink');
 const FriendRequest = require('../models/FriendRequest');
 const Friendship = require('../models/Friendship');
@@ -770,15 +771,15 @@ exports.listSubgridMembers = async (req, res) => {
             filter.userId = q;
         }
 
+        // Populate customRoleId if the field exists, otherwise just get plain members
         const members = await SubgridMembership.find(filter)
             .sort({ createdAt: -1 })
             .skip(Number(offset))
             .limit(Math.min(Number(limit), 200))
-            .populate('customRoleId')
+            .populate({ path: 'customRoleId', model: 'CustomRole' })
             .lean();
 
         // Populate user profile data for each member
-        const User = require('../models/User');
         const userIds = members.map(m => m.userId);
         const users = await User.find({ _id: { $in: userIds } })
             .select('_id firstName lastName email username avatarUrl bannerUrl createdAt role stakeholderBadge company')
