@@ -14,6 +14,7 @@ import {
     Alert,
     ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     UserPlus,
     Plus,
@@ -325,6 +326,7 @@ const CreditUnionAdminScreen = () => {
     const styles = useMemo(() => createStyles(colors), [colors]);
     const { width } = useWindowDimensions();
     const isMobile = width < 900;
+    const insets = useSafeAreaInsets();
     const [mobileShowContent, setMobileShowContent] = useState(false);
     const [mobileShowSettingsContent, setMobileShowSettingsContent] = useState(false);
     const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
@@ -4394,7 +4396,7 @@ const CreditUnionAdminScreen = () => {
                     {/* Settings Sidebar - full width on mobile, hidden when viewing content */}
                     {(!isMobile || !mobileShowSettingsContent) && (
                     <View style={[styles.settingsSidebar, isMobile && styles.settingsSidebarMobile]}>
-                        <View style={styles.settingsSidebarHeader}>
+                        <View style={[styles.settingsSidebarHeader, isMobile && { paddingTop: insets.top + 12 }]}>
                             <Hash size={16} color="#FFFFFF" />
                             <Text style={styles.settingsSidebarTitle}>THE GRYD</Text>
                             {isMobile && (
@@ -4460,13 +4462,24 @@ const CreditUnionAdminScreen = () => {
                     {/* Settings Content - full width on mobile, shown when viewing content */}
                     {(!isMobile || mobileShowSettingsContent) && (
                     <View style={[styles.settingsContent, isMobile && styles.settingsContentMobile]}>
-                        <View style={styles.settingsContentHeader}>
+                        <View style={[styles.settingsContentHeader, isMobile && [styles.settingsContentHeaderMobile, { paddingTop: insets.top + 12 }]]}>
                             {isMobile && (
                                 <TouchableOpacity onPress={() => setMobileShowSettingsContent(false)} style={styles.settingsMobileBackBtn}>
-                                    <ArrowLeft size={20} color={colors.text} />
+                                    <ArrowLeft size={18} color="#3B82F6" />
+                                    <Text style={styles.settingsMobileBackBtnText}>Back</Text>
                                 </TouchableOpacity>
                             )}
-                            <Text style={styles.settingsContentTitle}>Server Settings</Text>
+                            <Text style={[styles.settingsContentTitle, isMobile && { flex: 1 }]}>
+                                {settingsTab === 'server-profile' ? 'Server Profile' :
+                                 settingsTab === 'engagement' ? 'Engagement' :
+                                 settingsTab === 'members' ? 'Members' :
+                                 settingsTab === 'stakeholders' ? 'Stakeholders' :
+                                 settingsTab === 'roles' ? 'Roles & Permissions' :
+                                 settingsTab === 'invites' ? 'Invites' :
+                                 settingsTab === 'bans' ? 'Ban Members' :
+                                 settingsTab === 'content-moderation' ? 'Content Moderation' :
+                                 'Server Settings'}
+                            </Text>
                             <TouchableOpacity style={styles.settingsCloseBtn} onPress={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
                                 <Text style={styles.settingsCloseBtnText}>Close</Text>
                                 <X size={18} color="#EF4444" />
@@ -6759,7 +6772,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         mobileTopBar: {
             flexDirection: 'column',
             paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingTop: Platform.OS === 'ios' ? 50 : Platform.OS === 'android' ? 40 : 16,
+            paddingBottom: 12,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
             backgroundColor: colors.surface,
@@ -7926,7 +7940,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             alignItems: 'center',
             gap: 12,
             paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingTop: 12,
+            paddingBottom: Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 24 : 12,
         },
         messageInputLeft: {
             flexDirection: 'row',
@@ -8595,13 +8610,28 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             borderLeftWidth: 0,
             borderWidth: 0,
         },
+        settingsContentHeaderMobile: {
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+        },
         settingsMobileCloseBtn: {
             marginLeft: 'auto',
             padding: 4,
         },
         settingsMobileBackBtn: {
-            marginRight: 8,
-            padding: 4,
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginRight: 12,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            backgroundColor: '#EFF6FF',
+            borderRadius: 8,
+            gap: 4,
+        },
+        settingsMobileBackBtnText: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: '#3B82F6',
         },
         settingsPanel: {
             maxWidth: 800,

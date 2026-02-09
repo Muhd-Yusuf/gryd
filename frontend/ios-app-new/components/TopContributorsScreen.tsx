@@ -653,7 +653,8 @@ export default function TopContributorsScreen() {
         mobileTopBar: {
             flexDirection: 'column',
             paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingTop: Platform.OS === 'ios' ? 50 : Platform.OS === 'android' ? 40 : 16,
+            paddingBottom: 12,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
             backgroundColor: colors.surface,

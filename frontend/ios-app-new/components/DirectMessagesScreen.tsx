@@ -2709,7 +2709,8 @@ const createStyles = (colors: any) =>
         inputContainer: {
             flexDirection: 'column',
             paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingTop: 12,
+            paddingBottom: Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 24 : 12,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
@@ -3234,7 +3235,8 @@ const createStyles = (colors: any) =>
         mobileTopBar: {
             flexDirection: 'column',
             paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingTop: Platform.OS === 'ios' ? 50 : Platform.OS === 'android' ? 40 : 16,
+            paddingBottom: 12,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
             backgroundColor: colors.surface,
