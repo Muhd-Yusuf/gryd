@@ -94,6 +94,15 @@ const {
     addChannelMembers,
     removeChannelMember,
 } = require('../controllers/communityController');
+const {
+    getRoles,
+    createRole,
+    updateRole,
+    deleteRole,
+    assignRole,
+    removeRole,
+    getRoleMembers,
+} = require('../controllers/customRoleController');
 const { attachUserContext, requireUser } = require('../middleware/authMiddleware');
 const { attachEmbedContext } = require('../middleware/embedMiddleware');
 const {
@@ -216,6 +225,15 @@ router.patch('/subgrids/:subgridId/content-moderation', requireUser, loadSubgrid
 router.post('/subgrids/:subgridId/content-moderation/words', requireUser, loadSubgrid, requireSubgridAdmin, addProhibitedWords);
 router.delete('/subgrids/:subgridId/content-moderation/words', requireUser, loadSubgrid, requireSubgridAdmin, removeProhibitedWords);
 router.post('/subgrids/:subgridId/content-moderation/test', requireUser, loadSubgrid, requireSubgridAdmin, testContentFilter);
+
+// Custom Roles (CU Admin feature)
+router.get('/subgrids/:subgridId/roles', requireUser, loadSubgrid, requireSubgridRead, getRoles);
+router.post('/subgrids/:subgridId/roles', requireUser, loadSubgrid, requireSubgridAdmin, createRole);
+router.patch('/subgrids/:subgridId/roles/:roleId', requireUser, loadSubgrid, requireSubgridAdmin, updateRole);
+router.delete('/subgrids/:subgridId/roles/:roleId', requireUser, loadSubgrid, requireSubgridAdmin, deleteRole);
+router.get('/subgrids/:subgridId/roles/:roleId/members', requireUser, loadSubgrid, requireSubgridRead, getRoleMembers);
+router.post('/subgrids/:subgridId/members/:memberId/role', requireUser, loadSubgrid, requireSubgridAdmin, assignRole);
+router.delete('/subgrids/:subgridId/members/:memberId/role', requireUser, loadSubgrid, requireSubgridAdmin, removeRole);
 
 router.get('/subgrids/:subgridId/notifications', requireUser, loadSubgrid, requireSubgridRead, listNotifications);
 router.post('/subgrids/:subgridId/notifications/:notificationId/read', requireUser, loadSubgrid, requireSubgridRead, markNotificationRead);
