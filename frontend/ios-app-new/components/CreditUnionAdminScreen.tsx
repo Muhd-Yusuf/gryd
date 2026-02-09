@@ -1185,17 +1185,24 @@ const CreditUnionAdminScreen = () => {
 
     // Content Moderation (Prohibited Words) functions
     const loadContentModerationSettings = async () => {
-        if (!activeSubgridId) return;
+        console.log('[loadContentModerationSettings] Called with activeSubgridId:', activeSubgridId);
+        if (!activeSubgridId) {
+            console.log('[loadContentModerationSettings] No activeSubgridId, skipping');
+            return;
+        }
         setContentModerationLoading(true);
         try {
+            console.log('[loadContentModerationSettings] Calling API...');
             const response = await communityGet(`/subgrids/${activeSubgridId}/content-moderation`);
+            console.log('[loadContentModerationSettings] API Response:', response);
             const settings = response?.data || {};
+            console.log('[loadContentModerationSettings] Settings:', settings);
             setContentModerationEnabled(settings.enabled ?? true);
             setProhibitedWords(settings.prohibitedWords || []);
             setContentModerationAction(settings.action || 'block');
             setBlockedMessage(settings.blockedMessage || 'Your message contains prohibited content and cannot be sent.');
         } catch (err: any) {
-            console.error('Failed to load content moderation settings:', err);
+            console.error('[loadContentModerationSettings] Error:', err);
         } finally {
             setContentModerationLoading(false);
         }
@@ -1223,7 +1230,11 @@ const CreditUnionAdminScreen = () => {
     };
 
     const addProhibitedWord = async () => {
-        if (!activeSubgridId || !newProhibitedWord.trim()) return;
+        console.log('[addProhibitedWord] Called with:', { activeSubgridId, newProhibitedWord });
+        if (!activeSubgridId || !newProhibitedWord.trim()) {
+            console.log('[addProhibitedWord] Missing required fields');
+            return;
+        }
         const word = newProhibitedWord.trim().toLowerCase();
         if (prohibitedWords.includes(word)) {
             if (Platform.OS === 'web') {
@@ -1235,12 +1246,15 @@ const CreditUnionAdminScreen = () => {
         }
         setContentModerationLoading(true);
         try {
-            await communityPost(`/subgrids/${activeSubgridId}/content-moderation/words`, {
+            console.log('[addProhibitedWord] Calling API...');
+            const response = await communityPost(`/subgrids/${activeSubgridId}/content-moderation/words`, {
                 words: [word],
             });
+            console.log('[addProhibitedWord] API Response:', response);
             setProhibitedWords((prev) => [...prev, word]);
             setNewProhibitedWord('');
         } catch (err: any) {
+            console.error('[addProhibitedWord] Error:', err);
             if (Platform.OS === 'web') {
                 window.alert(err.message || 'Failed to add prohibited word.');
             } else {
@@ -1252,14 +1266,21 @@ const CreditUnionAdminScreen = () => {
     };
 
     const removeProhibitedWord = async (word: string) => {
-        if (!activeSubgridId) return;
+        console.log('[removeProhibitedWord] Called with:', { activeSubgridId, word });
+        if (!activeSubgridId) {
+            console.log('[removeProhibitedWord] No activeSubgridId');
+            return;
+        }
         setContentModerationLoading(true);
         try {
-            await communityDelete(`/subgrids/${activeSubgridId}/content-moderation/words`, {
+            console.log('[removeProhibitedWord] Calling API...');
+            const response = await communityDelete(`/subgrids/${activeSubgridId}/content-moderation/words`, {
                 words: [word],
             });
+            console.log('[removeProhibitedWord] API Response:', response);
             setProhibitedWords((prev) => prev.filter((w) => w !== word));
         } catch (err: any) {
+            console.error('[removeProhibitedWord] Error:', err);
             if (Platform.OS === 'web') {
                 window.alert(err.message || 'Failed to remove prohibited word.');
             } else {
@@ -1271,14 +1292,33 @@ const CreditUnionAdminScreen = () => {
     };
 
     const testContentModeration = async () => {
-        if (!activeSubgridId || !contentModerationTestText.trim()) return;
+        console.log('[testContentModeration] Called with:', { activeSubgridId, contentModerationTestText });
+        if (!activeSubgridId || !contentModerationTestText.trim()) {
+            console.log('[testContentModeration] Missing required fields');
+            return;
+        }
         setContentModerationLoading(true);
         try {
+            console.log('[testContentModeration] Calling API...');
             const response = await communityPost(`/subgrids/${activeSubgridId}/content-moderation/test`, {
                 content: contentModerationTestText,
             });
-            setContentModerationTestResult(response?.data || null);
+            console.log('[testContentModeration] API Response:', response);
+            // Map backend response to frontend expected shape
+            // Backend returns: { allowed, message?, censoredContent?, flagged?, matches? }
+            // Frontend expects: { isProhibited, matchedWords, filteredContent }
+            const data = response?.data;
+            if (data) {
+                setContentModerationTestResult({
+                    isProhibited: !data.allowed,
+                    matchedWords: data.matches || [],
+                    filteredContent: data.censoredContent || contentModerationTestText,
+                });
+            } else {
+                setContentModerationTestResult(null);
+            }
         } catch (err: any) {
+            console.error('[testContentModeration] Error:', err);
             if (Platform.OS === 'web') {
                 window.alert(err.message || 'Failed to test content moderation.');
             } else {
@@ -3647,7 +3687,7 @@ const CreditUnionAdminScreen = () => {
                                 <ScrollView style={{ maxHeight: 200 }}>
                                     <TouchableOpacity
                                         style={[styles.roleSelectItem, !assigningMember.customRole && styles.roleSelectItemActive]}
-                                        onPress={() => handleAssignRole(assigningMember._id, null)}
+                                        onPress={() => handleAssignRole(assigningMember.userId || assigningMember._id, null)}
                                     >
                                         <View style={[styles.roleColor, { backgroundColor: colors.textMuted }]} />
                                         <Text style={styles.roleName}>No Role</Text>
@@ -3657,7 +3697,7 @@ const CreditUnionAdminScreen = () => {
                                         <TouchableOpacity
                                             key={role._id}
                                             style={[styles.roleSelectItem, assigningMember.customRole?._id === role._id && styles.roleSelectItemActive]}
-                                            onPress={() => handleAssignRole(assigningMember._id, role._id)}
+                                            onPress={() => handleAssignRole(assigningMember.userId || assigningMember._id, role._id)}
                                         >
                                             <View style={[styles.roleColor, { backgroundColor: role.color }]} />
                                             <Text style={styles.roleName}>{role.name}</Text>
