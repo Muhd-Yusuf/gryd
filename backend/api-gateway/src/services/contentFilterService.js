@@ -24,13 +24,23 @@ const checkContent = (content, prohibitedWords) => {
         if (!word || word.trim() === '') continue;
 
         const lowerWord = word.toLowerCase().trim();
+        const escapedWord = escapeRegex(lowerWord);
 
-        // Use word boundary matching for better accuracy
-        // This prevents matching partial words (e.g., "ass" in "class")
-        const regex = new RegExp(`\\b${escapeRegex(lowerWord)}\\b`, 'gi');
+        // Check if word starts/ends with word characters to determine boundary matching
+        const startsWithWordChar = /^\w/.test(lowerWord);
+        const endsWithWordChar = /\w$/.test(lowerWord);
+
+        // Build regex pattern with appropriate boundaries
+        // Use word boundary for word chars, lookahead/lookbehind for special chars
+        const startBoundary = startsWithWordChar ? '\\b' : '(?:^|[\\s.,!?;:\'"()\\[\\]{}])';
+        const endBoundary = endsWithWordChar ? '\\b' : '(?=[\\s.,!?;:\'"()\\[\\]{}]|$)';
+
+        const regex = new RegExp(`${startBoundary}${escapedWord}${endBoundary}`, 'gi');
 
         if (regex.test(content)) {
             matches.push(word);
+            // Reset regex lastIndex for replace
+            regex.lastIndex = 0;
             // Censor by replacing with asterisks
             censoredContent = censoredContent.replace(regex, (match) => '*'.repeat(match.length));
         }

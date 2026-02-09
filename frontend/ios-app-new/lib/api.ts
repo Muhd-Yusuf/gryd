@@ -837,8 +837,8 @@ export const communityPatch = (path, body) =>
     apiFetch(`/community${path}`, { method: 'PATCH', body: JSON.stringify(body || {}) });
 export const communityPut = (path, body) =>
     apiFetch(`/community${path}`, { method: 'PUT', body: JSON.stringify(body || {}) });
-export const communityDelete = (path) =>
-    apiFetch(`/community${path}`, { method: 'DELETE' });
+export const communityDelete = (path, body?: any) =>
+    apiFetch(`/community${path}`, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined });
 
 // Update current user profile
 export const updateUserProfile = (data: { firstName?: string; lastName?: string; email?: string; username?: string }) =>
