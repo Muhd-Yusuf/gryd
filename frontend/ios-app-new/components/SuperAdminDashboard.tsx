@@ -339,6 +339,17 @@ const SuperAdminDashboard = () => {
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
 
+    // Filtered customers for overview search
+    const filteredRecentCustomers = useMemo(() => {
+        if (!searchQuery.trim()) return recentCustomers;
+        const query = searchQuery.toLowerCase().trim();
+        return recentCustomers.filter((customer) =>
+            customer.name?.toLowerCase().includes(query) ||
+            customer.email?.toLowerCase().includes(query) ||
+            customer.tenantName?.toLowerCase().includes(query)
+        );
+    }, [recentCustomers, searchQuery]);
+
     // Load initial data
     useEffect(() => {
         loadInitialData();
@@ -1195,17 +1206,19 @@ const SuperAdminDashboard = () => {
                 </View>
             )}
 
-            {/* Search bar - full width on mobile, partial on desktop */}
-            <View style={[styles.searchContainer, isMobile && styles.searchContainerMobile]}>
-                <Search size={18} color={colors.textMuted} />
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder={isMobile ? "Search..." : "Search anything here"}
-                    placeholderTextColor={colors.textMuted}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                />
-            </View>
+            {/* Search bar - only visible on overview page, desktop only */}
+            {activeNav === 'overview' && !isMobile && (
+                <View style={styles.searchContainer}>
+                    <Search size={18} color={colors.textMuted} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search anything here"
+                        placeholderTextColor={colors.textMuted}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
+            )}
 
             {/* Desktop: Show full header with icons and profile */}
             {!isMobile && (
@@ -1292,7 +1305,7 @@ const SuperAdminDashboard = () => {
 
                 {isMobile ? (
                     <View style={styles.mobileCardList}>
-                        {recentCustomers.map((customer) => (
+                        {filteredRecentCustomers.map((customer) => (
                             <TouchableOpacity
                                 key={customer._id}
                                 style={styles.mobileCustomerCard}
@@ -1342,7 +1355,7 @@ const SuperAdminDashboard = () => {
                             <View style={[styles.tableHeaderCell, { width: 50 }]} />
                         </View>
 
-                        {recentCustomers.map((customer) => (
+                        {filteredRecentCustomers.map((customer) => (
                             <TouchableOpacity
                                 key={customer._id}
                                 style={styles.tableRow}
@@ -3229,15 +3242,19 @@ const createStyles = (colors: any) =>
         },
         searchContainerMobile: {
             maxWidth: '100%',
+            width: '100%',
             flex: 1,
-            height: 40,
+            paddingVertical: Platform.OS === 'web' ? 6 : 8,
+            paddingHorizontal: Platform.OS === 'web' ? 12 : 14,
+            height: Platform.OS === 'web' ? undefined : 42,
         },
         searchInput: {
             flex: 1,
-            marginLeft: 10,
-            fontSize: 15,
+            marginLeft: 8,
+            fontSize: Platform.OS === 'web' ? 14 : 16,
             color: colors.text,
             paddingVertical: 0,
+            minHeight: Platform.OS === 'web' ? 20 : 26,
         },
         topBarRight: {
             flexDirection: 'row',
