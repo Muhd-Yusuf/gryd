@@ -98,7 +98,6 @@ import VoiceMessagePlayer from './VoiceMessagePlayer';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { getCachedSubgrids, cacheSubgrids, getCachedChannelMessages, cacheChannelMessages, getCachedChannelPosts, cacheChannelPosts, getCachedCUAdminMembers, cacheCUAdminMembers, addChannelMessageToCache } from '../lib/userCache';
 import { generateTempId, isTempId } from '../lib/messageQueue';
-import EmojiPicker from './EmojiPicker';
 
 // Helper to convert Blob to data URL
 const blobToDataUrl = (blob: Blob): Promise<string> => {
@@ -6031,11 +6030,31 @@ const CreditUnionAdminScreen = () => {
             </Modal>
 
             {/* Emoji Picker Modal */}
-            <EmojiPicker
-                visible={showEmojiPicker}
-                onClose={() => setShowEmojiPicker(false)}
-                onSelectEmoji={handleEmojiSelect}
-            />
+            <Modal visible={showEmojiPicker} transparent animationType="fade">
+                <Pressable style={styles.emojiPickerOverlay} onPress={() => setShowEmojiPicker(false)}>
+                    <View style={styles.emojiPickerContainer}>
+                        <View style={styles.emojiPickerHeader}>
+                            <Text style={styles.emojiPickerTitle}>Emoji</Text>
+                            <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
+                                <X size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.emojiGrid} showsVerticalScrollIndicator={false}>
+                            <View style={styles.emojiGridInner}>
+                                {emojis.map((emoji, index) => (
+                                    <TouchableOpacity
+                                        key={index}
+                                        style={styles.emojiButton}
+                                        onPress={() => handleEmojiSelect(emoji)}
+                                    >
+                                        <Text style={styles.emojiText}>{emoji}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </ScrollView>
+                    </View>
+                </Pressable>
+            </Modal>
 
             {/* Call Modal */}
             <Modal visible={callType !== null} transparent animationType="fade" onRequestClose={handleEndCall}>
