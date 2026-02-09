@@ -662,6 +662,12 @@ export default function TopContributorsScreen() {
             backgroundColor: colors.surface,
             gap: 12,
         },
+        mobileBackBtn: {
+            padding: 8,
+            marginRight: 8,
+            borderRadius: 8,
+            backgroundColor: colors.inputBg,
+        },
         mobileHeaderBrandRow: {
             flexDirection: 'row',
             alignItems: 'center',
