@@ -6,7 +6,10 @@ const getTenantMembership = async (tenantId, userId) => {
 };
 
 const getSubgridMembership = async (tenantId, subgridId, userId) => {
-    return SubgridMembership.findOne({ tenantId, subgridId, userId });
+    console.log('[getSubgridMembership] Query:', { tenantId: String(tenantId), subgridId: String(subgridId), userId: String(userId) });
+    const membership = await SubgridMembership.findOne({ tenantId, subgridId, userId });
+    console.log('[getSubgridMembership] Result:', membership ? { role: membership.role, status: membership.status } : null);
+    return membership;
 };
 
 const requireTenantRole = (membership, allowedRoles) => {

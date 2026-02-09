@@ -117,21 +117,28 @@ const requireSubgridModeration = async (req, res, next) => {
 };
 
 const requireSubgridAdmin = async (req, res, next) => {
+    console.log('[requireSubgridAdmin] Checking admin access...');
     if (!req.subgrid) {
         await loadSubgrid(req, res, () => {});
         if (!req.subgrid) {
+            console.log('[requireSubgridAdmin] No subgrid found');
             return;
         }
     }
 
     if (!req.user) {
+        console.log('[requireSubgridAdmin] No user found');
         return res.status(401).json({ message: 'Authentication required' });
     }
 
+    console.log('[requireSubgridAdmin] User:', req.user.id, 'Subgrid:', req.subgrid._id);
     const membership = await getSubgridMembership(req.subgrid.tenantId, req.subgrid._id, req.user.id);
+    console.log('[requireSubgridAdmin] Membership:', membership);
     if (!membership || !isMembershipActive(membership) || !requireSubgridRole(membership, ['subgrid_admin'])) {
+        console.log('[requireSubgridAdmin] Admin access denied - membership:', !!membership, 'active:', membership ? isMembershipActive(membership) : false, 'isAdmin:', membership ? requireSubgridRole(membership, ['subgrid_admin']) : false);
         return res.status(403).json({ message: 'Admin access denied' });
     }
+    console.log('[requireSubgridAdmin] Access granted');
     return next();
 };
 

@@ -4453,11 +4453,16 @@ exports.addProhibitedWords = async (req, res) => {
         const { subgridId } = req.params;
         const { words } = req.body;
 
+        console.log('[addProhibitedWords] Request received:', { subgridId, words, body: req.body });
+
         if (!words || !Array.isArray(words) || words.length === 0) {
+            console.log('[addProhibitedWords] Invalid words array');
             return res.status(400).json({ message: 'Words array is required' });
         }
 
+        console.log('[addProhibitedWords] Calling contentFilterService.addProhibitedWords...');
         const updatedWords = await contentFilterService.addProhibitedWords(subgridId, words);
+        console.log('[addProhibitedWords] Updated words:', updatedWords);
 
         return res.status(200).json({
             success: true,
@@ -4465,6 +4470,7 @@ exports.addProhibitedWords = async (req, res) => {
             message: `Added ${words.length} word(s) to prohibited list`,
         });
     } catch (error) {
+        console.error('[addProhibitedWords] Error:', error);
         return res.status(500).json({ message: 'Failed to add prohibited words', error: error.message });
     }
 };

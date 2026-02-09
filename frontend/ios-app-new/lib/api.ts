@@ -66,7 +66,6 @@ let resolvedUserId = USER_ID;
 let resolvedTenantId = TENANT_ID;
 let resolvedUserRole: string = USER_ROLE;
 let authToken: string | null = null;
-let bootstrapPromise: Promise<void> | null = null;
 
 // ===================
 // AUTHENTICATION API
@@ -744,7 +743,7 @@ const ensureBootstrap = async () => {
 
     console.log('[Bootstrap] Current state - userId:', resolvedUserId, 'tenantId:', resolvedTenantId, 'hasToken:', !!authToken);
 
-    // If we have a user ID from auth, we don't need bootstrap
+    // If we have a user ID from auth, try to get tenant if needed
     if (resolvedUserId) {
         // If we still need tenant ID, try to get user's first tenant
         if (!resolvedTenantId) {
@@ -768,36 +767,8 @@ const ensureBootstrap = async () => {
         return;
     }
 
-    // Legacy bootstrap for development (when no auth)
-    if (bootstrapPromise) {
-        return bootstrapPromise;
-    }
-
-    bootstrapPromise = (async () => {
-        const response = await safeFetch('/bootstrap', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-        });
-        const data = await parseJson(response);
-        if (!response.ok) {
-            const message = data?.message || 'Bootstrap failed';
-            throw new Error(message);
-        }
-        const payload = data?.data || {};
-        if (payload.userId) {
-            resolvedUserId = payload.userId;
-        }
-        if (payload.tenantId) {
-            resolvedTenantId = payload.tenantId;
-        }
-    })();
-
-    try {
-        await bootstrapPromise;
-    } finally {
-        bootstrapPromise = null;
-    }
+    // No authenticated user - do nothing (user must log in)
+    console.log('[Bootstrap] No authenticated user, skipping bootstrap');
 };
 
 export const getTenantId = () => resolvedTenantId || TENANT_ID;
@@ -965,6 +936,33 @@ export const assignCustomRole = (subgridId: string, memberId: string, roleId: st
 // Remove custom role from a member
 export const removeCustomRole = (subgridId: string, memberId: string) =>
     communityDelete(`/subgrids/${subgridId}/members/${memberId}/role`);
+
+// ===================
+// CONTENT MODERATION API
+// ===================
+
+// Get content moderation settings for a subgrid
+export const getContentModerationSettings = (subgridId: string) =>
+    communityGet(`/subgrids/${subgridId}/content-moderation`);
+
+// Update content moderation settings
+export const updateContentModerationSettings = (subgridId: string, data: {
+    enabled?: boolean;
+    action?: 'block' | 'flag' | 'censor';
+    blockedMessage?: string;
+}) => communityPatch(`/subgrids/${subgridId}/content-moderation`, data);
+
+// Add prohibited words
+export const addProhibitedWords = (subgridId: string, words: string[]) =>
+    communityPost(`/subgrids/${subgridId}/content-moderation/words`, { words });
+
+// Remove prohibited words
+export const removeProhibitedWords = (subgridId: string, words: string[]) =>
+    communityDelete(`/subgrids/${subgridId}/content-moderation/words`, { words });
+
+// Test content against filter
+export const testContentFilter = (subgridId: string, content: string) =>
+    communityPost(`/subgrids/${subgridId}/content-moderation/test`, { content });
 
 // ===================
 // MEDIA API

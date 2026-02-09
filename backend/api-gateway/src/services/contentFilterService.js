@@ -190,9 +190,12 @@ const updateModerationSettings = async (subgridId, settings) => {
  */
 const addProhibitedWords = async (subgridId, words) => {
     try {
+        console.log('[ContentFilterService.addProhibitedWords] Input:', { subgridId, words });
         const cleanedWords = words
             .map(w => w.trim().toLowerCase())
             .filter(w => w.length > 0);
+
+        console.log('[ContentFilterService.addProhibitedWords] Cleaned words:', cleanedWords);
 
         const subgrid = await Subgrid.findByIdAndUpdate(
             subgridId,
@@ -200,6 +203,7 @@ const addProhibitedWords = async (subgridId, words) => {
             { new: true }
         ).select('contentModeration.prohibitedWords');
 
+        console.log('[ContentFilterService.addProhibitedWords] Updated subgrid:', subgrid);
         return subgrid?.contentModeration?.prohibitedWords || [];
     } catch (error) {
         console.error('[ContentFilterService] Error adding prohibited words:', error);
