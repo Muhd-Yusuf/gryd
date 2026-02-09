@@ -1583,6 +1583,13 @@ export default function DirectMessagesScreen() {
                                         style={styles.chatHeaderAvatar}
                                     />
                                     <Text style={styles.chatHeaderName}>{selectedFriendName}</Text>
+                                    {selectedFriendId && getFriendBadge(selectedFriendId) && (
+                                        <View style={[styles.chatHeaderBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getFriendBadge(selectedFriendId)!] }]}>
+                                            <Text style={styles.chatHeaderBadgeText}>
+                                                {getFriendBadge(selectedFriendId)!.charAt(0).toUpperCase() + getFriendBadge(selectedFriendId)!.slice(1)}
+                                            </Text>
+                                        </View>
+                                    )}
                                 </View>
                                 <View style={styles.chatHeaderIcons}>
                                     <TouchableOpacity style={styles.headerIcon} onPress={() => handleStartCall('audio')}>
@@ -1608,7 +1615,16 @@ export default function DirectMessagesScreen() {
                                             style={styles.profileAvatarImage}
                                         />
                                     </View>
-                                    <Text style={styles.profileName}>{selectedFriendName}</Text>
+                                    <View style={styles.profileNameRow}>
+                                        <Text style={styles.profileName}>{selectedFriendName}</Text>
+                                        {selectedFriendId && getFriendBadge(selectedFriendId) && (
+                                            <View style={[styles.profileBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[getFriendBadge(selectedFriendId)!] }]}>
+                                                <Text style={styles.profileBadgeText}>
+                                                    {getFriendBadge(selectedFriendId)!.charAt(0).toUpperCase() + getFriendBadge(selectedFriendId)!.slice(1)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
                                     <Text style={styles.profileUsername}>{selectedFriendUsername}</Text>
                                     <Text style={styles.introText}>
                                         This is the beginning of your direct message with{' '}
@@ -2257,11 +2273,29 @@ const createStyles = (colors: any) =>
             fontSize: 15,
             fontWeight: '500',
             color: colors.text,
-            flex: 1,
+            flexShrink: 1,
         },
         friendNameActive: {
             color: colors.primary,
             fontWeight: '600',
+        },
+        friendNameWithBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            flex: 1,
+            minWidth: 0,
+        },
+        friendBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+            flexShrink: 0,
+        },
+        friendBadgeText: {
+            fontSize: 9,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         friendLastMsgTime: {
             fontSize: 11,
@@ -2350,6 +2384,17 @@ const createStyles = (colors: any) =>
             fontWeight: '600',
             color: colors.text,
         },
+        chatHeaderBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 4,
+            marginLeft: 8,
+        },
+        chatHeaderBadgeText: {
+            fontSize: 10,
+            fontWeight: '600',
+            color: '#FFFFFF',
+        },
         chatHeaderIcons: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -2388,11 +2433,26 @@ const createStyles = (colors: any) =>
             height: 80,
             borderRadius: 40,
         },
+        profileNameRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 4,
+        },
         profileName: {
             fontSize: 24,
             fontWeight: '700',
             color: colors.text,
-            marginBottom: 4,
+        },
+        profileBadge: {
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 6,
+        },
+        profileBadgeText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: '#FFFFFF',
         },
         profileUsername: {
             fontSize: 14,

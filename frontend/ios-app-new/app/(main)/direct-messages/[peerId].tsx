@@ -349,7 +349,7 @@ const DirectMessageChatScreen = () => {
         if (answerProcessedRef.current === answerCallId) return;
 
         // Mark as processed immediately to prevent duplicate calls
-        answerProcessedRef.current = answerCallId;
+        answerProcessedRef.currenth system is ot that systetacal abi?t = answerCallId;
 
         // Answer the call (async operation)
         // We do NOT navigate away - the call modal will show based on agoraCall.callState
@@ -1328,7 +1328,16 @@ const DirectMessageChatScreen = () => {
                                             )}
                                             <View style={[styles.messageBubble, isSelf ? styles.messageBubbleSelf : styles.messageBubbleOther]}>
                                                 {!isSelf && (
-                                                    <Text style={styles.messageSender}>{senderName}</Text>
+                                                    <View style={styles.messageSenderRow}>
+                                                        <Text style={styles.messageSender}>{senderName}</Text>
+                                                        {friendStakeholderBadge && (
+                                                            <View style={[styles.messageBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[friendStakeholderBadge] }]}>
+                                                                <Text style={styles.messageBadgeText}>
+                                                                    {friendStakeholderBadge.charAt(0).toUpperCase() + friendStakeholderBadge.slice(1)}
+                                                                </Text>
+                                                            </View>
+                                                        )}
+                                                    </View>
                                                 )}
                                                 {!!message.body && <Text style={[styles.messageText, isSelf && styles.messageTextSelf]}>{message.body}</Text>}
                                                 {attachmentList.map((attachment, idx) => {
@@ -1617,7 +1626,10 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         messageBubble: { padding: 12, borderRadius: 16, flexShrink: 1 },
         messageBubbleSelf: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
         messageBubbleOther: { backgroundColor: colors.surfaceMuted, borderBottomLeftRadius: 4 },
-        messageSender: { fontSize: 13, fontWeight: '600', color: colors.textMuted, marginBottom: 4 },
+        messageSenderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' },
+        messageSender: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+        messageBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+        messageBadgeText: { fontSize: 9, fontWeight: '600', color: '#FFFFFF' },
         messageTime: { fontSize: 11, color: colors.textMuted, marginTop: 4, alignSelf: 'flex-end' },
         messageTimeSelf: { color: 'rgba(255,255,255,0.7)' },
         messageText: { fontSize: 15, color: colors.text, lineHeight: 22 },

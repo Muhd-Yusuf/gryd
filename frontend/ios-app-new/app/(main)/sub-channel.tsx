@@ -12,6 +12,7 @@ import {
     Platform,
     Alert,
     Pressable,
+    useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X, Calendar, BadgeCheck, Megaphone, Clock, MapPin, PlayCircle, File, Flag } from 'lucide-react-native';
@@ -155,7 +156,9 @@ const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', '
 
 const SubChannelScreen = () => {
     const { colors } = useTheme();
-    const styles = useMemo(() => createStyles(colors), [colors]);
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768;
+    const styles = useMemo(() => createStyles(colors, isMobile), [colors, isMobile]);
     const router = useRouter();
     const navigation = useNavigation();
     const params = useLocalSearchParams();
@@ -1949,17 +1952,17 @@ const SubChannelScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: boolean = false) =>
     StyleSheet.create({
         safe: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: isMobile ? colors.surface : colors.appBg,
             position: 'relative',
         },
         page: {
             flex: 1,
-            padding: 16,
-            backgroundColor: colors.appBg,
+            padding: isMobile ? 0 : 16,
+            backgroundColor: isMobile ? colors.surface : colors.appBg,
         },
         gridBackground: {
             position: 'absolute',
@@ -1967,7 +1970,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             left: 0,
             right: 0,
             bottom: 0,
-            ...(Platform.OS === 'web'
+            ...(Platform.OS === 'web' && !isMobile
                 ? (({
                     backgroundImage:
                         'linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px), linear-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.08) 1px, transparent 1px)',
@@ -1978,10 +1981,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         card: {
             flex: 1,
             backgroundColor: colors.surface,
-            borderRadius: 24,
-            borderWidth: 1,
+            borderRadius: isMobile ? 0 : 24,
+            borderWidth: isMobile ? 0 : 1,
             borderColor: colors.border,
-            padding: 16,
+            padding: isMobile ? 12 : 16,
             gap: 12,
         },
         header: {
@@ -1989,11 +1992,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: 8,
+            paddingHorizontal: isMobile ? 4 : 0,
+            paddingTop: isMobile ? 8 : 0,
         },
         title: {
-            fontSize: 16,
+            fontSize: isMobile ? 18 : 16,
             fontWeight: '700',
             color: colors.text,
+            flex: 1,
         },
         headerActions: {
             flexDirection: 'row',

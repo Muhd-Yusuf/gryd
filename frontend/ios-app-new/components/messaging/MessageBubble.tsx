@@ -27,6 +27,21 @@ export interface Attachment {
     durationMs?: number;
 }
 
+export type StakeholderBadgeType = 'stakeholder' | 'vendor' | 'partner' | 'sponsor' | 'investor' | null;
+
+export const STAKEHOLDER_BADGE_COLORS: Record<string, string> = {
+    stakeholder: '#3B82F6',
+    vendor: '#8B5CF6',
+    partner: '#10B981',
+    sponsor: '#F59E0B',
+    investor: '#EC4899',
+};
+
+export const formatBadgeLabel = (badge: StakeholderBadgeType): string => {
+    if (!badge) return '';
+    return badge.charAt(0).toUpperCase() + badge.slice(1);
+};
+
 export interface MessageBubbleProps {
     messageId: string;
     body?: string;
@@ -34,10 +49,12 @@ export interface MessageBubbleProps {
     senderId?: string;
     senderName?: string;
     senderAvatar?: string;
+    senderBadge?: StakeholderBadgeType;
     timestamp?: string;
     isSelf: boolean;
     showSenderName?: boolean;
     showAvatar?: boolean;
+    showBadge?: boolean;
     // Call history support
     isCallHistory?: boolean;
     callType?: 'audio' | 'video' | 'voice';
@@ -78,10 +95,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     senderId,
     senderName,
     senderAvatar,
+    senderBadge,
     timestamp,
     isSelf,
     showSenderName = false,
     showAvatar = true,
+    showBadge = true,
     isCallHistory = false,
     callType,
     callDuration,
@@ -223,11 +242,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     { backgroundColor: isSelf ? colors.primary : colors.surfaceMuted },
                 ]}
             >
-                {/* Sender name for group chats */}
+                {/* Sender name and badge for group chats */}
                 {showSenderName && !isSelf && senderName && (
-                    <Text style={[styles.senderName, { color: colors.primary }]}>
-                        {senderName}
-                    </Text>
+                    <View style={styles.senderRow}>
+                        <Text style={[styles.senderName, { color: colors.primary }]}>
+                            {senderName}
+                        </Text>
+                        {showBadge && senderBadge && (
+                            <View style={[styles.badgeContainer, { backgroundColor: STAKEHOLDER_BADGE_COLORS[senderBadge] || colors.primary }]}>
+                                <Text style={styles.badgeText}>{formatBadgeLabel(senderBadge)}</Text>
+                            </View>
+                        )}
+                    </View>
                 )}
 
                 {/* Attachments */}
@@ -309,10 +335,27 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         messageBubbleOther: {
             borderBottomLeftRadius: 4,
         },
+        senderRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 4,
+            flexWrap: 'wrap',
+        },
         senderName: {
             fontSize: 12,
             fontWeight: '600',
-            marginBottom: 4,
+        },
+        badgeContainer: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+        },
+        badgeText: {
+            fontSize: 9,
+            fontWeight: '600',
+            color: '#FFFFFF',
+            textTransform: 'capitalize',
         },
         messageText: {
             fontSize: 15,
