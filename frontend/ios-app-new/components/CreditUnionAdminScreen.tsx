@@ -251,9 +251,6 @@ const getAuthorName = (authorId?: string, members?: Member[]) => {
         String(m.user?._id) === authorIdStr ||
         String(m._id) === authorIdStr
     );
-    if (!member && members.length > 0) {
-        console.log('[getAuthorName] No match for:', authorIdStr, 'Sample member:', members[0] ? { userId: members[0].userId, user_id: members[0].user?._id } : 'none');
-    }
     if (member) return getMemberName(member);
     return `User ${authorIdStr.slice(-6)}`;
 };
@@ -655,18 +652,7 @@ const CreditUnionAdminScreen = () => {
                     }
                 }
                 if (membersRes.status === 'fulfilled') {
-                    const rawMembersData = membersRes.value?.data || [];
-                    console.log('[CUA Admin] Raw members from API:', rawMembersData.length, 'members');
-                    if (rawMembersData.length > 0) {
-                        console.log('[CUA Admin] Sample raw member:', JSON.stringify({
-                            userId: rawMembersData[0].userId,
-                            firstName: rawMembersData[0].firstName,
-                            lastName: rawMembersData[0].lastName,
-                            email: rawMembersData[0].email,
-                            user: rawMembersData[0].user,
-                        }));
-                    }
-                    const membersData = rawMembersData.map((m: Member) => ({
+                    const membersData = (membersRes.value?.data || []).map((m: Member) => ({
                         ...m,
                         userName: m.firstName && m.lastName
                             ? `${m.firstName} ${m.lastName}`
@@ -705,10 +691,6 @@ const CreditUnionAdminScreen = () => {
         communityGet(`/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`)
             .then((response) => {
                 const messagesData = response?.data || [];
-                console.log('[CUA Admin] Loaded', messagesData.length, 'messages');
-                if (messagesData.length > 0) {
-                    console.log('[CUA Admin] Sample message authorId:', messagesData[0].authorId);
-                }
                 setMessages(messagesData);
                 // Cache messages for offline access
                 cacheChannelMessages(activeChannelId, messagesData);

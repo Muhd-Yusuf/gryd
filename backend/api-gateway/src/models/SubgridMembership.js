@@ -24,6 +24,12 @@ const subgridMembershipSchema = new mongoose.Schema({
         enum: ['subgrid_admin', 'moderator', 'member', 'stakeholder'],
         default: 'member',
     },
+    // Custom role assigned by CU Admin (references CustomRole model)
+    customRoleId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'CustomRole',
+        default: null,
+    },
     status: {
         type: String,
         enum: ['active', 'muted', 'suspended'],
