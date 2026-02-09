@@ -13,6 +13,10 @@ const logger = require('./utils/logger');
 
 dotenv.config();
 
+// Server version for deployment tracking
+const SERVER_VERSION = '1.0.2';
+logger.info('Server', `Starting API Gateway v${SERVER_VERSION}`);
+
 // Environment variable validation
 const validateEnv = () => {
     const required = ['MONGO_URI', 'JWT_SECRET'];
