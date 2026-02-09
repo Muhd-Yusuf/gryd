@@ -810,7 +810,7 @@ export default function TopContributorsScreen() {
                 {/* Icon Rail - hidden on mobile */}
                 {!isMobile && (
                     <View style={styles.iconRail}>
-                        <TouchableOpacity style={styles.serverIcon} onPress={() => router.push('/admin')}>
+                        <TouchableOpacity style={[styles.serverIcon, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]} onPress={() => router.push('/admin')}>
                             {activeSubgrid ? (
                                 activeSubgrid.logoUrl ? (
                                     <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />

@@ -2848,7 +2848,7 @@ const CreditUnionAdminScreen = () => {
                 {/* Left Icon Rail - hidden on mobile */}
                 {!isMobile && (
                 <View style={styles.iconRail}>
-                    <TouchableOpacity style={styles.railLogo}>
+                    <TouchableOpacity style={[styles.railLogo, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]}>
                         {activeSubgrid ? (
                             activeSubgrid.logoUrl ? (
                                 <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />

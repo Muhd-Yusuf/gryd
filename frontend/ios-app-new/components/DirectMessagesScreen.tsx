@@ -95,6 +95,16 @@ type Channel = {
     status?: string;
 };
 
+type StakeholderBadge = 'stakeholder' | 'vendor' | 'partner' | 'sponsor' | 'investor';
+
+const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
+    stakeholder: '#3B82F6',
+    vendor: '#8B5CF6',
+    partner: '#10B981',
+    sponsor: '#F59E0B',
+    investor: '#EC4899',
+};
+
 type UserProfile = {
     id: string;
     firstName?: string;
@@ -104,6 +114,7 @@ type UserProfile = {
     createdAt?: string;
     avatarUrl?: string;
     bannerUrl?: string;
+    stakeholderBadge?: StakeholderBadge | null;
 };
 
 type DirectMessage = {
@@ -700,6 +711,11 @@ export default function DirectMessagesScreen() {
             return `@${user.firstName.toLowerCase()}${(user.lastName || '').slice(0, 3).toLowerCase()}`;
         }
         return `@user${friendId.slice(-6)}`;
+    };
+
+    const getFriendBadge = (friendId: string): StakeholderBadge | null => {
+        const user = friendUsers[friendId];
+        return user?.stakeholderBadge || null;
     };
 
     const getMemberId = (member: Member) => member.userId || member.user?._id || member._id || '';
@@ -1377,7 +1393,7 @@ export default function DirectMessagesScreen() {
                 {/* Icon Rail - hidden on mobile */}
                 {!isMobile && (
                     <View style={styles.iconRail}>
-                        <TouchableOpacity style={styles.serverIcon} onPress={() => router.push('/admin')}>
+                        <TouchableOpacity style={[styles.serverIcon, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]} onPress={() => router.push('/admin')}>
                             {activeSubgrid ? (
                                 activeSubgrid.logoUrl ? (
                                     <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
@@ -1467,6 +1483,7 @@ export default function DirectMessagesScreen() {
                             (sortedFriends || []).map((friendId, index) => {
                                 const isActive = selectedFriendId === friendId;
                                 const name = getFriendName(friendId);
+                                const friendBadge = getFriendBadge(friendId);
                                 const lastMsg = lastMessages[friendId];
                                 const lastMsgPreview = lastMsg?.body
                                     ? truncateMessage(lastMsg.body)
@@ -1490,7 +1507,16 @@ export default function DirectMessagesScreen() {
                                         />
                                         <View style={styles.friendInfo}>
                                             <View style={styles.friendNameRow}>
-                                                <Text style={[styles.friendName, isActive && styles.friendNameActive]} numberOfLines={1}>{name}</Text>
+                                                <View style={styles.friendNameWithBadge}>
+                                                    <Text style={[styles.friendName, isActive && styles.friendNameActive]} numberOfLines={1}>{name}</Text>
+                                                    {friendBadge && (
+                                                        <View style={[styles.friendBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[friendBadge] }]}>
+                                                            <Text style={styles.friendBadgeText}>
+                                                                {friendBadge.charAt(0).toUpperCase() + friendBadge.slice(1)}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                </View>
                                                 {lastMsgTime ? (
                                                     <Text style={styles.friendLastMsgTime}>{lastMsgTime}</Text>
                                                 ) : null}
