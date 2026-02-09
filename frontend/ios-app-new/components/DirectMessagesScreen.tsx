@@ -1368,26 +1368,26 @@ export default function DirectMessagesScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Top Navigation */}
-            <View style={[styles.topNav, isMobile && styles.topNavMobile]}>
-                {!isMobile && (
+            {/* Top Navigation - Desktop only */}
+            {!isMobile && (
+                <View style={styles.topNav}>
                     <View style={styles.logo}>
                         <Text style={styles.logoIcon}>#</Text>
                         <Text style={styles.logoText}>The Gryd</Text>
                     </View>
-                )}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.navTabs, isMobile && styles.navTabsMobile]}>
-                    <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin')}>
-                        <Text style={styles.navTabText}>Server</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.navTab, styles.navTabActive]}>
-                        <Text style={[styles.navTabText, styles.navTabTextActive]}>Messages</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin/contributors')}>
-                        <Text style={styles.navTabText}>Top Contributors</Text>
-                    </TouchableOpacity>
-                </ScrollView>
-            </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navTabs}>
+                        <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin')}>
+                            <Text style={styles.navTabText}>Server</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.navTab, styles.navTabActive]}>
+                            <Text style={[styles.navTabText, styles.navTabTextActive]}>Messages</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin/contributors')}>
+                            <Text style={styles.navTabText}>Top Contributors</Text>
+                        </TouchableOpacity>
+                    </ScrollView>
+                </View>
+            )}
 
             <View style={styles.mainContent}>
                 {/* Icon Rail - hidden on mobile */}
