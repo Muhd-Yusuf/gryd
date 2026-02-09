@@ -786,8 +786,9 @@ export default function TopContributorsScreen() {
         mobileProfileHeader: {
             flexDirection: 'row',
             alignItems: 'center',
-            paddingHorizontal: 12,
-            paddingVertical: 10,
+            paddingHorizontal: 16,
+            paddingTop: Platform.OS === 'ios' ? 60 : Platform.OS === 'android' ? 50 : 20,
+            paddingBottom: 12,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
             backgroundColor: colors.surface,
