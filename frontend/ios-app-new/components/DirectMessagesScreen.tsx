@@ -73,6 +73,7 @@ import { useWebSocketContext } from '../contexts/WebSocketContext';
 import CallModal from './CallModal';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
 import { MessageBubble, MessageComposer } from './messaging';
+import EmojiPicker from './EmojiPicker';
 
 // Incoming call notification type
 type IncomingCallNotification = {
@@ -1952,31 +1953,11 @@ export default function DirectMessagesScreen() {
             </Modal>
 
             {/* Emoji Picker Modal */}
-            <Modal visible={showEmojiPicker} transparent animationType="fade" onRequestClose={() => setShowEmojiPicker(false)}>
-                <Pressable style={styles.emojiPickerOverlay} onPress={() => setShowEmojiPicker(false)}>
-                    <Pressable style={styles.emojiPickerContainer} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.emojiPickerHeader}>
-                            <Text style={styles.emojiPickerTitle}>Emoji</Text>
-                            <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                                <X size={20} color={colors.textMuted} />
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView style={styles.emojiGrid} showsVerticalScrollIndicator={false}>
-                            <View style={styles.emojiGridInner}>
-                                {emojis.map((emoji, index) => (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={styles.emojiButton}
-                                        onPress={() => handleEmojiSelect(emoji)}
-                                    >
-                                        <Text style={styles.emojiText}>{emoji}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
+            <EmojiPicker
+                visible={showEmojiPicker}
+                onClose={() => setShowEmojiPicker(false)}
+                onSelectEmoji={handleEmojiSelect}
+            />
 
             {/* Incoming Call Notification */}
             {incomingCall && (

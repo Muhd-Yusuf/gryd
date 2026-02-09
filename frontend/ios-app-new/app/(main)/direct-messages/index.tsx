@@ -31,6 +31,7 @@ import { useCallContext } from '../../../contexts/CallContext';
 import { CallModalDefault as CallModal } from '../../../components';
 import { diagnoseCallState } from '../../../lib/callTestUtils';
 import { useWebSocketContext } from '../../../contexts/WebSocketContext';
+import EmojiPicker from '../../../components/EmojiPicker';
 
 type Subgrid = {
     _id: string;
@@ -1674,31 +1675,11 @@ const DirectMessagesScreen = () => {
             </View>
 
             {/* Emoji Picker Modal */}
-            <Modal visible={showEmojiPicker} transparent animationType="fade" onRequestClose={() => setShowEmojiPicker(false)}>
-                <Pressable style={styles.emojiModalOverlay} onPress={() => setShowEmojiPicker(false)}>
-                    <Pressable style={styles.emojiModalCard} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.emojiModalHeader}>
-                            <Text style={styles.emojiModalTitle}>Emoji</Text>
-                            <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                                <X size={18} color={colors.textMuted} />
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView style={styles.emojiScrollArea} showsVerticalScrollIndicator={false}>
-                            <View style={styles.emojiGridWrap}>
-                                {emojis.map((emoji, index) => (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={styles.emojiBtn}
-                                        onPress={() => handleEmojiSelect(emoji)}
-                                    >
-                                        <Text style={styles.emojiBtnText}>{emoji}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
+            <EmojiPicker
+                visible={showEmojiPicker}
+                onClose={() => setShowEmojiPicker(false)}
+                onSelectEmoji={handleEmojiSelect}
+            />
 
             <Modal visible={addFriendOpen} transparent animationType="fade" onRequestClose={() => setAddFriendOpen(false)}>
                 <View style={styles.modalOverlay}>
