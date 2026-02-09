@@ -3230,12 +3230,15 @@ const createStyles = (colors: any) =>
         searchContainerMobile: {
             maxWidth: '100%',
             flex: 1,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
         },
         searchInput: {
             flex: 1,
-            marginLeft: 8,
-            fontSize: 14,
+            marginLeft: 10,
+            fontSize: 16,
             color: colors.text,
+            paddingVertical: Platform.OS === 'web' ? 0 : 4,
         },
         topBarRight: {
             flexDirection: 'row',
