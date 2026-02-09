@@ -251,6 +251,9 @@ const getAuthorName = (authorId?: string, members?: Member[]) => {
         String(m.user?._id) === authorIdStr ||
         String(m._id) === authorIdStr
     );
+    if (!member && members.length > 0) {
+        console.log('[getAuthorName] No match for:', authorIdStr, 'Sample member:', members[0] ? { userId: members[0].userId, user_id: members[0].user?._id } : 'none');
+    }
     if (member) return getMemberName(member);
     return `User ${authorIdStr.slice(-6)}`;
 };
