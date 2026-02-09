@@ -565,7 +565,9 @@ export default function TopContributorsScreen() {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            padding: 8,
+            paddingHorizontal: 8,
+            paddingTop: 8,
+            paddingBottom: Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 24 : 8,
             borderTopWidth: 1,
             borderTopColor: colors.border,
             backgroundColor: colors.surface,
@@ -871,8 +873,14 @@ export default function TopContributorsScreen() {
                     {/* Mobile Top Bar */}
                     {isMobile && (
                         <View style={styles.mobileTopBar}>
-                            {/* Gryd Branding Row */}
+                            {/* Gryd Branding Row with Back Button */}
                             <View style={styles.mobileHeaderBrandRow}>
+                                <TouchableOpacity
+                                    style={styles.mobileBackBtn}
+                                    onPress={() => router.push('/admin')}
+                                >
+                                    <ArrowLeft size={20} color={colors.text} />
+                                </TouchableOpacity>
                                 <View style={styles.mobileGrydLogo}>
                                     <View style={styles.mobileGrydLogoIcon}>
                                         <Text style={styles.mobileGrydLogoHash}>#</Text>
