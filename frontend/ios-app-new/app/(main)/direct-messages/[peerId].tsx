@@ -349,7 +349,7 @@ const DirectMessageChatScreen = () => {
         if (answerProcessedRef.current === answerCallId) return;
 
         // Mark as processed immediately to prevent duplicate calls
-        answerProcessedRef.currenth system is ot that systetacal abi?t = answerCallId;
+        answerProcessedRef.current = answerCallId;
 
         // Answer the call (async operation)
         // We do NOT navigate away - the call modal will show based on agoraCall.callState
