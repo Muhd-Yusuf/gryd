@@ -2469,112 +2469,152 @@ const SuperAdminDashboard = () => {
             onRequestClose={() => setInviteModalOpen(false)}
         >
             <Pressable style={styles.modalOverlay} onPress={() => setInviteModalOpen(false)}>
-                <Pressable style={styles.inviteModal} onPress={(e) => e.stopPropagation()}>
-                    <View style={styles.inviteModalHeader}>
-                        <View style={styles.inviteIconContainer}>
-                            <UserPlus size={32} color="#22c55e" />
-                        </View>
-                        <TouchableOpacity style={styles.inviteCloseButton} onPress={() => setInviteModalOpen(false)}>
-                            <X size={24} color={colors.textMuted} />
-                        </TouchableOpacity>
-                    </View>
-
-                    <Text style={styles.inviteModalTitle}>Add Team Member</Text>
-                    <Text style={styles.inviteModalSubtitle}>Invite colleagues to help manage the platform</Text>
-
-                    <View style={styles.inviteForm}>
-                        {/* Name row */}
-                        <View style={[styles.inviteFormRow, isMobile && styles.inviteFormRowMobile]}>
-                            <View style={[styles.inviteEmailGroup, { flex: 1 }]}>
-                                <Text style={styles.inviteLabel}>First Name</Text>
-                                <TextInput
-                                    style={styles.inviteInput}
-                                    value={inviteFirstName}
-                                    onChangeText={setInviteFirstName}
-                                    placeholder="John"
-                                    placeholderTextColor={colors.textMuted}
-                                    autoCapitalize="words"
-                                />
+                <Pressable style={[styles.inviteModal, isMobile && styles.inviteModalMobile]} onPress={(e) => e.stopPropagation()}>
+                    <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                        <View style={styles.inviteModalHeader}>
+                            <View style={styles.inviteIconContainer}>
+                                <UserPlus size={32} color="#22c55e" />
                             </View>
-                            <View style={[styles.inviteEmailGroup, { flex: 1, marginLeft: isMobile ? 0 : 12 }]}>
-                                <Text style={styles.inviteLabel}>Last Name</Text>
-                                <TextInput
-                                    style={styles.inviteInput}
-                                    value={inviteLastName}
-                                    onChangeText={setInviteLastName}
-                                    placeholder="Doe"
-                                    placeholderTextColor={colors.textMuted}
-                                    autoCapitalize="words"
-                                />
-                            </View>
+                            <TouchableOpacity style={styles.inviteCloseButton} onPress={() => setInviteModalOpen(false)}>
+                                <X size={24} color={colors.textMuted} />
+                            </TouchableOpacity>
                         </View>
 
-                        {/* Email and Role row */}
-                        <View style={[styles.inviteFormRow, isMobile && styles.inviteFormRowMobile]}>
-                            <View style={styles.inviteEmailGroup}>
-                                <Text style={styles.inviteLabel}>Email address *</Text>
-                                <TextInput
-                                    style={styles.inviteInput}
-                                    value={inviteEmail}
-                                    onChangeText={setInviteEmail}
-                                    placeholder="name@example.com"
-                                    placeholderTextColor={colors.textMuted}
-                                    keyboardType="email-address"
-                                    autoCapitalize="none"
-                                />
+                        <Text style={styles.inviteModalTitle}>Add Team Member</Text>
+                        <Text style={styles.inviteModalSubtitle}>Invite colleagues to help manage the platform</Text>
+
+                        <View style={styles.inviteForm}>
+                            {/* Name row */}
+                            <View style={[styles.inviteFormRow, isMobile && styles.inviteFormRowMobile]}>
+                                <View style={[styles.inviteEmailGroup, { flex: 1 }]}>
+                                    <Text style={styles.inviteLabel}>First Name</Text>
+                                    <TextInput
+                                        style={styles.inviteInput}
+                                        value={inviteFirstName}
+                                        onChangeText={setInviteFirstName}
+                                        placeholder="John"
+                                        placeholderTextColor={colors.textMuted}
+                                        autoCapitalize="words"
+                                    />
+                                </View>
+                                <View style={[styles.inviteEmailGroup, { flex: 1, marginLeft: isMobile ? 0 : 12 }]}>
+                                    <Text style={styles.inviteLabel}>Last Name</Text>
+                                    <TextInput
+                                        style={styles.inviteInput}
+                                        value={inviteLastName}
+                                        onChangeText={setInviteLastName}
+                                        placeholder="Doe"
+                                        placeholderTextColor={colors.textMuted}
+                                        autoCapitalize="words"
+                                    />
+                                </View>
                             </View>
-                            <View style={styles.inviteRoleGroup}>
-                                <Text style={styles.inviteLabel}>Role</Text>
-                                <TouchableOpacity
-                                    style={styles.inviteRoleDropdown}
-                                    onPress={() => setInviteRoleDropdownOpen(!inviteRoleDropdownOpen)}
-                                >
-                                    <Text style={styles.inviteRoleText}>
-                                        {inviteRole === 'super_admin' ? 'Super Admin' : 'Admin'}
-                                    </Text>
-                                    <ChevronDown size={20} color={colors.textMuted} />
-                                </TouchableOpacity>
-                                {inviteRoleDropdownOpen && (
-                                    <View style={[styles.inviteRoleDropdownMenu, { position: 'absolute', top: 70, left: 0, right: 0, zIndex: 9999 }]}>
+
+                            {/* Email field */}
+                            <View style={[styles.inviteFormRow, isMobile && styles.inviteFormRowMobile]}>
+                                <View style={[styles.inviteEmailGroup, isMobile && { flex: 1 }]}>
+                                    <Text style={styles.inviteLabel}>Email address *</Text>
+                                    <TextInput
+                                        style={styles.inviteInput}
+                                        value={inviteEmail}
+                                        onChangeText={setInviteEmail}
+                                        placeholder="name@example.com"
+                                        placeholderTextColor={colors.textMuted}
+                                        keyboardType="email-address"
+                                        autoCapitalize="none"
+                                    />
+                                </View>
+                                {!isMobile && (
+                                    <View style={styles.inviteRoleGroup}>
+                                        <Text style={styles.inviteLabel}>Role</Text>
                                         <TouchableOpacity
-                                            style={[styles.inviteRoleOption, inviteRole === 'admin' && styles.inviteRoleOptionActive]}
-                                            onPress={() => { setInviteRole('admin'); setInviteRoleDropdownOpen(false); }}
+                                            style={styles.inviteRoleDropdown}
+                                            onPress={() => setInviteRoleDropdownOpen(!inviteRoleDropdownOpen)}
                                         >
-                                            <Text style={styles.inviteRoleOptionText}>Admin</Text>
-                                            <Text style={styles.inviteRoleOptionDesc}>Can manage customers and moderation</Text>
+                                            <Text style={styles.inviteRoleText}>
+                                                {inviteRole === 'super_admin' ? 'Super Admin' : 'Admin'}
+                                            </Text>
+                                            <ChevronDown size={20} color={colors.textMuted} />
                                         </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={[styles.inviteRoleOption, inviteRole === 'super_admin' && styles.inviteRoleOptionActive]}
-                                            onPress={() => { setInviteRole('super_admin'); setInviteRoleDropdownOpen(false); }}
-                                        >
-                                            <Text style={styles.inviteRoleOptionText}>Super Admin</Text>
-                                            <Text style={styles.inviteRoleOptionDesc}>Full platform access including settings</Text>
-                                        </TouchableOpacity>
+                                        {inviteRoleDropdownOpen && (
+                                            <View style={[styles.inviteRoleDropdownMenu, { position: 'absolute', top: 70, left: 0, right: 0, zIndex: 9999 }]}>
+                                                <TouchableOpacity
+                                                    style={[styles.inviteRoleOption, inviteRole === 'admin' && styles.inviteRoleOptionActive]}
+                                                    onPress={() => { setInviteRole('admin'); setInviteRoleDropdownOpen(false); }}
+                                                >
+                                                    <Text style={styles.inviteRoleOptionText}>Admin</Text>
+                                                    <Text style={styles.inviteRoleOptionDesc}>Can manage customers and moderation</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={[styles.inviteRoleOption, inviteRole === 'super_admin' && styles.inviteRoleOptionActive]}
+                                                    onPress={() => { setInviteRole('super_admin'); setInviteRoleDropdownOpen(false); }}
+                                                >
+                                                    <Text style={styles.inviteRoleOptionText}>Super Admin</Text>
+                                                    <Text style={styles.inviteRoleOptionDesc}>Full platform access including settings</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        )}
                                     </View>
                                 )}
                             </View>
-                        </View>
-                    </View>
 
-                    <View style={styles.inviteModalActions}>
-                        <TouchableOpacity
-                            style={styles.inviteCancelButton}
-                            onPress={() => { setInviteModalOpen(false); setInviteRoleDropdownOpen(false); }}
-                        >
-                            <Text style={styles.inviteCancelText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.inviteSubmitButton, !inviteEmail.trim() && styles.inviteSubmitButtonDisabled]}
-                            onPress={handleInviteMember}
-                            disabled={!inviteEmail.trim() || invitingMember}
-                        >
-                            {invitingMember ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <Text style={styles.inviteSubmitText}>Send invite</Text>
+                            {/* Role field - separate row on mobile */}
+                            {isMobile && (
+                                <View style={[styles.inviteFormRow, styles.inviteFormRowMobile]}>
+                                    <View style={[styles.inviteRoleGroup, { flex: 1, zIndex: 1000 }]}>
+                                        <Text style={styles.inviteLabel}>Role</Text>
+                                        <TouchableOpacity
+                                            style={styles.inviteRoleDropdown}
+                                            onPress={() => setInviteRoleDropdownOpen(!inviteRoleDropdownOpen)}
+                                        >
+                                            <Text style={styles.inviteRoleText}>
+                                                {inviteRole === 'super_admin' ? 'Super Admin' : 'Admin'}
+                                            </Text>
+                                            <ChevronDown size={20} color={colors.textMuted} />
+                                        </TouchableOpacity>
+                                        {inviteRoleDropdownOpen && (
+                                            <View style={[styles.inviteRoleDropdownMenu, { position: 'absolute', top: 70, left: 0, right: 0, zIndex: 9999 }]}>
+                                                <TouchableOpacity
+                                                    style={[styles.inviteRoleOption, inviteRole === 'admin' && styles.inviteRoleOptionActive]}
+                                                    onPress={() => { setInviteRole('admin'); setInviteRoleDropdownOpen(false); }}
+                                                >
+                                                    <Text style={styles.inviteRoleOptionText}>Admin</Text>
+                                                    <Text style={styles.inviteRoleOptionDesc}>Can manage customers and moderation</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={[styles.inviteRoleOption, inviteRole === 'super_admin' && styles.inviteRoleOptionActive]}
+                                                    onPress={() => { setInviteRole('super_admin'); setInviteRoleDropdownOpen(false); }}
+                                                >
+                                                    <Text style={styles.inviteRoleOptionText}>Super Admin</Text>
+                                                    <Text style={styles.inviteRoleOptionDesc}>Full platform access including settings</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        )}
+                                    </View>
+                                </View>
                             )}
-                        </TouchableOpacity>
-                    </View>
+                        </View>
+
+                        <View style={[styles.inviteModalActions, isMobile && styles.inviteModalActionsMobile]}>
+                            <TouchableOpacity
+                                style={[styles.inviteCancelButton, isMobile && styles.inviteCancelButtonMobile]}
+                                onPress={() => { setInviteModalOpen(false); setInviteRoleDropdownOpen(false); }}
+                            >
+                                <Text style={styles.inviteCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.inviteSubmitButton, isMobile && styles.inviteSubmitButtonMobile, !inviteEmail.trim() && styles.inviteSubmitButtonDisabled]}
+                                onPress={handleInviteMember}
+                                disabled={!inviteEmail.trim() || invitingMember}
+                            >
+                                {invitingMember ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.inviteSubmitText}>Send invite</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </ScrollView>
                 </Pressable>
             </Pressable>
         </Modal>
@@ -4760,6 +4800,13 @@ const createStyles = (colors: any) =>
             width: '90%',
             maxWidth: 520,
             padding: 24,
+            overflow: 'visible',
+        },
+        inviteModalMobile: {
+            width: '95%',
+            maxWidth: '100%',
+            padding: 16,
+            maxHeight: '90%',
         },
         inviteModalHeader: {
             flexDirection: 'row',
@@ -4789,11 +4836,15 @@ const createStyles = (colors: any) =>
             color: colors.textMuted,
             marginBottom: 24,
         },
-        inviteForm: {},
+        inviteForm: {
+            zIndex: 100,
+        },
         inviteFormRow: {
             flexDirection: 'row',
             gap: 16,
             marginBottom: 16,
+            overflow: 'visible',
+            zIndex: 100,
         },
         inviteEmailGroup: {
             flex: 2,
@@ -4802,6 +4853,7 @@ const createStyles = (colors: any) =>
             flex: 1,
             position: 'relative',
             zIndex: 1000,
+            overflow: 'visible',
         },
         inviteLabel: {
             fontSize: 14,
@@ -4882,6 +4934,12 @@ const createStyles = (colors: any) =>
             gap: 12,
             marginTop: 24,
             zIndex: 1,
+            position: 'relative',
+        },
+        inviteModalActionsMobile: {
+            flexDirection: 'column-reverse',
+            gap: 10,
+            marginTop: 20,
         },
         inviteCancelButton: {
             paddingHorizontal: 24,
@@ -4889,6 +4947,9 @@ const createStyles = (colors: any) =>
             borderRadius: 8,
             borderWidth: 1,
             borderColor: colors.border,
+        },
+        inviteCancelButtonMobile: {
+            alignItems: 'center',
         },
         inviteCancelText: {
             fontSize: 14,
@@ -4902,6 +4963,10 @@ const createStyles = (colors: any) =>
             backgroundColor: colors.primary,
             minWidth: 120,
             alignItems: 'center',
+        },
+        inviteSubmitButtonMobile: {
+            minWidth: 'auto',
+            width: '100%',
         },
         inviteSubmitButtonDisabled: {
             backgroundColor: colors.textSubtle,

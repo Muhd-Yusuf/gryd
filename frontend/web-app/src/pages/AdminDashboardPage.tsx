@@ -3,13 +3,16 @@ import {
     Activity,
     Bell,
     Bot,
+    ChevronDown,
     DollarSign,
     LayoutDashboard,
     LogOut,
     Menu,
+    Plus,
     Search,
     Settings,
     Shield,
+    UserPlus,
     Users,
     X,
     Trash2,
@@ -31,6 +34,15 @@ const TeamView = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+
+    // Add Team Member Modal State
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [inviteFirstName, setInviteFirstName] = useState('');
+    const [inviteLastName, setInviteLastName] = useState('');
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState<'admin' | 'super_admin'>('admin');
+    const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+    const [inviting, setInviting] = useState(false);
 
     const loadTeam = async () => {
         setLoading(true);
@@ -64,6 +76,44 @@ const TeamView = () => {
         }
     };
 
+    const handleInvite = async () => {
+        if (!inviteEmail.trim()) return;
+
+        setInviting(true);
+        try {
+            const response = await apiPost('/super-admin/team/invite', {
+                email: inviteEmail.trim(),
+                firstName: inviteFirstName.trim() || 'Team',
+                lastName: inviteLastName.trim() || 'Member',
+                role: inviteRole,
+            });
+
+            if (response?.data?.user) {
+                setMembers(prev => [...prev, response.data.user]);
+            }
+
+            // Reset form and close modal
+            setInviteFirstName('');
+            setInviteLastName('');
+            setInviteEmail('');
+            setInviteRole('admin');
+            setShowAddModal(false);
+        } catch (err: any) {
+            alert(err.message || 'Failed to invite team member');
+        } finally {
+            setInviting(false);
+        }
+    };
+
+    const closeModal = () => {
+        setShowAddModal(false);
+        setRoleDropdownOpen(false);
+        setInviteFirstName('');
+        setInviteLastName('');
+        setInviteEmail('');
+        setInviteRole('admin');
+    };
+
     if (loading && members.length === 0) return <div className="p-8 text-center text-gray-500">Loading team...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
@@ -71,7 +121,13 @@ const TeamView = () => {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">Team Management</h2>
-                {/* Add Member button could go here if requested later */}
+                <button
+                    onClick={() => setShowAddModal(true)}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                    <Plus size={16} />
+                    Add Team Member
+                </button>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -123,6 +179,119 @@ const TeamView = () => {
                 * Admin Role: Can view customers and manage.<br />
                 * Full Access Admin: Can do anything.
             </div>
+
+            {/* Add Team Member Modal */}
+            {showAddModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={closeModal}>
+                    <div
+                        className="bg-white rounded-xl w-full max-w-lg p-6 relative"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-4">
+                            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+                                <UserPlus size={28} className="text-emerald-600" />
+                            </div>
+                            <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 p-1">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <h3 className="text-xl font-semibold text-gray-900 mb-1">Add Team Member</h3>
+                        <p className="text-sm text-gray-500 mb-6">Invite colleagues to help manage the platform</p>
+
+                        {/* Form */}
+                        <div className="space-y-4">
+                            {/* Name Row */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                                    <input
+                                        type="text"
+                                        value={inviteFirstName}
+                                        onChange={(e) => setInviteFirstName(e.target.value)}
+                                        placeholder="John"
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                                    <input
+                                        type="text"
+                                        value={inviteLastName}
+                                        onChange={(e) => setInviteLastName(e.target.value)}
+                                        placeholder="Doe"
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Email and Role Row */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Email address *</label>
+                                    <input
+                                        type="email"
+                                        value={inviteEmail}
+                                        onChange={(e) => setInviteEmail(e.target.value)}
+                                        placeholder="name@example.com"
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div className="relative">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                    >
+                                        <span>{inviteRole === 'super_admin' ? 'Super Admin' : 'Admin'}</span>
+                                        <ChevronDown size={16} className={`text-gray-400 transition-transform ${roleDropdownOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {roleDropdownOpen && (
+                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setInviteRole('admin'); setRoleDropdownOpen(false); }}
+                                                className={`w-full px-4 py-3 text-left hover:bg-gray-50 ${inviteRole === 'admin' ? 'bg-emerald-50' : ''}`}
+                                            >
+                                                <div className="text-sm font-medium text-gray-900">Admin</div>
+                                                <div className="text-xs text-gray-500">Can manage customers and moderation</div>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setInviteRole('super_admin'); setRoleDropdownOpen(false); }}
+                                                className={`w-full px-4 py-3 text-left hover:bg-gray-50 border-t border-gray-100 ${inviteRole === 'super_admin' ? 'bg-emerald-50' : ''}`}
+                                            >
+                                                <div className="text-sm font-medium text-gray-900">Super Admin</div>
+                                                <div className="text-xs text-gray-500">Full platform access including settings</div>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-end gap-3 mt-6">
+                            <button
+                                onClick={closeModal}
+                                className="px-5 py-2.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleInvite}
+                                disabled={!inviteEmail.trim() || inviting}
+                                className="px-5 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-w-[100px]"
+                            >
+                                {inviting ? 'Sending...' : 'Send invite'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
