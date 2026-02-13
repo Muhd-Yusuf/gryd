@@ -9,3 +9,7 @@
 // - Native: import { useAgoraCall } from './useAgoraCall'
 export { useAgoraCall } from './useAgoraCall';
 export type { CallState, CallType, CallSession, IncomingCall, CallParticipant } from './useAgoraCall';
+
+// Scroll management for chat screens
+export { useScrollToBottom } from './useScrollToBottom';
+export type { UseScrollToBottomReturn } from './useScrollToBottom';

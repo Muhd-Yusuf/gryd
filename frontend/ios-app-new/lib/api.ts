@@ -13,47 +13,39 @@ const withApiSuffix = (baseUrl: string) => {
 
 const resolveBaseUrl = () => {
     const explicit = process.env.EXPO_PUBLIC_API_BASE_URL;
-    console.log('[API] Platform:', Platform.OS);
-    console.log('[API] EXPO_PUBLIC_API_BASE_URL:', explicit);
 
-    // For native apps (iOS/Android), use Expo's hostUri to get the dev machine's IP
+    // PRIORITY: Always use explicit env var if provided (for production builds)
+    if (explicit && !explicit.includes('localhost') && !explicit.includes('127.0.0.1')) {
+        return withApiSuffix(explicit);
+    }
+
+    // For native apps (iOS/Android) in development, use Expo's hostUri to get the dev machine's IP
     // This is necessary because "localhost" on mobile refers to the phone, not your computer
     if (Platform.OS !== 'web') {
         const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
-        console.log('[API] hostUri:', hostUri);
         if (hostUri) {
             const host = String(hostUri).split(':')[0];
             if (host && host !== 'localhost') {
                 // Use the same host IP but port 4000 for backend
-                const url = `http://${host}:4000/api`;
-                console.log('[API] Using hostUri-based URL for native:', url);
-                return url;
+                return `http://${host}:4000/api`;
             }
         }
         // Fallback for native when hostUri not available
         if (explicit) {
-            // Replace localhost with 10.0.2.2 for Android emulator or keep for iOS simulator
-            const url = withApiSuffix(explicit);
-            console.log('[API] Using explicit URL for native:', url);
-            return url;
+            return withApiSuffix(explicit);
         }
     }
 
     // For web, use explicit env var or window.location.origin
     if (Platform.OS === 'web') {
         if (explicit) {
-            const url = withApiSuffix(explicit);
-            console.log('[API] Using explicit URL for web:', url);
-            return url;
+            return withApiSuffix(explicit);
         }
         if (typeof window !== 'undefined') {
-            const url = withApiSuffix(window.location.origin);
-            console.log('[API] Using window.location.origin:', url);
-            return url;
+            return withApiSuffix(window.location.origin);
         }
     }
 
-    console.log('[API] Using fallback localhost:4000/api');
     return 'http://localhost:4000/api';
 };
 
@@ -734,41 +726,75 @@ const safeFetch = async (path, options) => {
     throw new Error(`Unable to reach API at ${candidates[0]}`);
 };
 
+// Bootstrap promise for deduplication
+let bootstrapPromise: Promise<void> | null = null;
+let bootstrapComplete = false;
+
 const ensureBootstrap = async () => {
-    // Try to init auth from storage if we don't have a user ID yet
-    if (!resolvedUserId && !authToken) {
-        console.log('[Bootstrap] No user ID or token, initializing auth from storage...');
-        await initAuth();
-    }
-
-    console.log('[Bootstrap] Current state - userId:', resolvedUserId, 'tenantId:', resolvedTenantId, 'hasToken:', !!authToken);
-
-    // If we have a user ID from auth, try to get tenant if needed
-    if (resolvedUserId) {
-        // If we still need tenant ID, try to get user's first tenant
-        if (!resolvedTenantId) {
-            console.log('[Bootstrap] User ID found but no tenant, fetching tenants...');
-            try {
-                const response = await safeFetch('/community/tenants', {
-                    method: 'GET',
-                    headers: buildHeaders({}),
-                });
-                const data = await parseJson(response);
-                console.log('[Bootstrap] Tenants response:', response.status, data);
-                if (response.ok && data?.data?.length > 0) {
-                    resolvedTenantId = data.data[0]._id;
-                    console.log('[Bootstrap] Set tenantId from first tenant:', resolvedTenantId);
-                }
-            } catch (err) {
-                console.error('[Bootstrap] Failed to fetch tenants:', err);
-                // Ignore - user might not have any tenants yet
-            }
-        }
+    // If already complete, return immediately
+    if (bootstrapComplete && resolvedTenantId) {
         return;
     }
 
-    // No authenticated user - do nothing (user must log in)
-    console.log('[Bootstrap] No authenticated user, skipping bootstrap');
+    // If bootstrap is in progress, wait for it
+    if (bootstrapPromise) {
+        return bootstrapPromise;
+    }
+
+    // Start bootstrap and store the promise
+    bootstrapPromise = (async () => {
+        try {
+            // Try to init auth from storage if we don't have a user ID yet
+            if (!resolvedUserId && !authToken) {
+                console.log('[Bootstrap] No user ID or token, initializing auth from storage...');
+                await initAuth();
+            }
+
+            console.log('[Bootstrap] Current state - userId:', resolvedUserId, 'tenantId:', resolvedTenantId, 'hasToken:', !!authToken);
+
+            // If we have a user ID from auth, try to get tenant if needed
+            if (resolvedUserId) {
+                // If we still need tenant ID, try to get user's first tenant
+                if (!resolvedTenantId) {
+                    console.log('[Bootstrap] User ID found but no tenant, fetching tenants...');
+                    try {
+                        const headers = buildHeaders({});
+                        console.log('[Bootstrap] Request headers:', JSON.stringify(headers));
+                        const response = await safeFetch('/community/tenants', {
+                            method: 'GET',
+                            headers,
+                        });
+                        console.log('[Bootstrap] Got response, status:', response.status);
+                        const data = await parseJson(response);
+                        console.log('[Bootstrap] Tenants response:', response.status, JSON.stringify(data));
+                        if (response.ok && data?.data?.length > 0) {
+                            resolvedTenantId = data.data[0]._id;
+                            console.log('[Bootstrap] Set tenantId from first tenant:', resolvedTenantId);
+                            bootstrapComplete = true;
+                        } else {
+                            console.log('[Bootstrap] No tenants found in response or response not ok');
+                            // Mark complete even if no tenants, to prevent infinite retries
+                            bootstrapComplete = true;
+                        }
+                    } catch (err: any) {
+                        console.error('[Bootstrap] Failed to fetch tenants:', err?.message || err);
+                        // Mark complete to prevent infinite retries
+                        bootstrapComplete = true;
+                    }
+                } else {
+                    bootstrapComplete = true;
+                }
+                return;
+            }
+
+            // No authenticated user - do nothing (user must log in)
+            console.log('[Bootstrap] No authenticated user, skipping bootstrap');
+        } finally {
+            bootstrapPromise = null;
+        }
+    })();
+
+    return bootstrapPromise;
 };
 
 export const getTenantId = () => resolvedTenantId || TENANT_ID;
@@ -1257,16 +1283,21 @@ export const updateVoiceChannelMuteState = (channelId: string, isMuted: boolean)
 
 // Subscribe to call events (SSE)
 // Returns a cleanup function. Call this after ensuring bootstrap is complete.
+// Note: EventSource (SSE) is only available on web. On native, call events come through WebSocket.
 export const subscribeToCallEvents = (onEvent: (event: string, data: any) => void): (() => void) => {
     const baseUrl = getApiBaseUrl();
     const userId = getUserId();
 
     if (!baseUrl || !userId) {
-        console.warn('[CallEvents] Cannot subscribe: missing baseUrl or userId. baseUrl:', baseUrl, 'userId:', userId);
         return () => {};
     }
 
-    console.log('[CallEvents] Subscribing with userId:', userId);
+    // Check if EventSource is available (web only)
+    // On React Native, EventSource doesn't exist - call events should come through WebSocket instead
+    if (typeof EventSource === 'undefined') {
+        console.log('[API] EventSource not available (native platform) - call events will come through WebSocket');
+        return () => {};
+    }
 
     // SSE doesn't support custom headers in most browsers, so pass auth via query params
     // The backend authMiddleware looks for userId in query params for SSE connections
@@ -1276,11 +1307,11 @@ export const subscribeToCallEvents = (onEvent: (event: string, data: any) => voi
     const eventSource = new EventSource(`${baseUrl}/media/calls/events?${params.toString()}`);
 
     eventSource.onopen = () => {
-        console.log('[CallEvents] Connected successfully');
+        // Connected
     };
 
-    eventSource.onerror = (error) => {
-        console.error('[CallEvents] Connection error:', error);
+    eventSource.onerror = () => {
+        // Connection error - will auto-reconnect
     };
 
     // Listen for specific call events
@@ -1290,15 +1321,14 @@ export const subscribeToCallEvents = (onEvent: (event: string, data: any) => voi
             try {
                 const data = JSON.parse(event.data);
                 onEvent(eventName, data);
-            } catch (err) {
-                console.error(`[CallEvents] Failed to parse ${eventName}:`, err);
+            } catch {
+                // Failed to parse event - ignore
             }
         });
     });
 
     // Return cleanup function
     return () => {
-        console.log('[CallEvents] Closing connection');
         eventSource.close();
     };
 };

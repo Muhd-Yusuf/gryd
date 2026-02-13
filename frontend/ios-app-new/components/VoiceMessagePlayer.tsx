@@ -14,7 +14,7 @@ import {
     Animated,
 } from 'react-native';
 import { Play, Pause } from 'lucide-react-native';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import { useAudioPlayer, AudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 interface VoiceMessagePlayerProps {
     source: string;
@@ -53,10 +53,45 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(durationMs || 0);
 
-    const soundRef = useRef<Audio.Sound | null>(null);
     const webAudioRef = useRef<HTMLAudioElement | null>(null);
     const progressAnim = useRef(new Animated.Value(0)).current;
     const playerId = useRef(`player-${Date.now()}-${Math.random()}`).current;
+
+    // Use expo-audio player hook for native playback
+    const player = useAudioPlayer(Platform.OS !== 'web' ? source : null);
+
+    // Listen to player status changes on native
+    useEffect(() => {
+        if (Platform.OS === 'web' || !player) return;
+
+        const updateStatus = () => {
+            try {
+                if (player.duration > 0) {
+                    setDuration(player.duration * 1000);
+                }
+                if (player.duration > 0) {
+                    const prog = player.currentTime / player.duration;
+                    setProgress(prog);
+                    setCurrentTime(player.currentTime * 1000);
+                    progressAnim.setValue(prog);
+                }
+                setIsPlaying(player.playing);
+                if (player.currentTime >= player.duration && player.duration > 0) {
+                    setIsPlaying(false);
+                    setProgress(0);
+                    setCurrentTime(0);
+                    progressAnim.setValue(0);
+                    currentlyPlayingId = null;
+                    stopCurrentAudio = null;
+                }
+            } catch (err) {
+                // Player may be disposed - ignore errors
+            }
+        };
+
+        const interval = setInterval(updateStatus, 100);
+        return () => clearInterval(interval);
+    }, [player, progressAnim]);
 
     // Cleanup on unmount
     useEffect(() => {
@@ -73,21 +108,21 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
                 webAudioRef.current = null;
             }
         } else {
-            if (soundRef.current) {
-                try {
-                    await soundRef.current.stopAsync();
-                    await soundRef.current.unloadAsync();
-                } catch (e) {
-                    // Ignore cleanup errors
+            // Wrap entire player access in try-catch to handle disposed native objects
+            try {
+                if (player && player.playing) {
+                    player.pause();
                 }
-                soundRef.current = null;
+            } catch (err) {
+                // Ignore errors during cleanup - the player may already be disposed
+                // This is expected when the component unmounts while audio is playing
             }
         }
         setIsPlaying(false);
         setProgress(0);
         setCurrentTime(0);
         progressAnim.setValue(0);
-    }, [progressAnim]);
+    }, [progressAnim, player]);
 
     // Stop this player if another one starts
     useEffect(() => {
@@ -109,7 +144,11 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
             if (Platform.OS === 'web') {
                 webAudioRef.current?.pause();
             } else {
-                await soundRef.current?.pauseAsync();
+                try {
+                    player?.pause();
+                } catch (err) {
+                    console.log('[VoiceMessagePlayer] Pause error (safe to ignore):', err);
+                }
             }
             setIsPlaying(false);
             currentlyPlayingId = null;
@@ -178,57 +217,16 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
 
     const playOnNative = async () => {
         // Set audio mode for playback
-        await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
+        await setAudioModeAsync({
+            allowsRecording: false,
+            playsInSilentMode: true,
         });
 
-        if (!soundRef.current) {
-            const { sound } = await Audio.Sound.createAsync(
-                { uri: source },
-                { shouldPlay: true },
-                onPlaybackStatusUpdate
-            );
-            soundRef.current = sound;
-        } else {
-            // Resume from paused state
-            await soundRef.current.playAsync();
-        }
-        setIsPlaying(true);
-        setIsLoading(false);
-    };
-
-    const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-        if (!status.isLoaded) {
-            if (status.error) {
-                console.error('[VoiceMessagePlayer] Native audio error:', status.error);
-            }
-            return;
-        }
-
-        if (status.durationMillis) {
-            setDuration(status.durationMillis);
-        }
-
-        if (status.positionMillis !== undefined && status.durationMillis) {
-            const prog = status.positionMillis / status.durationMillis;
-            setProgress(prog);
-            setCurrentTime(status.positionMillis);
-            progressAnim.setValue(prog);
-        }
-
-        if (status.didJustFinish) {
-            setIsPlaying(false);
-            setProgress(0);
-            setCurrentTime(0);
-            progressAnim.setValue(0);
-            currentlyPlayingId = null;
-            stopCurrentAudio = null;
-            // Unload to allow replay from beginning
-            soundRef.current?.unloadAsync();
-            soundRef.current = null;
+        if (player) {
+            player.seekTo(0);
+            player.play();
+            setIsPlaying(true);
+            setIsLoading(false);
         }
     };
 

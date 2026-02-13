@@ -93,6 +93,9 @@ const {
     listChannelMembers,
     addChannelMembers,
     removeChannelMember,
+    listBannedUsers,
+    banUser,
+    unbanUser,
 } = require('../controllers/communityController');
 const {
     getRoles,
@@ -153,6 +156,22 @@ router.delete('/subgrids/:subgridId/channels/:channelId', requireUser, loadSubgr
 router.get('/subgrids/:subgridId/channels/:channelId/members', requireUser, loadSubgrid, requireSubgridAdmin, listChannelMembers);
 router.post('/subgrids/:subgridId/channels/:channelId/members', requireUser, loadSubgrid, requireSubgridAdmin, addChannelMembers);
 router.delete('/subgrids/:subgridId/channels/:channelId/members/:userId', requireUser, loadSubgrid, requireSubgridAdmin, removeChannelMember);
+
+// Bans
+router.get('/subgrids/:subgridId/bans', requireUser, loadSubgrid, requireSubgridAdmin, listBannedUsers);
+router.post('/subgrids/:subgridId/bans', requireUser, loadSubgrid, requireSubgridAdmin, banUser);
+router.delete('/subgrids/:subgridId/bans/:odl', requireUser, loadSubgrid, requireSubgridAdmin, unbanUser);
+
+// Channel Messages (alternative routes that map channelId from URL to query)
+router.get('/subgrids/:subgridId/channels/:channelId/messages', loadSubgrid, requireSubgridRead, (req, res, next) => {
+    req.query.channelId = req.params.channelId;
+    next();
+}, listMessages);
+router.post('/subgrids/:subgridId/channels/:channelId/messages', loadSubgrid, requireSubgridWrite, (req, res, next) => {
+    req.body.channelId = req.params.channelId;
+    next();
+}, createMessage);
+router.delete('/subgrids/:subgridId/channels/:channelId/messages/:messageId', requireUser, loadSubgrid, requireSubgridRead, deleteMessage);
 
 // Categories
 router.get('/subgrids/:subgridId/categories', loadSubgrid, requireSubgridRead, listCategories);

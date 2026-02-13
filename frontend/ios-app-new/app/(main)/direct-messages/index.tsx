@@ -11,18 +11,19 @@ import {
     Modal,
     Pressable,
     Alert,
+    KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sun, Moon, X, Search, UserPlus, ChevronDown, Check, Phone, Video, MoreHorizontal, Trash2, File, Send, Paperclip, Smile, Mic, MessageSquare, Bell, AtSign, Eye, PhoneOff, PhoneIncoming, PhoneOutgoing, PhoneMissed, ArrowUpRight, ArrowDownLeft, MessageCircle, Trophy, User, LucideIcon } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync } from 'expo-audio';
 import { Platform } from 'react-native';
-import { communityGet, communityPost, communityDelete, getAuthUser, getTenantId, getUserId, resolveTenantId, resolveUserId, getOnlineStatus, updatePresence, setUserOnline, uploadFile } from '../../../lib/api';
+import { communityGet, communityPost, communityDelete, getTenantId, getUserId, getOnlineStatus, updatePresence, setUserOnline, uploadFile } from '../../../lib/api';
 import { useTheme } from '../../../lib/theme';
 import { formatRelativeTime, formatMessageDate, Attachment, twemojiUrl } from '../../../lib/chatMedia';
-import { getCachedUsers, cacheUsers, getAllCachedUsers, getCachedSubgrids, cacheSubgrids, getCachedFriends, cacheFriends, getCachedMessages, cacheMessages, removeMessageFromCache, addMessageToCache } from '../../../lib/userCache';
+import { cacheMessages, removeMessageFromCache, addMessageToCache, getCachedFriends, cacheFriends, getCachedSubgrids, cacheSubgrids } from '../../../lib/userCache';
 import { createOptimisticMessage, markMessageSent, markMessageFailed, isTempId, saveDraft, getDraft, clearDraft } from '../../../lib/messageQueue';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
@@ -31,11 +32,31 @@ import { useCallContext } from '../../../contexts/CallContext';
 import { CallModalDefault as CallModal } from '../../../components';
 import { diagnoseCallState } from '../../../lib/callTestUtils';
 import { useWebSocketContext } from '../../../contexts/WebSocketContext';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+    useCurrentUser,
+    useTenantId,
+    useSubgrids,
+    useMembers,
+    useFriends,
+    useFriendRequests,
+    useBlocks,
+    useChannels,
+    useDirectMessages,
+    useAcceptFriendRequest,
+    useDeclineFriendRequest,
+    useSendFriendRequest,
+    useRemoveFriend,
+    useBlockUser,
+    useUnblockUser,
+} from '../../../hooks/queries';
+import { queryKeys } from '../../../lib/queryClient';
 
 type Subgrid = {
     _id: string;
     name?: string;
     logoUrl?: string;
+    coverImageUrl?: string;
 };
 
 type Member = {
@@ -169,50 +190,34 @@ const normalizeAttachments = (message: Message) => {
 
 const DirectMessagesScreen = () => {
     const { colors, mode, toggleTheme } = useTheme();
-    const styles = useMemo(() => createStyles(colors), [colors]);
+    const insets = useSafeAreaInsets();
     const { width } = useWindowDimensions();
     const isCompact = width < 1200;
     const isMobile = width < 900;
+    // Calculate bottom padding for composer (handles iOS home indicator + Android nav buttons)
+    const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
+    const styles = useMemo(() => createStyles(colors, bottomInset), [colors, bottomInset]);
     const showCenterPanel = !isMobile;
     const router = useRouter();
     const params = useLocalSearchParams();
     const initialSubgridId = normalizeParam(params.subgridId);
-    const [userId, setUserId] = useState(getUserId() || '');
-    const [tenantId, setTenantId] = useState(getTenantId());
-    const [subgrids, setSubgrids] = useState<Subgrid[]>(() => {
-        const tid = getTenantId();
-        return tid ? (getCachedSubgrids(tid) || []) : [];
-    });
+    const queryClient = useQueryClient();
+    // Use cached subgridId for instant display if not provided in params
+    const cachedTenantId = getTenantId() || '';
+    const initialCachedSubgrids = getCachedSubgrids(cachedTenantId);
     const [subgridId, setSubgridId] = useState(() => {
         if (initialSubgridId) return initialSubgridId;
-        const tid = getTenantId();
-        const cached = tid ? getCachedSubgrids(tid) : null;
-        return cached && cached.length > 0 ? cached[0]._id : '';
-    });
-    const [members, setMembers] = useState<Member[]>([]);
-    const [friends, setFriends] = useState<string[]>(() => {
-        const tid = getTenantId();
-        const cached = tid ? getCachedSubgrids(tid) : null;
-        const sgId = cached && cached.length > 0 ? cached[0]._id : '';
-        if (sgId) {
-            const friendsData = getCachedFriends(sgId);
-            return friendsData?.friends || [];
+        // Use first cached subgrid if available for instant loading
+        if (initialCachedSubgrids && initialCachedSubgrids.length > 0) {
+            return initialCachedSubgrids[0]._id;
         }
-        return [];
+        return '';
     });
-    const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>(() => getAllCachedUsers() as Record<string, UserProfile>);
-    const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
-    const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
-    const [blockedIds, setBlockedIds] = useState<string[]>([]);
-    const [blockedUsers, setBlockedUsers] = useState<Record<string, UserProfile>>({});
-    const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
-    const [lastMessages, setLastMessages] = useState<Record<string, Message | null>>({});
+    const [activePeerId, setActivePeerId] = useState('');
     const [search, setSearch] = useState('');
     const [memberSearch, setMemberSearch] = useState('');
     const [addFriendOpen, setAddFriendOpen] = useState(false);
-    const [activePeerId, setActivePeerId] = useState('');
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [draft, setDraft] = useState(() => ''); // Will be updated when activePeerId changes
+    const [draft, setDraft] = useState(() => '');
     const [error, setError] = useState('');
     const [requestsOpen, setRequestsOpen] = useState(true);
     const [blockedOpen, setBlockedOpen] = useState(false);
@@ -220,7 +225,101 @@ const DirectMessagesScreen = () => {
     const [settingsModalOpen, setSettingsModalOpen] = useState(false);
     const [showSearchInput, setShowSearchInput] = useState(false);
     const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
-    const [channels, setChannels] = useState<{ _id: string; name?: string }[]>([]);
+    const [lastMessages, setLastMessages] = useState<Record<string, Message | null>>({});
+    // Local messages state for WebSocket real-time updates
+    const [localMessages, setLocalMessages] = useState<Message[]>([]);
+
+    // React Query hooks
+    const tenantIdQuery = useTenantId();
+    const tenantId = tenantIdQuery.data || getTenantId() || '';
+    const currentUserQuery = useCurrentUser();
+    const currentUserProfile = currentUserQuery.data ? {
+        id: currentUserQuery.data.userId,
+        firstName: currentUserQuery.data.firstName,
+        lastName: currentUserQuery.data.lastName,
+        email: currentUserQuery.data.email,
+        avatarUrl: currentUserQuery.data.avatarUrl,
+    } : null;
+    const userId = currentUserQuery.data?.userId || getUserId() || '';
+
+    const subgridsQuery = useSubgrids(tenantId);
+    const membersQuery = useMembers(subgridId);
+    const friendsQuery = useFriends(subgridId);
+    const incomingRequestsQuery = useFriendRequests(subgridId, 'incoming');
+    const outgoingRequestsQuery = useFriendRequests(subgridId, 'outgoing');
+    const blocksQuery = useBlocks(subgridId);
+    const channelsQuery = useChannels(subgridId);
+    const directMessagesQuery = useDirectMessages(subgridId, activePeerId);
+
+    // Mutation hooks
+    const acceptFriendRequestMutation = useAcceptFriendRequest(subgridId);
+    const declineFriendRequestMutation = useDeclineFriendRequest(subgridId);
+    const sendFriendRequestMutation = useSendFriendRequest(subgridId);
+    const removeFriendMutation = useRemoveFriend(subgridId);
+    const blockUserMutation = useBlockUser(subgridId);
+    const unblockUserMutation = useUnblockUser(subgridId);
+
+    // Derived data from React Query with instant cache fallback
+    // Use local cache for instant display while React Query hydrates from AsyncStorage
+    const cachedSubgrids = useMemo(() => getCachedSubgrids(tenantId), [tenantId]);
+    const cachedFriends = useMemo(() => getCachedFriends(subgridId), [subgridId]);
+
+    const subgrids: Subgrid[] = subgridsQuery.data || cachedSubgrids || [];
+    const members: Member[] = membersQuery.data || [];
+    const friendsData = friendsQuery.data || cachedFriends || { friends: [], users: {} };
+    const friends: string[] = friendsData.friends || [];
+    const friendUsers: Record<string, UserProfile> = friendsData.users || {};
+    const incomingRequests: FriendRequest[] = incomingRequestsQuery.data || [];
+    const outgoingRequests: FriendRequest[] = outgoingRequestsQuery.data || [];
+    const blocksData = blocksQuery.data || { blocked: [], users: {} };
+    const blockedIds: string[] = blocksData.blocked || [];
+    const blockedUsers: Record<string, UserProfile> = blocksData.users || {};
+    const channels: { _id: string; name?: string }[] = channelsQuery.data || [];
+
+    // Cache data when React Query returns fresh data
+    useEffect(() => {
+        if (subgridsQuery.data && tenantId) {
+            cacheSubgrids(tenantId, subgridsQuery.data);
+        }
+    }, [subgridsQuery.data, tenantId]);
+
+    useEffect(() => {
+        if (friendsQuery.data && subgridId) {
+            cacheFriends(subgridId, friendsQuery.data.friends || [], friendsQuery.data.users || {});
+        }
+    }, [friendsQuery.data, subgridId]);
+
+    // Merge React Query messages with local WebSocket messages
+    const messages = useMemo(() => {
+        const queryMessages = directMessagesQuery.data || [];
+        const allMessages = [...queryMessages];
+        // Add local messages that aren't already in the query data
+        localMessages.forEach(localMsg => {
+            if (!allMessages.find(m => m._id === localMsg._id)) {
+                allMessages.push(localMsg);
+            }
+        });
+        // Sort by createdAt
+        allMessages.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        return allMessages;
+    }, [directMessagesQuery.data, localMessages]);
+
+    // Sync local messages when query data changes
+    useEffect(() => {
+        if (directMessagesQuery.data) {
+            setLocalMessages([]);
+        }
+    }, [directMessagesQuery.data]);
+
+    // Set default subgrid when subgrids load
+    useEffect(() => {
+        if (subgrids.length > 0) {
+            setSubgridId((current) => {
+                if (!current) return subgrids[0]._id;
+                return current;
+            });
+        }
+    }, [subgrids]);
 
     // Settings state
     const [notifyAllMessages, setNotifyAllMessages] = useState(true);
@@ -241,11 +340,9 @@ const DirectMessagesScreen = () => {
     const onCallEnded = useCallback((callId: string, reason: string) => {
         // Call ended - refresh messages to show call history
         if (subgridId && activePeerId) {
-            communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`)
-                .then(response => setMessages(response?.data || []))
-                .catch(() => {});
+            directMessagesQuery.refetch();
         }
-    }, [subgridId, activePeerId]);
+    }, [subgridId, activePeerId, directMessagesQuery]);
 
     const onCallError = useCallback((err: Error) => {
         setCallError(err.message);
@@ -292,8 +389,10 @@ const DirectMessagesScreen = () => {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [recordingError, setRecordingError] = useState('');
     const recordingInterval = useRef<NodeJS.Timeout | null>(null);
-    const expoRecordingRef = useRef<Audio.Recording | null>(null);
     const recordingStartRef = useRef<number>(0);
+
+    // expo-audio recorder hook (for native platforms)
+    const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
     const emojis = [
         '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😌',
@@ -303,135 +402,21 @@ const DirectMessagesScreen = () => {
         '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '💕', '💖',
     ];
 
-    useEffect(() => {
-        let isActive = true;
-        getAuthUser()
-            .then((user) => {
-                if (!isActive || !user) return;
-                setCurrentUserProfile({
-                    id: user.userId,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    email: user.email,
-                    avatarUrl: user.avatarUrl,
-                });
-                // Also set userId from auth user if available
-                if (user.userId) {
-                    setUserId(user.userId);
-                }
-            })
-            .catch(() => {});
-        resolveTenantId()
-            .then((id) => {
-                if (isActive) {
-                    setTenantId(id || '');
-                }
-            })
-            .catch((err) => {
-                if (isActive) {
-                    setError(err.message || 'Failed to resolve tenant.');
-                }
-            });
-        // Also resolve userId asynchronously (important for mobile)
-        resolveUserId()
-            .then((id) => {
-                if (isActive && id) {
-                    setUserId(id);
-                }
-            })
-            .catch(() => {});
-        return () => {
-            isActive = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        const loadSubgrids = async () => {
-            if (!tenantId) return;
-
-            // Use cached subgrids first for instant display
-            const cached = getCachedSubgrids(tenantId);
-            if (cached && cached.length > 0) {
-                setSubgrids(cached);
-                if (!subgridId) {
-                    setSubgridId(cached[0]._id);
-                }
-            }
-
-            // Fetch fresh data in background
-            try {
-                const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const list = response?.data || [];
-                setSubgrids(list);
-                cacheSubgrids(tenantId, list);
-                if (!subgridId && list.length > 0) {
-                    setSubgridId(list[0]._id);
-                }
-            } catch (err: any) {
-                // Keep cached data on error
-                if (!cached || cached.length === 0) {
-                    setError(err.message || 'Failed to load subgrids.');
-                }
-            }
-        };
-
-        loadSubgrids();
-    }, [tenantId]);
+    // Auth and tenant are now handled by React Query hooks above
 
     const activeSubgrid = useMemo(
         () => subgrids.find((s) => s._id === subgridId) || null,
         [subgrids, subgridId]
     );
 
-    const refreshFriendState = async (activeSubgridId: string) => {
-        // Load from cache first for instant display
-        const cachedFriends = getCachedFriends(activeSubgridId);
-        if (cachedFriends) {
-            setFriends(cachedFriends.friends);
-            setFriendUsers(prev => ({ ...prev, ...cachedFriends.users }));
-        }
+    // Friends, members, channels, requests, blocks are now fetched via React Query hooks above
 
-        // Then fetch fresh data in background
-        try {
-            const results = await Promise.allSettled([
-                communityGet(`/subgrids/${activeSubgridId}/friends`),
-                communityGet(`/subgrids/${activeSubgridId}/friend-requests?direction=incoming`),
-                communityGet(`/subgrids/${activeSubgridId}/friend-requests?direction=outgoing`),
-                communityGet(`/subgrids/${activeSubgridId}/blocks`),
-            ]);
-            const [friendsRes, incomingRes, outgoingRes, blocksRes] = results;
-            if (friendsRes.status === 'fulfilled') {
-                const friendsList = friendsRes.value?.data?.friends || [];
-                const users = friendsRes.value?.data?.users || {};
-                setFriends(friendsList);
-                setFriendUsers(users);
-                // Cache for instant loading on next visit
-                cacheFriends(activeSubgridId, friendsList, users);
-            } else if (!cachedFriends) {
-                setFriends([]);
-            }
-            if (incomingRes.status === 'fulfilled') {
-                setIncomingRequests(incomingRes.value?.data || []);
-            } else {
-                setIncomingRequests([]);
-            }
-            if (outgoingRes.status === 'fulfilled') {
-                setOutgoingRequests(outgoingRes.value?.data || []);
-            } else {
-                setOutgoingRequests([]);
-            }
-            if (blocksRes.status === 'fulfilled') {
-                setBlockedIds(blocksRes.value?.data?.blocked || []);
-                const users = blocksRes.value?.data?.users || {};
-                setBlockedUsers(users);
-                cacheUsers(users);
-            } else {
-                setBlockedIds([]);
-                setBlockedUsers({});
-            }
-        } catch (err: any) {
-            setError(err.message || 'Failed to load friends.');
-        }
+    // Refetch friends and requests function (for use after actions)
+    const refreshFriendState = () => {
+        friendsQuery.refetch();
+        incomingRequestsQuery.refetch();
+        outgoingRequestsQuery.refetch();
+        blocksQuery.refetch();
     };
 
     // Fetch last message for each friend to show in conversation list
@@ -455,36 +440,6 @@ const DirectMessagesScreen = () => {
         setLastMessages(lastMsgs);
     };
 
-    useEffect(() => {
-        const loadMembers = async () => {
-            if (!subgridId) return;
-            setError('');
-            try {
-                const response = await communityGet(`/subgrids/${subgridId}/members`);
-                setMembers(response?.data || []);
-            } catch (err: any) {
-                setMembers([]);
-                setError(err.message || 'Failed to load members.');
-            }
-        };
-
-        const loadChannels = async () => {
-            if (!subgridId) return;
-            try {
-                const response = await communityGet(`/subgrids/${subgridId}/channels`);
-                setChannels(response?.data || []);
-            } catch {
-                setChannels([]);
-            }
-        };
-
-        if (subgridId) {
-            refreshFriendState(subgridId);
-            loadChannels();
-        }
-        loadMembers();
-    }, [subgridId]);
-
     // Fetch last messages when friends list changes
     useEffect(() => {
         if (subgridId && friends.length > 0) {
@@ -499,43 +454,16 @@ const DirectMessagesScreen = () => {
         }
     }, [activePeerId]);
 
+    // React Query now handles message fetching via useDirectMessages hook
+    // Set up polling fallback when WebSocket is not connected
     useEffect(() => {
-        const loadMessages = async () => {
-            if (!subgridId || !activePeerId) {
-                setMessages([]);
-                return;
-            }
-
-            // Load from cache first for instant display
-            const cached = getCachedMessages(activePeerId);
-            if (cached && cached.length > 0) {
-                setMessages(cached as Message[]);
-            }
-
-            // Then fetch fresh data in background
-            try {
-                const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`);
-                const msgs = response?.data || [];
-                setMessages(msgs);
-                cacheMessages(activePeerId, msgs);
-            } catch {
-                // Keep cached messages on error
-                if (!cached || cached.length === 0) {
-                    setMessages([]);
-                }
-            }
-        };
-
-        // Initial fetch
-        loadMessages();
-
-        // Only poll if WebSocket is not connected (fallback)
-        let interval: NodeJS.Timeout | null = null;
-        if (!isConnected) {
-            interval = setInterval(loadMessages, 10000); // Reduced frequency when polling
+        if (!isConnected && subgridId && activePeerId) {
+            const interval = setInterval(() => {
+                directMessagesQuery.refetch();
+            }, 10000);
+            return () => clearInterval(interval);
         }
-        return () => { if (interval) clearInterval(interval); };
-    }, [subgridId, activePeerId, isConnected]);
+    }, [subgridId, activePeerId, isConnected, directMessagesQuery]);
 
     // WebSocket subscription for real-time DM updates
     // Use refs to avoid stale closures
@@ -572,7 +500,7 @@ const DirectMessagesScreen = () => {
                     (msgSenderId === peerId && msgRecipientId === myUserId);
 
                 if (isForThisConversation) {
-                    setMessages((prev) => {
+                    setLocalMessages((prev) => {
                         // Avoid duplicates
                         if (prev.some((m) => m._id === data.message._id)) {
                             return prev;
@@ -586,7 +514,9 @@ const DirectMessagesScreen = () => {
         // Subscribe to message deletions
         const unsubMessageDeleted = subscribe('message_deleted', (data: any) => {
             if (data.roomType === 'dm' && data.messageId) {
-                setMessages((prev) => prev.filter((m) => m._id !== data.messageId));
+                setLocalMessages((prev) => prev.filter((m) => m._id !== data.messageId));
+                // Also invalidate the query to ensure cache is updated
+                queryClient.invalidateQueries({ queryKey: ['subgrids', subgridId, 'direct-messages', activePeerId] });
             }
         });
 
@@ -669,10 +599,15 @@ const DirectMessagesScreen = () => {
 
     // Clear selection if active peer is no longer in filtered list
     useEffect(() => {
-        if (activePeerId && filteredPeers.length > 0 && !filteredPeers.includes(activePeerId)) {
-            setActivePeerId('');
+        if (filteredPeers.length > 0) {
+            setActivePeerId((current) => {
+                if (current && !filteredPeers.includes(current)) {
+                    return '';
+                }
+                return current;
+            });
         }
-    }, [filteredPeers, activePeerId]);
+    }, [filteredPeers]);
 
     // Fetch initial online statuses and subscribe to WebSocket presence events
     useEffect(() => {
@@ -733,8 +668,7 @@ const DirectMessagesScreen = () => {
         if (!subgridId || !requestId) return;
         setError('');
         try {
-            await communityPost(`/subgrids/${subgridId}/friend-requests/${requestId}/accept`, {});
-            await refreshFriendState(subgridId);
+            await acceptFriendRequestMutation.mutateAsync(requestId);
         } catch (err: any) {
             setError(err.message || 'Failed to accept friend request');
         }
@@ -744,8 +678,7 @@ const DirectMessagesScreen = () => {
         if (!subgridId || !requestId) return;
         setError('');
         try {
-            await communityPost(`/subgrids/${subgridId}/friend-requests/${requestId}/decline`, {});
-            await refreshFriendState(subgridId);
+            await declineFriendRequestMutation.mutateAsync(requestId);
         } catch (err: any) {
             setError(err.message || 'Failed to decline request.');
         }
@@ -755,8 +688,7 @@ const DirectMessagesScreen = () => {
         if (!subgridId || !recipientId) return;
         setError('');
         try {
-            await communityPost(`/subgrids/${subgridId}/friend-requests`, { recipientId });
-            await refreshFriendState(subgridId);
+            await sendFriendRequestMutation.mutateAsync(recipientId);
         } catch (err: any) {
             setError(err.message || 'Failed to send request.');
         }
@@ -766,8 +698,7 @@ const DirectMessagesScreen = () => {
         if (!subgridId || !blockedId) return;
         setError('');
         try {
-            await communityDelete(`/subgrids/${subgridId}/friends/${blockedId}/block`);
-            await refreshFriendState(subgridId);
+            await unblockUserMutation.mutateAsync(blockedId);
         } catch (err: any) {
             setError(err.message || 'Failed to unblock user.');
         }
@@ -777,8 +708,7 @@ const DirectMessagesScreen = () => {
         if (!subgridId || !activePeerId) return;
         setError('');
         try {
-            await communityDelete(`/subgrids/${subgridId}/friends/${activePeerId}`);
-            await refreshFriendState(subgridId);
+            await removeFriendMutation.mutateAsync(activePeerId);
             setActivePeerId('');
         } catch (err: any) {
             setError(err.message || 'Failed to remove friend.');
@@ -790,11 +720,10 @@ const DirectMessagesScreen = () => {
         setError('');
         try {
             if (blockedSet.has(activePeerId)) {
-                await communityDelete(`/subgrids/${subgridId}/friends/${activePeerId}/block`);
+                await unblockUserMutation.mutateAsync(activePeerId);
             } else {
-                await communityPost(`/subgrids/${subgridId}/friends/${activePeerId}/block`, {});
+                await blockUserMutation.mutateAsync(activePeerId);
             }
-            await refreshFriendState(subgridId);
         } catch (err: any) {
             setError(err.message || 'Failed to update block status.');
         }
@@ -805,7 +734,7 @@ const DirectMessagesScreen = () => {
 
         // For temp messages (pending), just remove from state
         if (isTempId(messageId)) {
-            setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+            setLocalMessages((prev) => prev.filter((msg) => msg._id !== messageId));
             return;
         }
 
@@ -828,16 +757,18 @@ const DirectMessagesScreen = () => {
         const deletedMessage = messages.find((msg) => msg._id === messageId);
 
         // Remove immediately (optimistic)
-        setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+        setLocalMessages((prev) => prev.filter((msg) => msg._id !== messageId));
         removeMessageFromCache(activePeerId, messageId);
 
         try {
             await communityDelete(`/subgrids/${subgridId}/direct-messages/${messageId}`);
+            // Invalidate query to update cache
+            queryClient.invalidateQueries({ queryKey: ['subgrids', subgridId, 'direct-messages', activePeerId] });
         } catch (error: any) {
             console.error('Failed to delete message:', error);
             // Rollback on failure
             if (deletedMessage) {
-                setMessages((prev) => {
+                setLocalMessages((prev) => {
                     const newMessages = [...prev, deletedMessage].sort((a, b) => {
                         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -885,7 +816,7 @@ const DirectMessagesScreen = () => {
         );
 
         // Add to UI immediately
-        setMessages((prev) => [...prev, tempMessage as Message]);
+        setLocalMessages((prev) => [...prev, tempMessage as Message]);
 
         // Update last message immediately
         setLastMessages(prev => ({
@@ -929,7 +860,7 @@ const DirectMessagesScreen = () => {
             // Replace temp message with real one
             if (sendResult?.data) {
                 markMessageSent(tempMessage._id, sendResult.data);
-                setMessages((prev) => {
+                setLocalMessages((prev) => {
                     const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
                     const newMessages = [...filtered, sendResult.data];
                     cacheMessages(activePeerId, newMessages.filter(m => !isTempId(m._id)));
@@ -939,11 +870,13 @@ const DirectMessagesScreen = () => {
                     ...prev,
                     [activePeerId]: sendResult.data
                 }));
+                // Invalidate query to sync with server
+                queryClient.invalidateQueries({ queryKey: ['subgrids', subgridId, 'direct-messages', activePeerId] });
             }
         } catch (err: any) {
             // Mark as failed but keep visible
             markMessageFailed(tempMessage._id, err.message);
-            setMessages((prev) =>
+            setLocalMessages((prev) =>
                 prev.map((m) =>
                     m._id === tempMessage._id
                         ? { ...m, _status: 'failed', _error: err.message } as any
@@ -1073,23 +1006,21 @@ const DirectMessagesScreen = () => {
 
         try {
             // Request permissions
-            const permission = await Audio.requestPermissionsAsync();
+            const permission = await AudioModule.requestRecordingPermissionsAsync();
             if (!permission.granted) {
                 setRecordingError('Microphone permission denied');
                 return;
             }
 
             // Configure audio mode
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+            await setAudioModeAsync({
+                allowsRecording: true,
+                playsInSilentMode: true,
             });
 
             // Start recording
-            const { recording: newRecording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            expoRecordingRef.current = newRecording;
+            await audioRecorder.prepareToRecordAsync();
+            audioRecorder.record();
             setIsRecording(true);
             recordingInterval.current = setInterval(() => {
                 setRecordingDuration(prev => prev + 1);
@@ -1106,10 +1037,10 @@ const DirectMessagesScreen = () => {
             recordingInterval.current = null;
         }
 
-        if (expoRecordingRef.current) {
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
-                const uri = expoRecordingRef.current.getURI();
+                await audioRecorder.stop();
+                const uri = audioRecorder.uri;
                 const durationMs = Date.now() - recordingStartRef.current;
 
                 if (uri && subgridId) {
@@ -1133,16 +1064,14 @@ const DirectMessagesScreen = () => {
                                 durationMs,
                             }],
                         });
-                        // Refresh messages
-                        const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${activePeerId}`);
-                        setMessages(response?.data || []);
+                        // Refresh messages via React Query
+                        directMessagesQuery.refetch();
                     }
                 }
             } catch (err: any) {
                 setRecordingError(err.message || 'Failed to save recording.');
             } finally {
-                expoRecordingRef.current = null;
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                await setAudioModeAsync({ allowsRecording: false });
             }
         }
     };
@@ -1155,14 +1084,13 @@ const DirectMessagesScreen = () => {
             recordingInterval.current = null;
         }
 
-        if (expoRecordingRef.current) {
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
+                await audioRecorder.stop();
             } catch (err) {
                 // Ignore errors during cancel
             }
-            expoRecordingRef.current = null;
-            await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+            await setAudioModeAsync({ allowsRecording: false });
         }
     };
 
@@ -1210,11 +1138,21 @@ const DirectMessagesScreen = () => {
 
     return (
         <SafeAreaView style={styles.safe}>
-            <View style={[styles.page, isMobile && styles.pageMobile]}>
+            <KeyboardAvoidingView
+                style={[styles.page, isMobile && styles.pageMobile]}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            >
                 <View style={[styles.grid, isMobile && styles.gridMobile]}>
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
                         <View style={styles.leftRail}>
-                            <TouchableOpacity style={styles.railLogo} onPress={handleBack}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.railLogo,
+                                    activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }
+                                ]}
+                                onPress={handleBack}
+                            >
                                 {activeSubgrid ? (
                                     activeSubgrid.logoUrl ? (
                                         <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
@@ -1671,7 +1609,7 @@ const DirectMessagesScreen = () => {
                         </View>
                     )}
                 </View>
-            </View>
+            </KeyboardAvoidingView>
 
             {/* Emoji Picker Modal */}
             <Modal visible={showEmojiPicker} transparent animationType="fade" onRequestClose={() => setShowEmojiPicker(false)}>
@@ -1929,7 +1867,7 @@ const DirectMessagesScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset: number = 0) =>
     StyleSheet.create({
         safe: {
             flex: 1,
@@ -2413,7 +2351,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            padding: 12,
+            paddingTop: 12,
+            paddingHorizontal: 12,
+            paddingBottom: bottomInset + 12,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
@@ -2755,7 +2695,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         composerContainer: {
             borderTopWidth: 1,
             borderTopColor: colors.border,
-            padding: 12,
+            paddingTop: 12,
+            paddingHorizontal: 12,
+            paddingBottom: bottomInset + 12,
         },
         // Attachment preview
         attachmentPreviewRow: {

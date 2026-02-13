@@ -34,7 +34,7 @@ const FRIENDS_CACHE_KEY = 'gryd_friends_cache';
 const SUPER_ADMIN_CACHE_KEY = 'gryd_super_admin_cache';
 const CU_ADMIN_MEMBERS_CACHE_KEY = 'gryd_cu_admin_members_cache';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-const MESSAGE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes for messages
+const MESSAGE_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours for messages (was 5 min, too short)
 const ADMIN_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes for admin data
 
 // In-memory caches for instant access
@@ -102,8 +102,7 @@ export const loadAllCaches = async (): Promise<void> => {
         }
 
         cacheLoaded = true;
-    } catch (err) {
-        console.warn('[Cache] Failed to load caches:', err);
+    } catch {
         cacheLoaded = true;
     }
 };
@@ -119,8 +118,8 @@ const saveUserCache = (): void => {
     userSaveTimeout = setTimeout(async () => {
         try {
             await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(userCache));
-        } catch (err) {
-            console.warn('[Cache] Failed to save user cache:', err);
+        } catch {
+            // Silently fail - cache is best-effort
         }
     }, 1000);
 };
@@ -130,8 +129,8 @@ const saveMessagesCache = (): void => {
     msgSaveTimeout = setTimeout(async () => {
         try {
             await AsyncStorage.setItem(MESSAGES_CACHE_KEY, JSON.stringify(messagesCache));
-        } catch (err) {
-            console.warn('[Cache] Failed to save messages cache:', err);
+        } catch {
+            // Silently fail - cache is best-effort
         }
     }, 1000);
 };
@@ -143,8 +142,8 @@ const saveSubgridsCache = (): void => {
             if (subgridsCache) {
                 await AsyncStorage.setItem(SUBGRIDS_CACHE_KEY, JSON.stringify(subgridsCache));
             }
-        } catch (err) {
-            console.warn('[Cache] Failed to save subgrids cache:', err);
+        } catch {
+            // Silently fail - cache is best-effort
         }
     }, 1000);
 };
@@ -156,8 +155,8 @@ const saveFriendsCache = (): void => {
             if (friendsCache) {
                 await AsyncStorage.setItem(FRIENDS_CACHE_KEY, JSON.stringify(friendsCache));
             }
-        } catch (err) {
-            console.warn('[Cache] Failed to save friends cache:', err);
+        } catch {
+            // Silently fail - cache is best-effort
         }
     }, 1000);
 };
@@ -249,6 +248,13 @@ export const addMessageToCache = (peerId: string, message: CachedMessage): void 
             existing.cachedAt = Date.now();
             saveMessagesCache();
         }
+    } else {
+        // Create new cache entry if it doesn't exist
+        messagesCache[peerId] = {
+            messages: [message],
+            cachedAt: Date.now(),
+        };
+        saveMessagesCache();
     }
 };
 
@@ -484,8 +490,8 @@ const saveSuperAdminCache = (): void => {
             if (superAdminCache) {
                 await AsyncStorage.setItem(SUPER_ADMIN_CACHE_KEY, JSON.stringify(superAdminCache));
             }
-        } catch (err) {
-            console.warn('[Cache] Failed to save super admin cache:', err);
+        } catch {
+            // Silently fail - cache is best-effort
         }
     }, 1000);
 };
@@ -536,8 +542,8 @@ const saveCUAdminMembersCache = (): void => {
     cuAdminMembersSaveTimeout = setTimeout(async () => {
         try {
             await AsyncStorage.setItem(CU_ADMIN_MEMBERS_CACHE_KEY, JSON.stringify(cuAdminMembersCache));
-        } catch (err) {
-            console.warn('[Cache] Failed to save CU admin members cache:', err);
+        } catch {
+            // Silently fail - cache is best-effort
         }
     }, 1000);
 };
@@ -560,8 +566,8 @@ export const clearAllCaches = async (): Promise<void> => {
             AsyncStorage.removeItem(SUPER_ADMIN_CACHE_KEY),
             AsyncStorage.removeItem(CU_ADMIN_MEMBERS_CACHE_KEY),
         ]);
-    } catch (err) {
-        console.warn('[Cache] Failed to clear caches:', err);
+    } catch {
+        // Silently fail - cache clear is best-effort
     }
 };
 

@@ -15,25 +15,13 @@ import {
     Image,
     Platform,
     Animated,
-    Modal,
-    Pressable,
+    KeyboardAvoidingView,
+    InputAccessoryView,
 } from 'react-native';
-import { Trash2, Send, File, X, Plus, Smile, Image, Mic } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Trash2, Send, File, X, Plus, Smile, Mic } from 'lucide-react-native';
+import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync } from 'expo-audio';
 import { useTheme } from '../../lib/theme';
-
-// Common emoji set
-const EMOJI_SET = [
-    '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂',
-    '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛',
-    '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨',
-    '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔',
-    '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵',
-    '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐',
-    '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👋', '🙏',
-    '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
-    '💯', '💢', '💥', '💫', '💦', '💨', '🔥', '✨', '⭐', '🌟',
-];
 
 export interface PendingAttachment {
     uri: string;
@@ -56,6 +44,8 @@ export interface MessageComposerProps {
     onRemoveAttachment?: (index: number) => void;
     // Waveform animation style (mobile style with bars)
     showWaveform?: boolean;
+    // Safe area handling - when true, adds bottom padding for device safe area (iOS home indicator, Android nav buttons)
+    useSafeArea?: boolean;
 }
 
 export const MessageComposer: React.FC<MessageComposerProps> = ({
@@ -69,20 +59,29 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     pendingAttachments = [],
     onRemoveAttachment,
     showWaveform = true,
+    useSafeArea = true,
 }) => {
     const { colors } = useTheme();
-    const styles = useMemo(() => createStyles(colors), [colors]);
+    const insets = useSafeAreaInsets();
+    // Calculate bottom padding: use safe area inset on mobile (iOS/Android), minimum 12px
+    const bottomPadding = useSafeArea && Platform.OS !== 'web'
+        ? Math.max(insets.bottom, 12)
+        : 12;
+    const styles = useMemo(() => createStyles(colors, bottomPadding), [colors, bottomPadding]);
 
     const [message, setMessage] = useState('');
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
+    const inputRef = useRef<TextInput>(null);
+    const inputAccessoryViewID = 'messageComposerAccessory';
     const [recordingDuration, setRecordingDuration] = useState(0);
 
-    const recordingRef = useRef<Audio.Recording | null>(null);
     const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
     const waveformAnims = useRef(
         Array.from({ length: 20 }, () => new Animated.Value(0.3))
     ).current;
+
+    // expo-audio recorder hook (for native platforms)
+    const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
     const hasContent = message.trim().length > 0 || pendingAttachments.length > 0;
 
@@ -92,11 +91,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             if (recordingTimerRef.current) {
                 clearInterval(recordingTimerRef.current);
             }
-            if (recordingRef.current) {
-                recordingRef.current.stopAndUnloadAsync().catch(() => {});
+            if (audioRecorder.isRecording) {
+                audioRecorder.stop().catch(() => {});
             }
         };
-    }, []);
+    }, [audioRecorder]);
 
     // Waveform animation
     useEffect(() => {
@@ -128,9 +127,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         setMessage('');
     }, [message, pendingAttachments, hasContent, onSend]);
 
-    const handleEmojiSelect = useCallback((emoji: string) => {
-        setMessage(prev => prev + emoji);
-    }, []);
 
     const startRecording = useCallback(async () => {
         if (Platform.OS === 'web') {
@@ -139,19 +135,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         }
 
         try {
-            const permission = await Audio.requestPermissionsAsync();
+            const permission = await AudioModule.requestRecordingPermissionsAsync();
             if (!permission.granted) return;
 
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+            await setAudioModeAsync({
+                allowsRecording: true,
+                playsInSilentMode: true,
             });
 
-            const { recording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
+            await audioRecorder.prepareToRecordAsync();
+            audioRecorder.record();
 
-            recordingRef.current = recording;
             setIsRecording(true);
             setRecordingDuration(0);
 
@@ -161,10 +155,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         } catch (err) {
             console.error('Failed to start recording:', err);
         }
-    }, []);
+    }, [audioRecorder]);
 
     const stopRecording = useCallback(async (send: boolean) => {
-        if (!recordingRef.current) return;
+        if (!audioRecorder.isRecording) return;
 
         if (recordingTimerRef.current) {
             clearInterval(recordingTimerRef.current);
@@ -172,14 +166,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         }
 
         try {
-            await recordingRef.current.stopAndUnloadAsync();
-            const uri = recordingRef.current.getURI();
+            await audioRecorder.stop();
+            const uri = audioRecorder.uri;
 
             if (send && uri && onSendVoice) {
                 onSendVoice(uri, recordingDuration * 1000);
             }
 
-            recordingRef.current = null;
             setIsRecording(false);
             setRecordingDuration(0);
         } catch (err) {
@@ -187,7 +180,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             setIsRecording(false);
             setRecordingDuration(0);
         }
-    }, [recordingDuration, onSendVoice]);
+    }, [audioRecorder, recordingDuration, onSendVoice]);
 
     const formatDuration = (seconds: number): string => {
         const mins = Math.floor(seconds / 60);
@@ -299,17 +292,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
                 {/* Input wrapper */}
                 <View style={[styles.inputWrapper, { backgroundColor: colors.surfaceMuted }]}>
-                    {/* Emoji button */}
-                    <TouchableOpacity
-                        style={styles.inputIconBtn}
-                        onPress={() => setShowEmojiPicker(true)}
-                        disabled={disabled}
-                    >
-                        <Smile size={22} color={colors.textMuted} />
-                    </TouchableOpacity>
-
-                    {/* Text input */}
+                    {/* Text input - uses native keyboard with emoji support */}
                     <TextInput
+                        ref={inputRef}
                         style={[styles.textInput, { color: colors.text }]}
                         placeholder={placeholder}
                         placeholderTextColor={colors.textMuted}
@@ -318,118 +303,88 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         multiline
                         maxLength={2000}
                         editable={!disabled}
-                        returnKeyType="send"
+                        returnKeyType="default"
                         blurOnSubmit={false}
-                        onSubmitEditing={() => {
-                            if (hasContent) {
-                                handleSend();
-                            }
-                        }}
+                        // Enable native emoji keyboard access
+                        keyboardType="default"
+                        // iOS InputAccessoryView ID for keyboard toolbar
+                        inputAccessoryViewID={Platform.OS === 'ios' ? inputAccessoryViewID : undefined}
                     />
 
-                    {/* Image attachment - hide on mobile to make room for send button */}
-                    {onAttachImage && Platform.OS === 'web' && (
-                        <TouchableOpacity
-                            style={styles.inputIconBtn}
-                            onPress={onAttachImage}
-                            disabled={disabled}
-                        >
-                            <Image size={22} color={colors.textMuted} />
-                        </TouchableOpacity>
-                    )}
-
-                    {/* Send button inside input wrapper for mobile - always visible */}
-                    {Platform.OS !== 'web' && (
-                        <TouchableOpacity
-                            style={[
-                                styles.inlineSendButton,
-                                { backgroundColor: hasContent ? colors.primary : colors.surfaceMuted }
-                            ]}
-                            onPress={handleSend}
-                            disabled={disabled || !hasContent}
-                        >
-                            <Send
-                                size={20}
-                                color={hasContent ? '#FFFFFF' : colors.textMuted}
-                            />
-                        </TouchableOpacity>
-                    )}
+                    {/* Send button inside input wrapper - always visible */}
+                    <TouchableOpacity
+                        style={[
+                            styles.inlineSendButton,
+                            { backgroundColor: hasContent ? colors.primary : colors.surfaceMuted }
+                        ]}
+                        onPress={handleSend}
+                        disabled={disabled || !hasContent}
+                    >
+                        <Send
+                            size={20}
+                            color={hasContent ? '#FFFFFF' : colors.textMuted}
+                        />
+                    </TouchableOpacity>
                 </View>
 
-                {/* Send or Mic button - only show on web or when recording on mobile */}
-                {Platform.OS === 'web' ? (
-                    hasContent ? (
-                        <TouchableOpacity
-                            style={[styles.sendButton, { backgroundColor: colors.primary }]}
-                            onPress={handleSend}
-                            disabled={disabled}
-                        >
-                            <Send size={20} color="#FFFFFF" />
-                        </TouchableOpacity>
-                    ) : null
-                ) : (
-                    /* Mobile: show mic button only when no content */
-                    !hasContent && enableVoiceRecording ? (
-                        <TouchableOpacity
-                            style={[styles.iconButton, { backgroundColor: colors.surfaceMuted }]}
-                            onPress={startRecording}
-                            disabled={disabled}
-                        >
-                            <Mic size={24} color={colors.textMuted} />
-                        </TouchableOpacity>
-                    ) : null
+                {/* Mic button for voice recording - only on mobile when no content */}
+                {Platform.OS !== 'web' && !hasContent && enableVoiceRecording && (
+                    <TouchableOpacity
+                        style={[styles.iconButton, { backgroundColor: colors.surfaceMuted }]}
+                        onPress={startRecording}
+                        disabled={disabled}
+                    >
+                        <Mic size={24} color={colors.textMuted} />
+                    </TouchableOpacity>
+                )}
+
+                {/* Send button - only show on web */}
+                {Platform.OS === 'web' && hasContent && (
+                    <TouchableOpacity
+                        style={[styles.sendButton, { backgroundColor: colors.primary }]}
+                        onPress={handleSend}
+                        disabled={disabled}
+                    >
+                        <Send size={20} color="#FFFFFF" />
+                    </TouchableOpacity>
                 )}
             </View>
 
-            {/* Emoji picker modal */}
-            <Modal
-                visible={showEmojiPicker}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowEmojiPicker(false)}
-            >
-                <Pressable
-                    style={styles.emojiOverlay}
-                    onPress={() => setShowEmojiPicker(false)}
-                >
-                    <Pressable
-                        style={[styles.emojiPicker, { backgroundColor: colors.surface }]}
-                        onPress={e => e.stopPropagation()}
-                    >
-                        <View style={styles.emojiHeader}>
-                            <Text style={[styles.emojiTitle, { color: colors.text }]}>Emoji</Text>
-                            <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                                <X size={24} color={colors.textMuted} />
+            {/* iOS InputAccessoryView - keeps send button visible above keyboard */}
+            {Platform.OS === 'ios' && (
+                <InputAccessoryView nativeID={inputAccessoryViewID}>
+                    <View style={[styles.accessoryContainer, { backgroundColor: colors.appBg, borderTopColor: colors.border }]}>
+                        <View style={[styles.accessoryInputWrapper, { backgroundColor: colors.surfaceMuted }]}>
+                            <Text style={[styles.accessoryPreview, { color: colors.textMuted }]} numberOfLines={1}>
+                                {message || placeholder}
+                            </Text>
+                            <TouchableOpacity
+                                style={[
+                                    styles.accessorySendButton,
+                                    { backgroundColor: hasContent ? colors.primary : colors.surfaceMuted }
+                                ]}
+                                onPress={handleSend}
+                                disabled={disabled || !hasContent}
+                            >
+                                <Send
+                                    size={18}
+                                    color={hasContent ? '#FFFFFF' : colors.textMuted}
+                                />
                             </TouchableOpacity>
                         </View>
-                        <ScrollView style={styles.emojiScroll}>
-                            <View style={styles.emojiGrid}>
-                                {EMOJI_SET.map((emoji, i) => (
-                                    <TouchableOpacity
-                                        key={i}
-                                        style={styles.emojiBtn}
-                                        onPress={() => {
-                                            handleEmojiSelect(emoji);
-                                            setShowEmojiPicker(false);
-                                        }}
-                                    >
-                                        <Text style={styles.emojiText}>{emoji}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </ScrollView>
-                    </Pressable>
-                </Pressable>
-            </Modal>
+                    </View>
+                </InputAccessoryView>
+            )}
         </View>
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomPadding: number = 12) =>
     StyleSheet.create({
         container: {
             paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingTop: 12,
+            paddingBottom: bottomPadding,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
@@ -464,7 +419,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontSize: 15,
             maxHeight: 120,
             paddingVertical: 12,
-            paddingHorizontal: 4,
+            paddingHorizontal: 12,
             ...(Platform.OS === 'web' ? { outline: 'none' } : {}),
         },
         sendButton: {
@@ -573,45 +528,33 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
             marginLeft: 12,
         },
-        // Emoji picker
-        emojiOverlay: {
-            flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            justifyContent: 'center',
+        // iOS InputAccessoryView styles
+        accessoryContainer: {
+            flexDirection: 'row',
             alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderTopWidth: 1,
         },
-        emojiPicker: {
-            width: '90%',
-            maxWidth: 400,
-            maxHeight: 400,
+        accessoryInputWrapper: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
             borderRadius: 20,
-            padding: 16,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
         },
-        emojiHeader: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 12,
-        },
-        emojiTitle: {
-            fontSize: 18,
-            fontWeight: '600',
-        },
-        emojiScroll: {
+        accessoryPreview: {
             flex: 1,
+            fontSize: 14,
         },
-        emojiGrid: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-        },
-        emojiBtn: {
-            width: '12.5%',
-            aspectRatio: 1,
+        accessorySendButton: {
+            width: 32,
+            height: 32,
+            borderRadius: 16,
             justifyContent: 'center',
             alignItems: 'center',
-        },
-        emojiText: {
-            fontSize: 24,
+            marginLeft: 8,
         },
     });
 

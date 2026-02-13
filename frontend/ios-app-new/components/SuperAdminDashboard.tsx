@@ -12,6 +12,7 @@ import {
     ActivityIndicator,
     Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     LayoutDashboard,
     Users,
@@ -46,17 +47,7 @@ import { useRouter } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import {
-    getSuperAdminOverview,
-    getSuperAdminCustomers,
     getSuperAdminCustomerDetails,
-    updateSuperAdminCustomer,
-    getSuperAdminModeration,
-    getSuperAdminConfig,
-    updateSuperAdminConfig,
-    getSuperAdminTeamMembers,
-    inviteSuperAdminTeamMember,
-    deleteSuperAdminTeamMember,
-    suspendSuperAdminTeamMember,
     getAuthUser,
     logout,
     superAdminPost,
@@ -66,18 +57,7 @@ import {
     updateUserProfile,
 } from '../lib/api';
 import { useTheme } from '../lib/theme';
-import {
-    getCachedSuperAdminStats,
-    cacheSuperAdminStats,
-    getCachedSuperAdminCustomers,
-    cacheSuperAdminCustomers,
-    getCachedSuperAdminModeration,
-    cacheSuperAdminModeration,
-    getCachedSuperAdminConfig,
-    cacheSuperAdminConfig,
-    getCachedSuperAdminTeamMembers,
-    cacheSuperAdminTeamMembers,
-} from '../lib/userCache';
+import { useSuperAdminDashboard } from '../hooks/useSuperAdminData';
 
 type NavItem = 'overview' | 'customers' | 'moderation' | 'configuration';
 
@@ -205,9 +185,13 @@ const formatTimeAgo = (value?: string) => {
 const SuperAdminDashboard = () => {
     const { colors, mode, toggleTheme } = useTheme();
     const router = useRouter();
-    const styles = useMemo(() => createStyles(colors), [colors]);
     const { width } = useWindowDimensions();
     const isMobile = width < 900;
+    const insets = useSafeAreaInsets();
+    // Calculate safe area values for mobile
+    const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 16) : 0;
+    const topInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.top, 0) : 0;
+    const styles = useMemo(() => createStyles(colors, bottomInset, topInset), [colors, bottomInset, topInset]);
 
     // Navigation state
     const [activeNav, setActiveNav] = useState<NavItem>('overview');
@@ -215,34 +199,42 @@ const SuperAdminDashboard = () => {
     // Data states - no loading overlays for seamless UX
     const [error, setError] = useState('');
 
-    // Overview data
-    const [stats, setStats] = useState<OverviewStats>({
-        totalCustomers: 0,
-        activeChannels: 0,
-        totalMembers: 0,
-        activeSubscriptions: 0,
-    });
-    const [customerGrowth, setCustomerGrowth] = useState<ChartData>({ labels: [], values: [] });
-    const [systemUptime, setSystemUptime] = useState<ChartData>({ labels: [], values: [] });
+    // React Query state
     const [growthRange, setGrowthRange] = useState<GrowthRange>(7);
-    const [growthDropdownOpen, setGrowthDropdownOpen] = useState(false);
-    const [recentCustomers, setRecentCustomers] = useState<Customer[]>([]);
-
-    // Customer stats
-    const [customerStats, setCustomerStats] = useState<CustomerStats>({
-        totalCustomers: 0,
-        activeCustomers: 0,
-        trialCustomers: 0,
-        premiumCustomers: 0,
-    });
-
-    // Customers data
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [customersTotal, setCustomersTotal] = useState(0);
     const [customerSearch, setCustomerSearch] = useState('');
     const [customerStatusFilter, setCustomerStatusFilter] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [moderationStatusFilter, setModerationStatusFilter] = useState('pending');
+    const [moderationPage, setModerationPage] = useState(1);
+
+    // React Query hook for Super Admin data
+    const superAdminData = useSuperAdminDashboard({
+        growthRange,
+        customerSearch,
+        customerStatus: customerStatusFilter,
+        customerPage: currentPage,
+        customerLimit: rowsPerPage,
+        moderationStatus: moderationStatusFilter,
+        moderationPage,
+        moderationLimit: 50,
+    });
+
+    // Derived data from React Query
+    const stats: OverviewStats = superAdminData.stats;
+    const customerGrowth: ChartData = superAdminData.customerGrowth;
+    const systemUptime: ChartData = superAdminData.systemUptime;
+    const recentCustomers: Customer[] = superAdminData.recentCustomers;
+    const customerStats: CustomerStats = superAdminData.customerStats;
+    const customers: Customer[] = superAdminData.customers;
+    const customersTotal = superAdminData.customersTotal;
+    const moderationItems: ModerationItem[] = superAdminData.moderationItems;
+    const moderationTotal = superAdminData.moderationTotal;
+    const config = superAdminData.config;
+    const teamMembers: TeamMember[] = superAdminData.teamMembers;
+
+    // UI state
+    const [growthDropdownOpen, setGrowthDropdownOpen] = useState(false);
     const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
     const [customerFilterDropdownOpen, setCustomerFilterDropdownOpen] = useState(false);
 
@@ -250,11 +242,6 @@ const SuperAdminDashboard = () => {
     const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
     const [actionMenuPosition, setActionMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
     const [actionMenuCustomer, setActionMenuCustomer] = useState<Customer | null>(null);
-
-    // Moderation data
-    const [moderationItems, setModerationItems] = useState<ModerationItem[]>([]);
-    const [moderationTotal, setModerationTotal] = useState(0);
-    const [moderationStatusFilter, setModerationStatusFilter] = useState('pending');
 
     // Moderation settings (new design)
     const [moderationSettings, setModerationSettings] = useState<ModerationSettings>({
@@ -272,8 +259,7 @@ const SuperAdminDashboard = () => {
     const [adminUsername, setAdminUsername] = useState('');
     const [savingAdminInfo, setSavingAdminInfo] = useState(false);
 
-    // Team members
-    const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+    // Team members (now from React Query)
     const [inviteModalOpen, setInviteModalOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
     const [inviteFirstName, setInviteFirstName] = useState('');
@@ -305,8 +291,7 @@ const SuperAdminDashboard = () => {
         weeklyReports: true,
     });
 
-    // Configuration data
-    const [config, setConfig] = useState<SystemConfig | null>(null);
+    // Configuration data (config now from React Query)
     const [configEditing, setConfigEditing] = useState(false);
     const [configForm, setConfigForm] = useState<SystemConfig | null>(null);
 
@@ -350,23 +335,20 @@ const SuperAdminDashboard = () => {
         );
     }, [recentCustomers, searchQuery]);
 
-    // Load initial data
+    // Load initial admin user data
     useEffect(() => {
         loadInitialData();
     }, []);
 
-    // Load data when navigation changes
+    // Sync config form when config loads from React Query
     useEffect(() => {
-        if (activeNav === 'overview') {
-            loadOverviewData();
-        } else if (activeNav === 'customers') {
-            loadCustomersData();
-        } else if (activeNav === 'moderation') {
-            loadModerationData();
-        } else if (activeNav === 'configuration') {
-            loadConfigData();
+        if (config) {
+            setConfigForm((current) => {
+                if (!current) return config;
+                return current;
+            });
         }
-    }, [activeNav, customerSearch, customerStatusFilter, moderationStatusFilter, currentPage, rowsPerPage, growthRange]);
+    }, [config]);
 
     // Load notification preferences when notifications tab is selected
     useEffect(() => {
@@ -384,37 +366,9 @@ const SuperAdminDashboard = () => {
             setAdminLastName(user?.lastName || '');
             setAdminEmail(user?.email || '');
             setAdminUsername(user?.username || user?.email?.split('@')[0] || '');
-            await loadTeamMembers();
+            // Team members are now loaded via React Query (useSuperAdminDashboard)
         } catch (err: any) {
             console.error('Failed to load initial data:', err.message);
-        }
-    };
-
-    const loadTeamMembers = async () => {
-        // Try cache first for instant display
-        const cachedMembers = getCachedSuperAdminTeamMembers();
-        if (cachedMembers) {
-            setTeamMembers(cachedMembers);
-        }
-
-        try {
-            const response = await getSuperAdminTeamMembers({ limit: 50 });
-            console.log('[SuperAdmin] Team members response:', response);
-            if (response?.data?.users) {
-                const members: TeamMember[] = response.data.users.map((user: any) => ({
-                    _id: user._id,
-                    name: [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Unknown',
-                    email: user.email,
-                    role: user.role || 'admin',
-                    status: user.status || 'active',
-                    avatar: user.avatarUrl,
-                }));
-                setTeamMembers(members);
-                cacheSuperAdminTeamMembers(members);
-            }
-        } catch (err: any) {
-            console.error('Failed to load team members:', err.message);
-            // Keep cached data on error
         }
     };
 
@@ -489,7 +443,7 @@ const SuperAdminDashboard = () => {
         try {
             setInvitingMember(true);
             setError('');
-            await inviteSuperAdminTeamMember({
+            await superAdminData.inviteTeamMember.mutateAsync({
                 email: inviteEmail,
                 firstName: inviteFirstName || undefined,
                 lastName: inviteLastName || undefined,
@@ -500,7 +454,6 @@ const SuperAdminDashboard = () => {
             setInviteFirstName('');
             setInviteLastName('');
             setInviteRole('admin');
-            await loadTeamMembers();
         } catch (err: any) {
             setError(err.message || 'Failed to send invite');
         } finally {
@@ -514,12 +467,11 @@ const SuperAdminDashboard = () => {
         try {
             setDeletingTeamMember(true);
             setError('');
-            await deleteSuperAdminTeamMember(teamDeleteMemberId);
+            await superAdminData.deleteTeamMember.mutateAsync(teamDeleteMemberId);
             setTeamDeleteModalOpen(false);
             setTeamDeleteMemberId(null);
             setTeamDeleteConfirmChecked(false);
             setTeamActionMember(null);
-            await loadTeamMembers();
         } catch (err: any) {
             setError(err.message || 'Failed to delete team member');
         } finally {
@@ -536,12 +488,11 @@ const SuperAdminDashboard = () => {
         try {
             setSuspendingTeamMember(true);
             setError('');
-            await suspendSuperAdminTeamMember(teamSuspendMemberId, shouldSuspend);
+            await superAdminData.suspendTeamMember.mutateAsync({ userId: teamSuspendMemberId, suspend: shouldSuspend });
             setTeamSuspendModalOpen(false);
             setTeamSuspendMemberId(null);
             setTeamSuspendConfirmChecked(false);
             setTeamActionMember(null);
-            await loadTeamMembers();
         } catch (err: any) {
             setError(err.message || 'Failed to update team member status');
         } finally {
@@ -573,140 +524,8 @@ const SuperAdminDashboard = () => {
         closeTeamMemberActionMenu();
     };
 
-    const loadOverviewData = async () => {
-        // Try cache first for instant display (only for default 7-day range)
-        if (growthRange === 7) {
-            const cachedStats = getCachedSuperAdminStats();
-            if (cachedStats) {
-                setStats(cachedStats.stats);
-                if (cachedStats.customerGrowth) setCustomerGrowth(cachedStats.customerGrowth);
-                if (cachedStats.systemUptime) setSystemUptime(cachedStats.systemUptime);
-                if (cachedStats.recentCustomers) setRecentCustomers(cachedStats.recentCustomers);
-            }
-        }
-
-        try {
-            const response = await getSuperAdminOverview({ growthDays: growthRange });
-            if (response?.data) {
-                setStats(response.data.stats);
-                setCustomerGrowth(response.data.customerGrowth || { labels: [], values: [] });
-                setSystemUptime(response.data.systemUptime || { labels: [], values: [] });
-
-                // Also load recent customers for the overview table
-                const customersResponse = await getSuperAdminCustomers({ limit: 5 });
-                if (customersResponse?.data?.customers) {
-                    setRecentCustomers(customersResponse.data.customers);
-                }
-
-                // Cache only 7-day data (default view)
-                if (growthRange === 7) {
-                    cacheSuperAdminStats({
-                        stats: response.data.stats,
-                        customerGrowth: response.data.customerGrowth,
-                        systemUptime: response.data.systemUptime,
-                        recentCustomers: customersResponse?.data?.customers || [],
-                    });
-                }
-            }
-        } catch (err: any) {
-            console.error('Failed to load overview:', err.message);
-            // Keep cached data on error
-        }
-    };
-
-    const loadCustomersData = async () => {
-        // Try cache first for instant display (only for first page without filters)
-        if (currentPage === 1 && !customerSearch && customerStatusFilter === 'all') {
-            const cachedCustomers = getCachedSuperAdminCustomers();
-            if (cachedCustomers) {
-                setCustomers(cachedCustomers.customers);
-                setCustomersTotal(cachedCustomers.total);
-            }
-        }
-
-        try {
-            const response = await getSuperAdminCustomers({
-                q: customerSearch,
-                status: customerStatusFilter !== 'all' ? customerStatusFilter : undefined,
-                limit: rowsPerPage,
-                offset: (currentPage - 1) * rowsPerPage,
-            });
-            if (response?.data) {
-                setCustomers(response.data.customers);
-                setCustomersTotal(response.data.total);
-
-                // Calculate customer stats
-                const all = response.data.total;
-                const active = response.data.customers.filter((c: Customer) => c.status === 'active').length;
-
-                setCustomerStats({
-                    totalCustomers: all,
-                    activeCustomers: active,
-                    trialCustomers: 0,
-                    premiumCustomers: 0,
-                });
-
-                // Cache first page without filters
-                if (currentPage === 1 && !customerSearch && customerStatusFilter === 'all') {
-                    cacheSuperAdminCustomers(response.data.customers, response.data.total);
-                }
-            }
-        } catch (err: any) {
-            console.error('Failed to load customers:', err.message);
-            // Keep cached data on error
-        }
-    };
-
-    const loadModerationData = async () => {
-        // Try cache first for instant display (only for unfiltered view)
-        if (moderationStatusFilter === 'all') {
-            const cachedModeration = getCachedSuperAdminModeration();
-            if (cachedModeration) {
-                setModerationItems(cachedModeration);
-                setModerationTotal(cachedModeration.length);
-            }
-        }
-
-        try {
-            const response = await getSuperAdminModeration({
-                status: moderationStatusFilter !== 'all' ? moderationStatusFilter : undefined,
-                limit: 50,
-            });
-            if (response?.data) {
-                setModerationItems(response.data.items);
-                setModerationTotal(response.data.total);
-
-                // Cache unfiltered moderation data
-                if (moderationStatusFilter === 'all') {
-                    cacheSuperAdminModeration(response.data.items);
-                }
-            }
-        } catch (err: any) {
-            console.error('Failed to load moderation queue:', err.message);
-            // Keep cached data on error
-        }
-    };
-
-    const loadConfigData = async () => {
-        // Try cache first for instant display
-        const cachedConfig = getCachedSuperAdminConfig();
-        if (cachedConfig) {
-            setConfig(cachedConfig);
-            setConfigForm(cachedConfig);
-        }
-
-        try {
-            const response = await getSuperAdminConfig();
-            if (response?.data) {
-                setConfig(response.data);
-                setConfigForm(response.data);
-                cacheSuperAdminConfig(response.data);
-            }
-        } catch (err: any) {
-            console.error('Failed to load configuration:', err.message);
-            // Keep cached data on error
-        }
-    };
+    // Data loading is now handled by React Query via useSuperAdminDashboard hook
+    // The hook automatically fetches and caches: overview, customers, moderation, config, team
 
     const handleViewCustomer = async (customer: Customer) => {
         setViewingCustomer(customer);
@@ -753,20 +572,15 @@ const SuperAdminDashboard = () => {
     };
 
     const handleCustomerStatusUpdate = async (customerId: string, newStatus: string) => {
-        // Optimistic update - immediately update UI
-        setCustomers(prev => prev.map(c => c._id === customerId ? { ...c, status: newStatus } : c));
         if (viewingCustomer?._id === customerId) {
             setViewingCustomer(prev => prev ? { ...prev, status: newStatus } : null);
         }
         setActionMenuOpen(null);
 
         try {
-            await updateSuperAdminCustomer(customerId, { status: newStatus });
-            // Refresh in background to ensure data consistency
-            loadCustomersData(true);
+            await superAdminData.updateCustomer.mutateAsync({ customerId, data: { status: newStatus } });
         } catch (err: any) {
-            // Revert optimistic update on error
-            loadCustomersData(true);
+            superAdminData.refetchCustomers();
             setError(err.message || 'Failed to update customer status');
         }
     };
@@ -786,7 +600,8 @@ const SuperAdminDashboard = () => {
             setAddCustomerModalOpen(false);
             setNewCustomerName('');
             setNewCustomerEmail('');
-            loadCustomersData(true);
+            superAdminData.refetchCustomers();
+            superAdminData.refetchOverview();
         } catch (err: any) {
             setError(err.message || 'Failed to add customer');
         } finally {
@@ -798,8 +613,7 @@ const SuperAdminDashboard = () => {
         if (!configForm) return;
 
         try {
-            await updateSuperAdminConfig(configForm);
-            setConfig(configForm);
+            await superAdminData.updateConfig.mutateAsync(configForm);
             setConfigEditing(false);
         } catch (err: any) {
             setError(err.message || 'Failed to save configuration');
@@ -825,8 +639,6 @@ const SuperAdminDashboard = () => {
 
         const customerId = suspendCustomerId;
 
-        // Optimistic update
-        setCustomers(prev => prev.map(c => c._id === customerId ? { ...c, status: 'suspended' } : c));
         if (viewingCustomer?._id === customerId) {
             setViewingCustomer(prev => prev ? { ...prev, status: 'suspended' } : null);
         }
@@ -835,10 +647,9 @@ const SuperAdminDashboard = () => {
 
         try {
             setSuspendingCustomer(true);
-            await updateSuperAdminCustomer(customerId, { status: 'suspended' });
-            loadCustomersData(true);
+            await superAdminData.updateCustomer.mutateAsync({ customerId, data: { status: 'suspended' } });
         } catch (err: any) {
-            loadCustomersData(true);
+            superAdminData.refetchCustomers();
             setError(err.message || 'Failed to suspend customer');
         } finally {
             setSuspendingCustomer(false);
@@ -847,17 +658,14 @@ const SuperAdminDashboard = () => {
 
     // Handle revoke suspension (activate)
     const handleRevokeSuspension = async (customerId: string) => {
-        // Optimistic update
-        setCustomers(prev => prev.map(c => c._id === customerId ? { ...c, status: 'active' } : c));
         if (viewingCustomer?._id === customerId) {
             setViewingCustomer(prev => prev ? { ...prev, status: 'active' } : null);
         }
 
         try {
-            await updateSuperAdminCustomer(customerId, { status: 'active' });
-            loadCustomersData(true);
+            await superAdminData.updateCustomer.mutateAsync({ customerId, data: { status: 'active' } });
         } catch (err: any) {
-            loadCustomersData(true);
+            superAdminData.refetchCustomers();
             setError(err.message || 'Failed to revoke suspension');
         }
     };
@@ -876,9 +684,6 @@ const SuperAdminDashboard = () => {
 
         const customerId = deleteCustomerId;
 
-        // Optimistic update - remove from list immediately
-        setCustomers(prev => prev.filter(c => c._id !== customerId));
-        setCustomersTotal(prev => prev - 1);
         setDeleteModalOpen(false);
         setDeleteCustomerId(null);
         if (viewingCustomer?._id === customerId) {
@@ -888,9 +693,10 @@ const SuperAdminDashboard = () => {
         try {
             setDeletingCustomer(true);
             await superAdminPost(`/customers/${customerId}/delete`, {});
-            loadCustomersData(true);
+            superAdminData.refetchCustomers();
+            superAdminData.refetchOverview();
         } catch (err: any) {
-            loadCustomersData(true);
+            superAdminData.refetchCustomers();
             setError(err.message || 'Failed to delete customer');
         } finally {
             setDeletingCustomer(false);
@@ -2809,7 +2615,7 @@ const SuperAdminDashboard = () => {
 
     // Render mobile bottom navigation
     const renderMobileBottomNav = () => (
-        <View style={[styles.mobileBottomNav, styles.mobileBottomNavSafe]}>
+        <View style={[styles.mobileBottomNav, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             {([
                 { key: 'overview', Icon: LayoutDashboard, label: 'Overview' },
                 { key: 'customers', Icon: Users, label: 'Customers' },
@@ -2988,7 +2794,7 @@ const SuperAdminDashboard = () => {
     );
 };
 
-const createStyles = (colors: any) =>
+const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0) =>
     StyleSheet.create({
         container: {
             flex: 1,
@@ -5139,7 +4945,7 @@ const createStyles = (colors: any) =>
             gap: 10,
         },
         mobileBottomNavSafe: {
-            paddingBottom: Platform.OS === 'ios' ? 20 : 4,
+            paddingBottom: bottomInset,
         },
         actionMenuMobile: {
             backgroundColor: colors.surface,
@@ -5148,10 +4954,10 @@ const createStyles = (colors: any) =>
             width: '100%',
             paddingVertical: 12,
             paddingHorizontal: 8,
-            paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+            paddingBottom: bottomInset + 16,
         },
         containerMobileSafe: {
-            paddingTop: Platform.OS === 'ios' ? 44 : Platform.OS === 'android' ? 24 : 0,
+            paddingTop: topInset,
         },
     });
 

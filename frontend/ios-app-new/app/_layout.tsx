@@ -9,6 +9,7 @@ import { WebSocketProvider } from '../contexts/WebSocketContext';
 import { CallProvider } from '../contexts/CallContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { ToastProvider } from '../contexts/ToastContext';
+import { QueryProvider } from '../contexts/QueryProvider';
 import IncomingCallOverlay from '../components/IncomingCallOverlay';
 
 const RootStack = () => {
@@ -24,7 +25,6 @@ const RootStack = () => {
                 }}
             >
                 <Stack.Screen name="index" />
-                <Stack.Screen name="welcome" />
                 <Stack.Screen name="admin" />
                 <Stack.Screen name="super-admin" />
                 <Stack.Screen name="super-admin-signup" />
@@ -71,17 +71,19 @@ export default function RootLayout() {
     }
 
     return (
-        <ThemeProvider>
-            <ToastProvider>
-                <WebSocketProvider>
-                    <NotificationProvider>
-                        <CallProvider>
-                            <RootStack />
-                            <IncomingCallOverlay />
-                        </CallProvider>
-                    </NotificationProvider>
-                </WebSocketProvider>
-            </ToastProvider>
-        </ThemeProvider>
+        <QueryProvider>
+            <ThemeProvider>
+                <ToastProvider>
+                    <WebSocketProvider>
+                        <NotificationProvider>
+                            <CallProvider>
+                                <RootStack />
+                                <IncomingCallOverlay />
+                            </CallProvider>
+                        </NotificationProvider>
+                    </WebSocketProvider>
+                </ToastProvider>
+            </ThemeProvider>
+        </QueryProvider>
     );
 }

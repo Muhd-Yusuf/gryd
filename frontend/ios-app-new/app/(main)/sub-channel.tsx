@@ -13,8 +13,10 @@ import {
     Alert,
     Pressable,
     useWindowDimensions,
+    KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X, Calendar, BadgeCheck, Megaphone, Clock, MapPin, PlayCircle, File, Flag } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
@@ -27,8 +29,19 @@ import UserAvatar from '../../components/UserAvatar';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { useWebSocketContext } from '../../contexts/WebSocketContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { useScrollToBottom } from '../../hooks';
+import {
+    useSubgrids,
+    useChannels,
+    useMembers,
+    useEvents,
+    usePosts,
+    useSubgridMessages,
+    useMyRole,
+} from '../../hooks/queries';
 
 type Channel = {
     _id: string;
@@ -157,29 +170,30 @@ const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', '
 const SubChannelScreen = () => {
     const { colors } = useTheme();
     const { width } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
     const isMobile = width < 768;
-    const styles = useMemo(() => createStyles(colors, isMobile), [colors, isMobile]);
+    // Calculate bottom padding for composer (handles iOS home indicator + Android nav buttons)
+    const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
+    const styles = useMemo(() => createStyles(colors, isMobile, bottomInset), [colors, isMobile, bottomInset]);
     const router = useRouter();
     const navigation = useNavigation();
     const params = useLocalSearchParams();
+    const queryClient = useQueryClient();
     const initialSubgridId = normalizeParam(params.subgridId);
     const initialChannelId = normalizeParam(params.channelId);
     const initialChannelName = normalizeParam(params.channelName);
     const initialShowEvents = normalizeParam(params.showEvents) === 'true';
     const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
     const [tenantId, setTenantId] = useState(getTenantId());
-    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
-    const [channels, setChannels] = useState<Channel[]>([]);
-    const [members, setMembers] = useState<Member[]>([]);
-    const [events, setEvents] = useState<Event[]>([]);
     const [showEventsView, setShowEventsView] = useState(initialShowEvents);
     const [subgridId, setSubgridId] = useState(initialSubgridId);
     const [channelId, setChannelId] = useState(initialChannelId);
     const [channelName, setChannelName] = useState(initialChannelName);
-    const [posts, setPosts] = useState<Post[]>(() => {
+    // Local state for WebSocket real-time updates
+    const [localPosts, setLocalPosts] = useState<Post[]>(() => {
         return initialChannelId ? (getCachedChannelPosts(initialChannelId) || []) : [];
     });
-    const [messages, setMessages] = useState<Message[]>(() => {
+    const [localMessages, setLocalMessages] = useState<Message[]>(() => {
         return initialChannelId ? (getCachedChannelMessages(initialChannelId) as Message[] || []) : [];
     });
     const [draft, setDraft] = useState(() => initialChannelId ? getDraft(`channel_${initialChannelId}`) : '');
@@ -198,7 +212,6 @@ const SubChannelScreen = () => {
     const [reportTarget, setReportTarget] = useState<{ id: string; type: 'post' | 'message' } | null>(null);
     const [reportSubmitting, setReportSubmitting] = useState(false);
     const [attachments, setAttachments] = useState<Array<{ type: 'image' | 'file'; uri: string; name?: string; mimeType?: string }>>([]);
-    const [userRole, setUserRole] = useState<string | null>(null);
     const [likeLoading, setLikeLoading] = useState<string | null>(null);
     const [reshareLoading, setReshareLoading] = useState<string | null>(null);
     const [commentModalOpen, setCommentModalOpen] = useState(false);
@@ -212,9 +225,71 @@ const SubChannelScreen = () => {
     const recordingStartRef = useRef<number>(0);
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const activeAudioStreamRef = useRef<any | null>(null);
-    const expoRecordingRef = useRef<Audio.Recording | null>(null);
-    const feedScrollRef = useRef<ScrollView>(null);
 
+    // Centralized scroll management
+    const {
+        scrollViewRef: feedScrollRef,
+        keyboardAwareRef,
+        scrollToBottom,
+        handleContentSizeChange,
+        handleScrollViewLayout,
+        resetScrollState,
+        markForInitialScroll,
+    } = useScrollToBottom();
+
+    // expo-audio recorder hook (for native platforms)
+    const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+
+    // React Query hooks
+    const subgridsQuery = useSubgrids(tenantId);
+    const channelsQuery = useChannels(subgridId);
+    const membersQuery = useMembers(subgridId);
+    const eventsQuery = useEvents(subgridId);
+    const postsQuery = usePosts(subgridId);
+    const messagesQuery = useSubgridMessages(subgridId);
+    const myRoleQuery = useMyRole(subgridId);
+
+    // Derived state from React Query
+    const subgrids: Subgrid[] = subgridsQuery.data || [];
+    const channels: Channel[] = channelsQuery.data || [];
+    const members: Member[] = membersQuery.data || [];
+    const events: Event[] = eventsQuery.data || [];
+    const userRole = myRoleQuery.data || null;
+
+    // Merge React Query data with local WebSocket updates
+    const posts = useMemo(() => {
+        const queryPosts = postsQuery.data || [];
+        // Filter by channel if needed
+        const filteredPosts = channelId
+            ? queryPosts.filter((p: any) => !p.channelId || p.channelId === channelId)
+            : queryPosts;
+        // Merge with local posts (WebSocket updates)
+        const mergedPosts = [...filteredPosts];
+        localPosts.forEach(localPost => {
+            if (!mergedPosts.some(p => p._id === localPost._id)) {
+                mergedPosts.push(localPost);
+            }
+        });
+        return mergedPosts;
+    }, [postsQuery.data, localPosts, channelId]);
+
+    const messages = useMemo(() => {
+        const queryMessages = messagesQuery.data || [];
+        // Filter by channel if needed
+        const filteredMessages = channelId
+            ? queryMessages.filter((m: any) => !m.channelId || m.channelId === channelId)
+            : queryMessages;
+        // Merge with local messages (WebSocket updates)
+        const mergedMessages = [...filteredMessages];
+        localMessages.forEach(localMsg => {
+            if (!mergedMessages.some(m => m._id === localMsg._id)) {
+                mergedMessages.push(localMsg);
+            }
+        });
+        return mergedMessages;
+    }, [messagesQuery.data, localMessages, channelId]);
+
+    // Resolve tenant ID on mount
     useEffect(() => {
         let isActive = true;
         resolveTenantId()
@@ -233,73 +308,28 @@ const SubChannelScreen = () => {
         };
     }, []);
 
+    // Auto-select first subgrid if none selected
     useEffect(() => {
-        const loadSubgrids = async () => {
-            if (!tenantId) return;
-            if (subgridId) return;
-            try {
-                const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const list = response?.data || [];
-                setSubgrids(list);
-                if (!subgridId && list.length > 0) {
-                    setSubgridId(list[0]._id);
+        if (subgrids.length > 0) {
+            setSubgridId((current) => {
+                if (!current) return subgrids[0]._id;
+                return current;
+            });
+        }
+    }, [subgrids]);
+
+    // Auto-select first channel if none selected
+    useEffect(() => {
+        if (channels.length > 0) {
+            setChannelId((current) => {
+                if (!current) {
+                    setChannelName(channels[0].name || 'general');
+                    return channels[0]._id;
                 }
-            } catch (err: any) {
-                setError(err.message || 'Failed to load subgrids.');
-            }
-        };
-
-        loadSubgrids();
-    }, [tenantId, subgridId]);
-
-    useEffect(() => {
-        const loadChannels = async () => {
-            if (!subgridId) return;
-            if (channelId) return;
-            try {
-                const response = await communityGet(`/subgrids/${subgridId}/channels`);
-                const list = response?.data || [];
-                setChannels(list);
-                if (!channelId && list.length > 0) {
-                    setChannelId(list[0]._id);
-                    setChannelName(list[0].name || 'general');
-                }
-            } catch (err: any) {
-                setError(err.message || 'Failed to load channels.');
-            }
-        };
-
-        loadChannels();
-    }, [subgridId, channelId]);
-
-    useEffect(() => {
-        const loadMembers = async () => {
-            if (!subgridId) return;
-            try {
-                const response = await communityGet(`/subgrids/${subgridId}/members`);
-                setMembers(response?.data || []);
-            } catch (err: any) {
-                setMembers([]);
-                setError(err.message || 'Failed to load members.');
-            }
-        };
-
-        loadMembers();
-    }, [subgridId]);
-
-    useEffect(() => {
-        const loadEvents = async () => {
-            if (!subgridId) return;
-            try {
-                const response = await communityGet(`/subgrids/${subgridId}/events`);
-                setEvents(response?.data || []);
-            } catch (err: any) {
-                setEvents([]);
-            }
-        };
-
-        loadEvents();
-    }, [subgridId]);
+                return current;
+            });
+        }
+    }, [channels]);
 
     // Load draft when switching channels
     useEffect(() => {
@@ -308,51 +338,18 @@ const SubChannelScreen = () => {
         }
     }, [channelId]);
 
+    // Cache posts and messages when React Query data changes
     useEffect(() => {
-        const loadFeed = async () => {
-            if (!subgridId || !channelId) return;
-            setError('');
+        if (channelId && postsQuery.data) {
+            cacheChannelPosts(channelId, postsQuery.data);
+        }
+    }, [channelId, postsQuery.data]);
 
-            // Load from cache first for instant display
-            const cachedPosts = getCachedChannelPosts(channelId);
-            const cachedMessages = getCachedChannelMessages(channelId);
-            if (cachedPosts && cachedPosts.length > 0) {
-                setPosts(cachedPosts);
-            }
-            if (cachedMessages && cachedMessages.length > 0) {
-                setMessages(cachedMessages as Message[]);
-            }
-
-            // Then fetch fresh data in background
-            try {
-                const [postsRes, messagesRes] = await Promise.allSettled([
-                    communityGet(`/subgrids/${subgridId}/posts?channelId=${channelId}`),
-                    communityGet(`/subgrids/${subgridId}/messages?channelId=${channelId}`),
-                ]);
-                if (postsRes.status === 'fulfilled') {
-                    const freshPosts = postsRes.value?.data || [];
-                    setPosts(freshPosts);
-                    cacheChannelPosts(channelId, freshPosts);
-                } else if (!cachedPosts) {
-                    setPosts([]);
-                }
-                if (messagesRes.status === 'fulfilled') {
-                    const freshMessages = messagesRes.value?.data || [];
-                    setMessages(freshMessages);
-                    cacheChannelMessages(channelId, freshMessages);
-                } else if (!cachedMessages) {
-                    setMessages([]);
-                }
-            } catch (err: any) {
-                // Keep cached data on error
-                if (!cachedPosts && !cachedMessages) {
-                    setError(err.message || 'Failed to load channel updates.');
-                }
-            }
-        };
-
-        loadFeed();
-    }, [subgridId, channelId]);
+    useEffect(() => {
+        if (channelId && messagesQuery.data) {
+            cacheChannelMessages(channelId, messagesQuery.data);
+        }
+    }, [channelId, messagesQuery.data]);
 
     // WebSocket: Join channel room and subscribe to new messages
     useEffect(() => {
@@ -364,18 +361,20 @@ const SubChannelScreen = () => {
         // Subscribe to new messages
         const unsubscribeNewMessage = subscribe('new_message', (data) => {
             if (data.roomType === 'channel' && data.roomId === channelId) {
-                setMessages((prev) => {
+                setLocalMessages((prev) => {
                     // Avoid duplicates
                     if (prev.some(m => m._id === data.message._id)) return prev;
                     return [...prev, data.message];
                 });
+                // Also add to cache
+                addChannelMessageToCache(channelId, data.message);
             }
         });
 
         // Subscribe to message updates
         const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
             if (data.roomType === 'channel' && data.roomId === channelId) {
-                setMessages((prev) => prev.map(m =>
+                setLocalMessages((prev) => prev.map(m =>
                     m._id === data.message._id ? data.message : m
                 ));
             }
@@ -384,7 +383,8 @@ const SubChannelScreen = () => {
         // Subscribe to message deletions
         const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
             if (data.roomType === 'channel' && data.roomId === channelId) {
-                setMessages((prev) => prev.filter(m => m._id !== data.messageId));
+                setLocalMessages((prev) => prev.filter(m => m._id !== data.messageId));
+                removeChannelMessageFromCache(channelId, data.messageId);
             }
         });
 
@@ -406,42 +406,41 @@ const SubChannelScreen = () => {
         // Subscribe to post events
         const unsubscribePostCreated = subscribe('post_created', (data) => {
             if (data.subgridId === subgridId) {
-                setPosts((prev) => [data.post, ...prev]);
+                setLocalPosts((prev) => [data.post, ...prev]);
             }
         });
 
         const unsubscribePostUpdated = subscribe('post_updated', (data) => {
             if (data.subgridId === subgridId) {
-                setPosts((prev) => prev.map(p =>
+                setLocalPosts((prev) => prev.map(p =>
                     p._id === data.post._id ? data.post : p
                 ));
+                updateChannelPostInCache(channelId, data.post);
             }
         });
 
         const unsubscribePostDeleted = subscribe('post_deleted', (data) => {
             if (data.subgridId === subgridId) {
-                setPosts((prev) => prev.filter(p => p._id !== data.postId));
+                setLocalPosts((prev) => prev.filter(p => p._id !== data.postId));
             }
         });
 
-        // Subscribe to channel events
+        // Subscribe to channel events - invalidate React Query cache
         const unsubscribeChannelCreated = subscribe('channel_created', (data) => {
             if (data.subgridId === subgridId) {
-                setChannels((prev) => [...prev, data.channel]);
+                queryClient.invalidateQueries({ queryKey: ['subgrids', subgridId, 'channels'] });
             }
         });
 
         const unsubscribeChannelUpdated = subscribe('channel_updated', (data) => {
             if (data.subgridId === subgridId) {
-                setChannels((prev) => prev.map(c =>
-                    c._id === data.channel._id ? data.channel : c
-                ));
+                queryClient.invalidateQueries({ queryKey: ['subgrids', subgridId, 'channels'] });
             }
         });
 
         const unsubscribeChannelDeleted = subscribe('channel_deleted', (data) => {
             if (data.subgridId === subgridId) {
-                setChannels((prev) => prev.filter(c => c._id !== data.channelId));
+                queryClient.invalidateQueries({ queryKey: ['subgrids', subgridId, 'channels'] });
             }
         });
 
@@ -454,21 +453,7 @@ const SubChannelScreen = () => {
             unsubscribeChannelUpdated();
             unsubscribeChannelDeleted();
         };
-    }, [subgridId, isConnected, subscribe, joinRoom, leaveRoom]);
-
-    // Fetch user role in subgrid
-    useEffect(() => {
-        const fetchRole = async () => {
-            if (!subgridId) return;
-            try {
-                const response = await communityGet(`/subgrids/${subgridId}/my-role`);
-                setUserRole(response?.data?.role || null);
-            } catch {
-                setUserRole(null);
-            }
-        };
-        fetchRole();
-    }, [subgridId]);
+    }, [subgridId, channelId, isConnected, subscribe, joinRoom, leaveRoom, queryClient]);
 
     // Sort ascending (oldest first) so newest messages appear at the bottom like WhatsApp
     // Mark items with _isPost flag so we can determine the correct API endpoint
@@ -483,14 +468,21 @@ const SubChannelScreen = () => {
         });
     }, [messages, posts]);
 
-    // Scroll to bottom when new messages arrive (WhatsApp-style)
+    // Scroll to bottom on initial load only (WhatsApp-style)
+    const lastChannelIdRef = useRef<string | null>(null);
+
     useEffect(() => {
-        if (feedItems.length > 0 && feedScrollRef.current) {
-            setTimeout(() => {
-                feedScrollRef.current?.scrollToEnd({ animated: true });
-            }, 100);
+        // Reset scroll state when channel changes
+        if (channelId !== lastChannelIdRef.current) {
+            resetScrollState();
+            lastChannelIdRef.current = channelId;
         }
-    }, [feedItems.length]);
+
+        // Mark for initial scroll when content loads
+        if (feedItems.length > 0) {
+            markForInitialScroll();
+        }
+    }, [feedItems.length, channelId, resetScrollState, markForInitialScroll]);
 
     const openReportModal = (id: string, type: 'post' | 'message') => {
         setReportTarget({ id, type });
@@ -646,7 +638,7 @@ const SubChannelScreen = () => {
 
         // For temp messages, just remove immediately
         if (isTempId(item._id)) {
-            setMessages((prev) => prev.filter((m) => m._id !== item._id));
+            setLocalMessages((prev) => prev.filter((m) => m._id !== item._id));
             setMenuOpen(null);
             return;
         }
@@ -681,7 +673,7 @@ const SubChannelScreen = () => {
         if (isPost) {
             setPosts((prev) => prev.filter((p) => p._id !== itemId));
         } else {
-            setMessages((prev) => prev.filter((m) => m._id !== itemId));
+            setLocalMessages((prev) => prev.filter((m) => m._id !== itemId));
             removeChannelMessageFromCache(channelId, itemId);
         }
         setMenuOpen(null);
@@ -702,7 +694,7 @@ const SubChannelScreen = () => {
                     return aTime - bTime;
                 }));
             } else {
-                setMessages((prev) => [...prev, deletedItem].sort((a, b) => {
+                setLocalMessages((prev) => [...prev, deletedItem].sort((a, b) => {
                     const aTime = new Date(a.createdAt || 0).getTime();
                     const bTime = new Date(b.createdAt || 0).getTime();
                     return aTime - bTime;
@@ -742,12 +734,10 @@ const SubChannelScreen = () => {
         );
 
         // Add to UI immediately
-        setMessages((prev) => [...prev, tempMessage as Message]);
+        setLocalMessages((prev) => [...prev, tempMessage as Message]);
 
         // Scroll to bottom
-        setTimeout(() => {
-            feedScrollRef.current?.scrollToEnd({ animated: true });
-        }, 50);
+        setTimeout(() => scrollToBottom(true), 100);
 
         try {
             // Upload attachments in parallel
@@ -785,7 +775,7 @@ const SubChannelScreen = () => {
             // Replace temp message with real one
             if (sendResult?.data) {
                 markMessageSent(tempMessage._id, sendResult.data);
-                setMessages((prev) => {
+                setLocalMessages((prev) => {
                     const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
                     const newMessages = [...filtered, sendResult.data];
                     cacheChannelMessages(channelId, newMessages.filter(m => !isTempId(m._id)));
@@ -795,7 +785,7 @@ const SubChannelScreen = () => {
         } catch (err: any) {
             // Mark message as failed but keep visible
             markMessageFailed(tempMessage._id, err.message);
-            setMessages((prev) =>
+            setLocalMessages((prev) =>
                 prev.map((m) =>
                     m._id === tempMessage._id
                         ? { ...m, _status: 'failed', _error: err.message } as any
@@ -820,10 +810,8 @@ const SubChannelScreen = () => {
         );
 
         // Add to UI immediately
-        setMessages((prev) => [...prev, tempMessage as Message]);
-        setTimeout(() => {
-            feedScrollRef.current?.scrollToEnd({ animated: true });
-        }, 50);
+        setLocalMessages((prev) => [...prev, tempMessage as Message]);
+        setTimeout(() => scrollToBottom(true), 100);
 
         try {
             const sendResult = await communityPost(`/subgrids/${subgridId}/messages`, {
@@ -835,7 +823,7 @@ const SubChannelScreen = () => {
 
             if (sendResult?.data) {
                 markMessageSent(tempMessage._id, sendResult.data);
-                setMessages((prev) => {
+                setLocalMessages((prev) => {
                     const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
                     const newMessages = [...filtered, sendResult.data];
                     cacheChannelMessages(channelId, newMessages.filter(m => !isTempId(m._id)));
@@ -844,7 +832,7 @@ const SubChannelScreen = () => {
             }
         } catch (err: any) {
             markMessageFailed(tempMessage._id, err.message);
-            setMessages((prev) =>
+            setLocalMessages((prev) =>
                 prev.map((m) =>
                     m._id === tempMessage._id
                         ? { ...m, _status: 'failed', _error: err.message } as any
@@ -899,7 +887,7 @@ const SubChannelScreen = () => {
                         URL.revokeObjectURL(blobUrl);
 
                         if (result?.success && result?.data && subgridId && channelId) {
-                            await communityPost(`/subgrids/${subgridId}/messages`, {
+                            const messageResponse = await communityPost(`/subgrids/${subgridId}/messages`, {
                                 channelId,
                                 body: '',
                                 kind: 'audio',
@@ -911,9 +899,13 @@ const SubChannelScreen = () => {
                                     durationMs,
                                 }],
                             });
-                            // Refresh messages
-                            const response = await communityGet(`/subgrids/${subgridId}/messages?channelId=${channelId}`);
-                            setMessages(response?.data || []);
+                            // Add the new message to local state
+                            if (messageResponse?.data) {
+                                setLocalMessages((prev) => {
+                                    if (prev.some((m) => m._id === messageResponse.data._id)) return prev;
+                                    return [...prev, messageResponse.data];
+                                });
+                            }
                         }
                     } catch (uploadErr: any) {
                         console.error('Failed to upload voice note:', uploadErr);
@@ -937,23 +929,21 @@ const SubChannelScreen = () => {
             return;
         }
 
-        // Native recording using expo-av
+        // Native recording using expo-audio
         try {
-            const permission = await Audio.requestPermissionsAsync();
+            const permission = await AudioModule.requestRecordingPermissionsAsync();
             if (!permission.granted) {
                 setRecordingError('Microphone permission denied');
                 return;
             }
 
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+            await setAudioModeAsync({
+                allowsRecording: true,
+                playsInSilentMode: true,
             });
 
-            const { recording: newRecording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            expoRecordingRef.current = newRecording;
+            await audioRecorder.prepareToRecordAsync();
+            audioRecorder.record();
             setRecording(true);
             recordingIntervalRef.current = setInterval(() => {
                 setRecordingDuration((prev) => prev + 1);
@@ -977,22 +967,31 @@ const SubChannelScreen = () => {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
-                const uri = expoRecordingRef.current.getURI();
+                await audioRecorder.stop();
+                const uri = audioRecorder.uri;
                 const durationMs = Date.now() - recordingStartRef.current;
 
                 if (uri && subgridId && channelId) {
                     // Upload the voice note
-                    const result = await uploadFile(
-                        { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' },
-                        { type: 'voice-note', subgridId }
-                    );
+                    console.log('[Voice Note Channel] Starting upload, URI:', uri);
+                    let result;
+                    try {
+                        result = await uploadFile(
+                            { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' },
+                            { type: 'voice-note', subgridId }
+                        );
+                        console.log('[Voice Note Channel] Upload result:', result);
+                    } catch (uploadError: any) {
+                        console.error('[Voice Note Channel] Upload failed:', uploadError?.message || uploadError);
+                        setError('Failed to upload voice note.');
+                        return;
+                    }
 
                     if (result?.success && result?.data) {
-                        await communityPost(`/subgrids/${subgridId}/messages`, {
+                        const messageResponse = await communityPost(`/subgrids/${subgridId}/messages`, {
                             channelId,
                             body: '',
                             kind: 'audio',
@@ -1004,17 +1003,20 @@ const SubChannelScreen = () => {
                                 durationMs,
                             }],
                         });
-                        // Refresh messages
-                        const response = await communityGet(`/subgrids/${subgridId}/messages?channelId=${channelId}`);
-                        setMessages(response?.data || []);
+                        // Add the new message to local state
+                        if (messageResponse?.data) {
+                            setLocalMessages((prev) => {
+                                if (prev.some((m) => m._id === messageResponse.data._id)) return prev;
+                                return [...prev, messageResponse.data];
+                            });
+                        }
                     }
                 }
             } catch (err: any) {
                 console.error('Failed to save recording:', err.message);
                 setError('Failed to send voice note.');
             } finally {
-                expoRecordingRef.current = null;
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                await setAudioModeAsync({ allowsRecording: false });
             }
         }
         setRecordingDuration(0);
@@ -1045,15 +1047,14 @@ const SubChannelScreen = () => {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
+                await audioRecorder.stop();
             } catch (err) {
                 // Ignore errors during cancel
             }
-            expoRecordingRef.current = null;
-            await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+            await setAudioModeAsync({ allowsRecording: false });
         }
     };
 
@@ -1072,8 +1073,8 @@ const SubChannelScreen = () => {
             audio.play();
         } else {
             try {
-                const { sound } = await Audio.Sound.createAsync({ uri: source });
-                await sound.playAsync();
+                const player = createAudioPlayer(source);
+                player.play();
             } catch (err) {
                 console.error('Failed to play audio:', err);
             }
@@ -1189,7 +1190,7 @@ const SubChannelScreen = () => {
                     )
                 );
             } else {
-                setMessages((prev) =>
+                setLocalMessages((prev) =>
                     prev.map((m) =>
                         m._id === itemId
                             ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
@@ -1237,7 +1238,7 @@ const SubChannelScreen = () => {
                     )
                 );
             } else {
-                setMessages((prev) =>
+                setLocalMessages((prev) =>
                     prev.map((m) =>
                         m._id === itemId
                             ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
@@ -1305,7 +1306,7 @@ const SubChannelScreen = () => {
                         : p
                 ));
             } else {
-                setMessages(prev => prev.map(m =>
+                setLocalMessages(prev => prev.map(m =>
                     m._id === commentTarget.id
                         ? { ...m, commentCount: (m.commentCount || 0) + 1 }
                         : m
@@ -1322,7 +1323,11 @@ const SubChannelScreen = () => {
     return (
         <SafeAreaView style={styles.safe}>
             <View pointerEvents="none" style={styles.gridBackground} />
-            <View style={styles.page}>
+            <KeyboardAvoidingView
+                style={styles.page}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            >
                 <View style={styles.card}>
                     <View style={styles.header}>
                         <TouchableOpacity style={styles.iconButton} onPress={handleBack}>
@@ -1423,13 +1428,16 @@ const SubChannelScreen = () => {
                         </ScrollView>
                     ) : (
                         /* Channel View */
-                    <ScrollView
-                        ref={feedScrollRef}
+                    <KeyboardAwareScrollView
+                        ref={keyboardAwareRef}
+                        innerRef={(ref) => { (feedScrollRef as any).current = ref as ScrollView; }}
                         contentContainerStyle={styles.feedList}
                         showsVerticalScrollIndicator={false}
-                        onContentSizeChange={() => {
-                            feedScrollRef.current?.scrollToEnd({ animated: false });
-                        }}
+                        keyboardShouldPersistTaps="handled"
+                        enableOnAndroid={true}
+                        extraScrollHeight={Platform.OS === 'ios' ? 20 : 0}
+                        onContentSizeChange={handleContentSizeChange}
+                        onLayout={handleScrollViewLayout}
                     >
                         {feedItems.length === 0 && (
                             <Text style={styles.emptyText}>No channel updates yet.</Text>
@@ -1624,7 +1632,7 @@ const SubChannelScreen = () => {
                             </View>
                             );
                         })}
-                    </ScrollView>
+                    </KeyboardAwareScrollView>
                     )}
 
                     {!!recordingError && <Text style={styles.errorText}>{recordingError}</Text>}
@@ -1681,9 +1689,12 @@ const SubChannelScreen = () => {
                             </View>
                         ) : (
                             <View style={styles.composer}>
-                                <TouchableOpacity style={styles.composerIcon} onPress={() => setEmojiOpen(true)}>
-                                    <Smile size={18} color={colors.textMuted} />
-                                </TouchableOpacity>
+                                {/* Only show emoji/sticker buttons on web - mobile users can use native keyboard emoji */}
+                                {Platform.OS === 'web' && (
+                                    <TouchableOpacity style={styles.composerIcon} onPress={() => setEmojiOpen(true)}>
+                                        <Smile size={18} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                )}
                                 <TextInput
                                     value={draft}
                                     onChangeText={(text) => {
@@ -1693,21 +1704,37 @@ const SubChannelScreen = () => {
                                     placeholder="Type message"
                                     placeholderTextColor={colors.textSubtle}
                                     style={styles.composerInput}
+                                    multiline
                                 />
+                                {/* Attach button - always visible */}
                                 <TouchableOpacity style={styles.composerIcon} onPress={handleAttachPress}>
                                     <Paperclip size={18} color={colors.textMuted} />
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.composerIcon} onPress={handleStartRecording}>
-                                    <Mic size={18} color={colors.textMuted} />
+                                {/* Voice recording - only on web (mobile has dedicated mic button below) */}
+                                {Platform.OS === 'web' && (
+                                    <TouchableOpacity style={styles.composerIcon} onPress={handleStartRecording}>
+                                        <Mic size={18} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                )}
+                                {/* Send button - always visible */}
+                                <TouchableOpacity
+                                    style={[styles.sendButton, !draft.trim() && !attachments.length && styles.sendButtonDisabled]}
+                                    onPress={handleSend}
+                                    disabled={!draft.trim() && !attachments.length}
+                                >
+                                    <Send size={16} color={draft.trim() || attachments.length ? colors.primaryText : colors.textMuted} />
                                 </TouchableOpacity>
-                                <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                                    <Send size={16} color={colors.primaryText} />
-                                </TouchableOpacity>
+                                {/* Voice mic - only on mobile when no content */}
+                                {Platform.OS !== 'web' && !draft.trim() && !attachments.length && (
+                                    <TouchableOpacity style={styles.voiceMicButton} onPress={handleStartRecording}>
+                                        <Mic size={18} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         )
                     )}
                 </View>
-            </View>
+            </KeyboardAvoidingView>
 
             <Modal visible={reportModalOpen} transparent animationType="fade" onRequestClose={() => setReportModalOpen(false)}>
                 <View style={styles.reportOverlay}>
@@ -1952,7 +1979,7 @@ const SubChannelScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: boolean = false) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: boolean = false, bottomInset: number = 0) =>
     StyleSheet.create({
         safe: {
             flex: 1,
@@ -1993,7 +2020,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             justifyContent: 'space-between',
             marginBottom: 8,
             paddingHorizontal: isMobile ? 4 : 0,
-            paddingTop: isMobile ? 8 : 0,
+            paddingTop: isMobile ? 16 : 0,
         },
         title: {
             fontSize: isMobile ? 18 : 16,
@@ -2593,6 +2620,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             paddingHorizontal: 12,
             height: 44,
             backgroundColor: colors.surfaceMuted,
+            marginBottom: bottomInset,
         },
         composerInput: {
             flex: 1,
@@ -2613,6 +2641,18 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: colors.primary,
+        },
+        sendButtonDisabled: {
+            backgroundColor: colors.surfaceMuted,
+        },
+        voiceMicButton: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: colors.surfaceMuted,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: 8,
         },
         attachmentPreview: {
             flexDirection: 'row',
@@ -2667,6 +2707,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             borderWidth: 1,
             borderColor: colors.border,
             height: 48,
+            marginBottom: bottomInset,
         },
         recordingCancelButton: {
             width: 36,

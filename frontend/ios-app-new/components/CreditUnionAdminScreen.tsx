@@ -13,6 +13,7 @@ import {
     Platform,
     Alert,
     ActivityIndicator,
+    KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -91,7 +92,7 @@ import {
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { communityGet, communityPost, communityPatch, communityPut, communityDelete, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile, getAuthUser, initiateChannelCall, logout, inviteStakeholder, StakeholderBadge, getNotificationPreferences, updateNotificationPreferences, getCustomRoles, createCustomRole, updateCustomRole, deleteCustomRole, assignCustomRole, removeCustomRole, CustomRole } from '../lib/api';
 import { useTheme } from '../lib/theme';
 import UserAvatar from './UserAvatar';
@@ -99,6 +100,57 @@ import VoiceMessagePlayer from './VoiceMessagePlayer';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { getCachedSubgrids, cacheSubgrids, getCachedChannelMessages, cacheChannelMessages, getCachedChannelPosts, cacheChannelPosts, getCachedCUAdminMembers, cacheCUAdminMembers, addChannelMessageToCache } from '../lib/userCache';
 import { generateTempId, isTempId } from '../lib/messageQueue';
+import { useQueryClient } from '@tanstack/react-query';
+import { useScrollToBottom } from '../hooks';
+import {
+    useSubgrids,
+    useChannels,
+    useMembers,
+    usePosts,
+    useCategories,
+    useEvents,
+    useChannelMessages,
+    useContentModerationSettings,
+    useUpdateContentModeration,
+    useAddProhibitedWords,
+    useRemoveProhibitedWords,
+    useEngagementSettings,
+    useUpdateEngagementSettings,
+    useBannedUsers,
+    useBanUser,
+    useUnbanUser,
+    useUpdateSubgrid,
+    useCustomRoles,
+    useCreateCustomRole,
+    useUpdateCustomRole,
+    useDeleteCustomRole,
+    useAssignCustomRole,
+    useCreateChannel,
+    useUpdateChannel,
+    useDeleteChannel,
+    useRemoveMember,
+    useUpdateMemberRole,
+    useUpdateMemberStatus,
+    useCreateCategory,
+    useDeleteCategory,
+    useCreateEvent,
+    useDeleteEvent,
+    useDeletePost,
+    useDeleteMessage,
+    usePinMessage,
+    useUnpinMessage,
+    useLikeItem,
+    useUnlikeItem,
+    useReshareItem,
+    useUnreshareItem,
+    useAddChannelMember,
+    useRemoveChannelMember,
+    useCreateComment,
+    useFlagContent,
+    useModerationAction,
+    useCreateSubgrid,
+} from '../hooks/queries';
+import { queryKeys } from '../lib/queryClient';
 
 // Helper to convert Blob to data URL
 const blobToDataUrl = (blob: Blob): Promise<string> => {
@@ -323,10 +375,13 @@ type ModerationFlag = {
 const CreditUnionAdminScreen = () => {
     const { colors, mode, toggleTheme } = useTheme();
     const router = useRouter();
-    const styles = useMemo(() => createStyles(colors), [colors]);
     const { width } = useWindowDimensions();
     const isMobile = width < 900;
     const insets = useSafeAreaInsets();
+    // Calculate safe area values for mobile
+    const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
+    const topInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.top, 16) : 0;
+    const styles = useMemo(() => createStyles(colors, bottomInset, topInset), [colors, bottomInset, topInset]);
     const [mobileShowContent, setMobileShowContent] = useState(false);
     const [mobileShowSettingsContent, setMobileShowSettingsContent] = useState(false);
     const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
@@ -341,27 +396,121 @@ const CreditUnionAdminScreen = () => {
     };
 
     const userId = getUserId();
+    const queryClient = useQueryClient();
     const [tenantId, setTenantId] = useState(getTenantId());
-    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
     const [activeSubgridId, setActiveSubgridId] = useState('');
-    const [channels, setChannels] = useState<Channel[]>([]);
-    const [categories, setCategories] = useState<Category[]>([]);
-    const [events, setEvents] = useState<Event[]>([]);
     const [activeChannelId, setActiveChannelId] = useState('');
-    const [posts, setPosts] = useState<Post[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [members, setMembers] = useState<Member[]>([]);
     const [memberOnlineStatuses, setMemberOnlineStatuses] = useState<Record<string, boolean>>({});
     const [error, setError] = useState('');
 
-    // Custom Roles State
-    const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
-    const [loadingRoles, setLoadingRoles] = useState(false);
+    // React Query hooks for data fetching with caching
+    const subgridsQuery = useSubgrids(tenantId);
+    const channelsQuery = useChannels(activeSubgridId);
+    const membersQuery = useMembers(activeSubgridId);
+    const postsQuery = usePosts(activeSubgridId);
+    const categoriesQuery = useCategories(activeSubgridId);
+    const eventsQuery = useEvents(activeSubgridId);
+    const messagesQuery = useChannelMessages(activeSubgridId, activeChannelId);
+
+    // Server Settings React Query hooks
+    const contentModerationQuery = useContentModerationSettings(activeSubgridId);
+    const updateContentModerationMutation = useUpdateContentModeration(activeSubgridId);
+    const addProhibitedWordsMutation = useAddProhibitedWords(activeSubgridId);
+    const removeProhibitedWordsMutation = useRemoveProhibitedWords(activeSubgridId);
+    const engagementSettingsQuery = useEngagementSettings(activeSubgridId);
+    const updateEngagementSettingsMutation = useUpdateEngagementSettings(activeSubgridId);
+    const bannedUsersQuery = useBannedUsers(activeSubgridId);
+    const banUserMutation = useBanUser(activeSubgridId);
+    const unbanUserMutation = useUnbanUser(activeSubgridId);
+    const updateSubgridMutation = useUpdateSubgrid(activeSubgridId);
+    const customRolesQuery = useCustomRoles(activeSubgridId);
+    const createCustomRoleMutation = useCreateCustomRole(activeSubgridId);
+    const updateCustomRoleMutation = useUpdateCustomRole(activeSubgridId);
+    const deleteCustomRoleMutation = useDeleteCustomRole(activeSubgridId);
+    const assignCustomRoleMutation = useAssignCustomRole(activeSubgridId);
+
+    // Channel mutations
+    const createChannelMutation = useCreateChannel(activeSubgridId);
+    const updateChannelMutation = useUpdateChannel(activeSubgridId);
+    const deleteChannelMutation = useDeleteChannel(activeSubgridId);
+
+    // Member mutations
+    const removeMemberMutation = useRemoveMember(activeSubgridId);
+    const updateMemberRoleMutation = useUpdateMemberRole(activeSubgridId);
+    const updateMemberStatusMutation = useUpdateMemberStatus(activeSubgridId);
+
+    // Category mutations
+    const createCategoryMutation = useCreateCategory(activeSubgridId);
+    const deleteCategoryMutation = useDeleteCategory(activeSubgridId);
+
+    // Event mutations
+    const createEventMutation = useCreateEvent(activeSubgridId);
+    const deleteEventMutation = useDeleteEvent(activeSubgridId);
+
+    // Post/Message mutations
+    const deletePostMutation = useDeletePost(activeSubgridId);
+    const deleteMessageMutation = useDeleteMessage(activeSubgridId);
+    const pinMessageMutation = usePinMessage(activeSubgridId);
+    const unpinMessageMutation = useUnpinMessage(activeSubgridId);
+
+    // Like/Reshare mutations
+    const likeItemMutation = useLikeItem(activeSubgridId);
+    const unlikeItemMutation = useUnlikeItem(activeSubgridId);
+    const reshareItemMutation = useReshareItem(activeSubgridId);
+    const unreshareItemMutation = useUnreshareItem(activeSubgridId);
+
+    // Channel member mutations
+    const addChannelMemberMutation = useAddChannelMember(activeSubgridId);
+    const removeChannelMemberMutation = useRemoveChannelMember(activeSubgridId);
+
+    // Comment mutation
+    const createCommentMutation = useCreateComment(activeSubgridId);
+
+    // Moderation mutations
+    const flagContentMutation = useFlagContent(activeSubgridId);
+    const moderationActionMutation = useModerationAction(activeSubgridId);
+
+    // Create subgrid mutation
+    const createSubgridMutation = useCreateSubgrid(tenantId);
+
+    // Derived data from React Query
+    const subgrids: Subgrid[] = subgridsQuery.data || [];
+    const channels: Channel[] = channelsQuery.data || [];
+    const members: Member[] = useMemo(() => {
+        const rawMembers = membersQuery.data || [];
+        return rawMembers.map((m: Member) => ({
+            ...m,
+            userName: m.firstName && m.lastName
+                ? `${m.firstName} ${m.lastName}`
+                : m.username || m.user?.firstName && m.user?.lastName
+                    ? `${m.user?.firstName} ${m.user?.lastName}`
+                    : m.user?.username || m.email || 'Unknown User',
+        }));
+    }, [membersQuery.data]);
+    const posts: Post[] = postsQuery.data || [];
+    const categories: Category[] = categoriesQuery.data || [];
+    const events: Event[] = eventsQuery.data || [];
+    // Derived settings from React Query
+    const contentModerationSettings = contentModerationQuery.data || { enabled: true, prohibitedWords: [], action: 'block' as const, localBlockedMessage: 'Your message contains prohibited content and cannot be sent.' };
+    const engagementSettings = engagementSettingsQuery.data || { joinMessage: true, uploadNotice: true, emojiReactions: true, autoEmoji: false, stickersAutocomplete: true };
+    const bannedUsers = bannedUsersQuery.data || [];
+    const customRoles: CustomRole[] = customRolesQuery.data || [];
+    // Messages need local state for WebSocket real-time updates
+    const [messages, setMessages] = useState<Message[]>([]);
+
+    // Sync messages from React Query when they change
+    useEffect(() => {
+        if (messagesQuery.data) {
+            setMessages(messagesQuery.data);
+        }
+    }, [messagesQuery.data]);
+
+    // Custom Roles UI State (data comes from customRolesQuery)
+    const loadingRoles = customRolesQuery.isLoading;
     const [createRoleModalOpen, setCreateRoleModalOpen] = useState(false);
     const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
     const [newRoleName, setNewRoleName] = useState('');
     const [newRoleColor, setNewRoleColor] = useState('#3B82F6');
-    const [savingRole, setSavingRole] = useState(false);
     const [assignRoleModalOpen, setAssignRoleModalOpen] = useState(false);
     const [assigningMember, setAssigningMember] = useState<Member | null>(null);
     const [memberSearchQuery, setMemberSearchQuery] = useState('');
@@ -380,10 +529,23 @@ const CreditUnionAdminScreen = () => {
     const [recordingError, setRecordingError] = useState('');
     const recordingInterval = useRef<NodeJS.Timeout | null>(null);
     const recordingStartRef = useRef<number>(0);
-    const expoRecordingRef = useRef<Audio.Recording | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
-    const feedScrollRef = useRef<ScrollView>(null);
+    const prevFeedItemsCountRef = useRef<number>(0);
+
+    // Centralized scroll management
+    const {
+        scrollViewRef: feedScrollRef,
+        keyboardAwareRef,
+        scrollToBottom,
+        handleContentSizeChange,
+        handleScrollViewLayout,
+        resetScrollState,
+        markForInitialScroll,
+    } = useScrollToBottom();
+
+    // expo-audio recorder hook (for native platforms)
+    const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
     // Common emojis for picker
     const emojis = [
@@ -538,24 +700,22 @@ const CreditUnionAdminScreen = () => {
         ['#11998e', '#38ef7d'],
         ['#fc5c7d', '#6a82fb'],
     ];
-    const [engagementSettings, setEngagementSettings] = useState({
+    // Content Moderation form inputs (for user editing before save)
+    const [newProhibitedWord, setNewProhibitedWord] = useState('');
+    const [contentModerationTestText, setContentModerationTestText] = useState('');
+    const [contentModerationTestResult, setContentModerationTestResult] = useState<{ isProhibited: boolean; matchedWords: string[]; filteredContent: string } | null>(null);
+    // Local edit state for content moderation settings (synced from React Query)
+    const [localContentModerationEnabled, setLocalContentModerationEnabled] = useState(true);
+    const [localContentModerationAction, setLocalContentModerationAction] = useState<'block' | 'flag' | 'censor'>('block');
+    const [localBlockedMessage, setLocalBlockedMessage] = useState('Your message contains prohibited content and cannot be sent.');
+    // Local edit state for engagement settings (synced from React Query)
+    const [localEngagementSettings, setLocalEngagementSettings] = useState({
         joinMessage: true,
         uploadNotice: true,
         emojiReactions: true,
         autoEmoji: false,
         stickersAutocomplete: true,
     });
-    const [engagementSettingsLoading, setEngagementSettingsLoading] = useState(false);
-
-    // Content Moderation (Prohibited Words) state
-    const [contentModerationEnabled, setContentModerationEnabled] = useState(true);
-    const [prohibitedWords, setProhibitedWords] = useState<string[]>([]);
-    const [contentModerationAction, setContentModerationAction] = useState<'block' | 'flag' | 'censor'>('block');
-    const [blockedMessage, setBlockedMessage] = useState('Your message contains prohibited content and cannot be sent.');
-    const [newProhibitedWord, setNewProhibitedWord] = useState('');
-    const [contentModerationLoading, setContentModerationLoading] = useState(false);
-    const [contentModerationTestText, setContentModerationTestText] = useState('');
-    const [contentModerationTestResult, setContentModerationTestResult] = useState<{ isProhibited: boolean; matchedWords: string[]; filteredContent: string } | null>(null);
 
     // Bootstrap tenant and load user info
     useEffect(() => {
@@ -579,98 +739,43 @@ const CreditUnionAdminScreen = () => {
         });
     }, []);
 
-    // Load subgrids with caching for instant display
+    // Set active subgrid when subgrids load from React Query
     useEffect(() => {
-        if (!tenantId) {
-            console.log('[CUA Admin] No tenantId yet, skipping subgrids load');
-            return;
-        }
-
-        // Load from cache first for instant display
-        const cached = getCachedSubgrids(tenantId);
-        if (cached && cached.length > 0) {
-            setSubgrids(cached);
-            if (!activeSubgridId) {
-                setActiveSubgridId(cached[0]._id);
-                setServerName(cached[0].name || '');
-                setServerDescription(cached[0].description || '');
-                setServerLogoUrl(cached[0].logoUrl || '');
-            }
-        }
-
-        // Then fetch fresh data in background
-        console.log('[CUA Admin] Loading subgrids for tenant:', tenantId);
-        communityGet(`/tenants/${tenantId}/subgrids`)
-            .then((response) => {
-                console.log('[CUA Admin] Subgrids response:', response);
-                const list = response?.data || [];
-                setSubgrids(list);
-                cacheSubgrids(tenantId, list);
-                if (list.length > 0 && !activeSubgridId) {
-                    console.log('[CUA Admin] Setting active subgrid:', list[0]._id);
-                    setActiveSubgridId(list[0]._id);
-                    setServerName(list[0].name || '');
-                    setServerDescription(list[0].description || '');
-                    setServerLogoUrl(list[0].logoUrl || '');
+        if (subgrids.length > 0) {
+            setActiveSubgridId((current) => {
+                if (!current) {
+                    console.log('[CUA Admin] Setting active subgrid:', subgrids[0]._id);
+                    setServerName(subgrids[0].name || '');
+                    setServerDescription(subgrids[0].description || '');
+                    setServerLogoUrl(subgrids[0].logoUrl || '');
+                    return subgrids[0]._id;
                 }
-            })
-            .catch((err) => {
-                console.error('[CUA Admin] Failed to load subgrids:', err);
-                // Keep cached data on error
+                return current;
             });
-    }, [tenantId]);
+        }
+    }, [subgrids]);
 
-    // Load subgrid data
+    // Sync local content moderation state with React Query data
     useEffect(() => {
-        if (!activeSubgridId) {
-            console.log('[CUA Admin] No activeSubgridId, skipping subgrid data load');
-            return;
+        if (contentModerationQuery.data) {
+            setLocalContentModerationEnabled(contentModerationQuery.data.enabled ?? true);
+            setLocalContentModerationAction(contentModerationQuery.data.action || 'block');
+            setLocalBlockedMessage(contentModerationQuery.data.localBlockedMessage || 'Your message contains prohibited content and cannot be sent.');
         }
+    }, [contentModerationQuery.data]);
 
-        // Load cached members first for instant display
-        const cachedMembers = getCachedCUAdminMembers(activeSubgridId);
-        if (cachedMembers) {
-            setMembers(cachedMembers);
-        }
-
-        console.log('[CUA Admin] Loading subgrid data for:', activeSubgridId);
-        Promise.allSettled([
-            communityGet(`/subgrids/${activeSubgridId}/channels`),
-            communityGet(`/subgrids/${activeSubgridId}/posts`),
-            communityGet(`/subgrids/${activeSubgridId}/members`),
-            communityGet(`/subgrids/${activeSubgridId}/categories`),
-            communityGet(`/subgrids/${activeSubgridId}/events`),
-        ])
-            .then(([channelsRes, postsRes, membersRes, categoriesRes, eventsRes]) => {
-                console.log('[CUA Admin] Channels result:', channelsRes);
-                console.log('[CUA Admin] Posts result:', postsRes);
-                console.log('[CUA Admin] Members result:', membersRes);
-                if (channelsRes.status === 'fulfilled') setChannels(channelsRes.value?.data || []);
-                if (postsRes.status === 'fulfilled') {
-                    const postsData = postsRes.value?.data || [];
-                    setPosts(postsData);
-                    // Cache posts for the first channel
-                    if (postsData.length > 0 && postsData[0]?.channelId) {
-                        cacheChannelPosts(postsData[0].channelId, postsData);
-                    }
-                }
-                if (membersRes.status === 'fulfilled') {
-                    const membersData = (membersRes.value?.data || []).map((m: Member) => ({
-                        ...m,
-                        userName: m.firstName && m.lastName
-                            ? `${m.firstName} ${m.lastName}`
-                            : m.username || m.user?.firstName && m.user?.lastName
-                                ? `${m.user?.firstName} ${m.user?.lastName}`
-                                : m.user?.username || m.email || 'Unknown User',
-                    }));
-                    setMembers(membersData);
-                    // Cache members for offline access
-                    cacheCUAdminMembers(activeSubgridId, membersData);
-                }
-                if (categoriesRes.status === 'fulfilled') setCategories(categoriesRes.value?.data || []);
-                if (eventsRes.status === 'fulfilled') setEvents(eventsRes.value?.data || []);
+    // Sync local engagement settings with React Query data
+    useEffect(() => {
+        if (engagementSettingsQuery.data) {
+            setLocalEngagementSettings({
+                joinMessage: engagementSettingsQuery.data.joinMessage ?? true,
+                uploadNotice: engagementSettingsQuery.data.uploadNotice ?? true,
+                emojiReactions: engagementSettingsQuery.data.emojiReactions ?? true,
+                autoEmoji: engagementSettingsQuery.data.autoEmoji ?? false,
+                stickersAutocomplete: engagementSettingsQuery.data.stickersAutocomplete ?? true,
             });
-    }, [activeSubgridId]);
+        }
+    }, [engagementSettingsQuery.data]);
 
     // Set default channel
     useEffect(() => {
@@ -680,29 +785,7 @@ const CreditUnionAdminScreen = () => {
         }
     }, [channels]);
 
-    // Load messages for active channel
-    useEffect(() => {
-        if (!activeSubgridId || !activeChannelId) return;
-
-        // Load cached messages first for instant display
-        const cachedMessages = getCachedChannelMessages(activeChannelId);
-        if (cachedMessages) {
-            setMessages(cachedMessages);
-        }
-
-        // Initial fetch from server
-        communityGet(`/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`)
-            .then((response) => {
-                const messagesData = response?.data || [];
-                setMessages(messagesData);
-                // Cache messages for offline access
-                cacheChannelMessages(activeChannelId, messagesData);
-            })
-            .catch(() => {
-                // Keep cached messages on error
-                if (!cachedMessages) setMessages([]);
-            });
-    }, [activeSubgridId, activeChannelId]);
+    // Messages are now loaded via React Query (messagesQuery) and synced to local state above
 
     // WebSocket: Join channel room and subscribe to new messages
     useEffect(() => {
@@ -713,14 +796,22 @@ const CreditUnionAdminScreen = () => {
         // Join the channel room
         joinRoom('channel', channelId);
 
-        // Subscribe to new messages
+        // Subscribe to new messages - update both local state and React Query cache
         const unsubscribeNewMessage = subscribe('new_message', (data) => {
             if (data.roomType === 'channel' && String(data.roomId) === channelId && data.message) {
                 setMessages((prev) => {
-                    // Avoid duplicates
                     if (prev.some(m => m._id === data.message._id)) return prev;
                     return [...prev, data.message];
                 });
+                // Also update React Query cache
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, channelId),
+                    (old: Message[] | undefined) => {
+                        if (!old) return [data.message];
+                        if (old.some(m => m._id === data.message._id)) return old;
+                        return [...old, data.message];
+                    }
+                );
             }
         });
 
@@ -730,6 +821,13 @@ const CreditUnionAdminScreen = () => {
                 setMessages((prev) => prev.map(m =>
                     m._id === data.message._id ? data.message : m
                 ));
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, channelId),
+                    (old: Message[] | undefined) => {
+                        if (!old) return [data.message];
+                        return old.map(m => m._id === data.message._id ? data.message : m);
+                    }
+                );
             }
         });
 
@@ -737,6 +835,13 @@ const CreditUnionAdminScreen = () => {
         const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
             if (data.roomType === 'channel' && String(data.roomId) === channelId) {
                 setMessages((prev) => prev.filter(m => m._id !== data.messageId));
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, channelId),
+                    (old: Message[] | undefined) => {
+                        if (!old) return [];
+                        return old.filter(m => m._id !== data.messageId);
+                    }
+                );
             }
         });
 
@@ -746,7 +851,7 @@ const CreditUnionAdminScreen = () => {
             unsubscribeMessageUpdated();
             unsubscribeMessageDeleted();
         };
-    }, [activeChannelId, isConnected, subscribe, joinRoom, leaveRoom]);
+    }, [activeChannelId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient]);
 
     // WebSocket: Join subgrid room for channel/post/member updates
     useEffect(() => {
@@ -755,66 +860,87 @@ const CreditUnionAdminScreen = () => {
         // Join the subgrid room
         joinRoom('subgrid', activeSubgridId);
 
-        // Subscribe to channel events
+        // Subscribe to channel events - update React Query cache
         const unsubscribeChannelCreated = subscribe('channel_created', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setChannels((prev) => [...prev, data.channel]);
+                queryClient.setQueryData(
+                    queryKeys.subgrids.channels(activeSubgridId),
+                    (old: Channel[] | undefined) => old ? [...old, data.channel] : [data.channel]
+                );
             }
         });
 
         const unsubscribeChannelUpdated = subscribe('channel_updated', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setChannels((prev) => prev.map(c =>
-                    c._id === data.channel._id ? data.channel : c
-                ));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.channels(activeSubgridId),
+                    (old: Channel[] | undefined) => old ? old.map(c => c._id === data.channel._id ? data.channel : c) : [data.channel]
+                );
             }
         });
 
         const unsubscribeChannelDeleted = subscribe('channel_deleted', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setChannels((prev) => prev.filter(c => c._id !== data.channelId));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.channels(activeSubgridId),
+                    (old: Channel[] | undefined) => old ? old.filter(c => c._id !== data.channelId) : []
+                );
             }
         });
 
-        // Subscribe to post events
+        // Subscribe to post events - update React Query cache
         const unsubscribePostCreated = subscribe('post_created', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setPosts((prev) => [data.post, ...prev]);
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: Post[] | undefined) => old ? [data.post, ...old] : [data.post]
+                );
             }
         });
 
         const unsubscribePostUpdated = subscribe('post_updated', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setPosts((prev) => prev.map(p =>
-                    p._id === data.post._id ? data.post : p
-                ));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: Post[] | undefined) => old ? old.map(p => p._id === data.post._id ? data.post : p) : [data.post]
+                );
             }
         });
 
         const unsubscribePostDeleted = subscribe('post_deleted', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setPosts((prev) => prev.filter(p => p._id !== data.postId));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: Post[] | undefined) => old ? old.filter(p => p._id !== data.postId) : []
+                );
             }
         });
 
-        // Subscribe to member events
+        // Subscribe to member events - update React Query cache
         const unsubscribeMemberJoined = subscribe('member_joined', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setMembers((prev) => [...prev, data.member]);
+                queryClient.setQueryData(
+                    queryKeys.subgrids.members(activeSubgridId),
+                    (old: Member[] | undefined) => old ? [...old, data.member] : [data.member]
+                );
             }
         });
 
         const unsubscribeMemberLeft = subscribe('member_left', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setMembers((prev) => prev.filter(m => m.userId !== data.userId));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.members(activeSubgridId),
+                    (old: Member[] | undefined) => old ? old.filter(m => m.userId !== data.userId) : []
+                );
             }
         });
 
         const unsubscribeMemberUpdated = subscribe('member_updated', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setMembers((prev) => prev.map(m =>
-                    m.userId === data.member.userId ? { ...m, ...data.member } : m
-                ));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.members(activeSubgridId),
+                    (old: Member[] | undefined) => old ? old.map(m => m.userId === data.member.userId ? { ...m, ...data.member } : m) : [data.member]
+                );
             }
         });
 
@@ -830,17 +956,17 @@ const CreditUnionAdminScreen = () => {
             unsubscribeMemberLeft();
             unsubscribeMemberUpdated();
         };
-    }, [activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom]);
+    }, [activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient]);
 
     useEffect(() => {
         if (!serverSettingsModalOpen || settingsTab !== 'bans' || !activeSubgridId) return;
         loadModerationQueue();
     }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
 
-    // Load content moderation settings when entering that tab
+    // Refetch content moderation settings when entering that tab
     useEffect(() => {
         if (!serverSettingsModalOpen || settingsTab !== 'content-moderation' || !activeSubgridId) return;
-        loadContentModerationSettings();
+        contentModerationQuery.refetch();
     }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
 
     // Fetch and update member online statuses
@@ -915,38 +1041,19 @@ const CreditUnionAdminScreen = () => {
         loadPreferences();
     }, [notificationSettingsModalOpen]);
 
-    // Load custom roles when roles tab is selected
+    // Refetch custom roles when roles tab is selected
     useEffect(() => {
         if (settingsTab === 'roles' && activeSubgridId) {
-            loadCustomRoles();
+            customRolesQuery.refetch();
         }
     }, [settingsTab, activeSubgridId]);
 
-    // Load engagement settings when engagement tab is selected
+    // Refetch engagement settings when engagement tab is selected
     useEffect(() => {
         if (settingsTab === 'engagement' && activeSubgridId) {
-            const loadEngagementSettings = async () => {
-                setEngagementSettingsLoading(true);
-                try {
-                    const current = subgrids.find((s) => s._id === activeSubgridId);
-                    if (current?.engagementSettings) {
-                        setEngagementSettings({
-                            joinMessage: current.engagementSettings.joinMessage ?? true,
-                            uploadNotice: current.engagementSettings.uploadNotice ?? true,
-                            emojiReactions: current.engagementSettings.emojiReactions ?? true,
-                            autoEmoji: current.engagementSettings.autoEmoji ?? false,
-                            stickersAutocomplete: current.engagementSettings.stickersAutocomplete ?? true,
-                        });
-                    }
-                } catch (err) {
-                    console.error('Failed to load engagement settings:', err);
-                } finally {
-                    setEngagementSettingsLoading(false);
-                }
-            };
-            loadEngagementSettings();
+            engagementSettingsQuery.refetch();
         }
-    }, [settingsTab, activeSubgridId, subgrids]);
+    }, [settingsTab, activeSubgridId]);
 
     const handleSaveNotificationSettings = async () => {
         setNotificationSettingsSaving(true);
@@ -1091,15 +1198,33 @@ const CreditUnionAdminScreen = () => {
         return items;
     }, [posts, messages, feedSearchQuery, members]);
 
-    // Scroll to bottom when new messages arrive (WhatsApp-style)
+    // Scroll to bottom on initial load and when new messages are added (WhatsApp-style)
+    const lastChannelIdRef = useRef<string | null>(null);
+
     useEffect(() => {
-        if (feedItems.length > 0 && feedScrollRef.current) {
-            // Small delay to ensure content is rendered
-            setTimeout(() => {
-                feedScrollRef.current?.scrollToEnd({ animated: true });
-            }, 100);
+        // Reset scroll state when channel changes
+        if (activeChannelId !== lastChannelIdRef.current) {
+            resetScrollState();
+            prevFeedItemsCountRef.current = 0;
+            lastChannelIdRef.current = activeChannelId;
         }
-    }, [feedItems.length]);
+
+        const prevCount = prevFeedItemsCountRef.current;
+        const currentCount = feedItems.length;
+
+        // Scroll to bottom on initial load (once) or when new items are added
+        if (currentCount > 0) {
+            if (prevCount === 0) {
+                // Initial load
+                markForInitialScroll();
+            } else if (currentCount > prevCount) {
+                // New messages added - scroll with animation
+                setTimeout(() => scrollToBottom(true), 100);
+            }
+        }
+
+        prevFeedItemsCountRef.current = currentCount;
+    }, [feedItems.length, activeChannelId, resetScrollState, markForInitialScroll, scrollToBottom]);
 
     const getSeverityLabel = (reason?: string) => {
         const value = (reason || '').toLowerCase();
@@ -1154,11 +1279,12 @@ const CreditUnionAdminScreen = () => {
         }
         setReportSubmitting(true);
         try {
-            const path =
-                reportTarget.type === 'post'
-                    ? `/subgrids/${activeSubgridId}/posts/${reportTarget.id}/flag`
-                    : `/subgrids/${activeSubgridId}/messages/${reportTarget.id}/flag`;
-            await communityPost(path, { reason });
+            const itemType = reportTarget.type === 'post' ? 'posts' : 'messages';
+            await flagContentMutation.mutateAsync({
+                itemType,
+                itemId: reportTarget.id,
+                reason,
+            });
             setReportModalOpen(false);
             setReportTarget(null);
             showSuccessModal('Report Submitted', 'Thanks for reporting. Our team will review this content.');
@@ -1185,39 +1311,20 @@ const CreditUnionAdminScreen = () => {
         }
     };
 
-    // Content Moderation (Prohibited Words) functions
-    const loadContentModerationSettings = async () => {
-        console.log('[loadContentModerationSettings] Called with activeSubgridId:', activeSubgridId);
-        if (!activeSubgridId) {
-            console.log('[loadContentModerationSettings] No activeSubgridId, skipping');
-            return;
-        }
-        setContentModerationLoading(true);
-        try {
-            console.log('[loadContentModerationSettings] Calling API...');
-            const response = await communityGet(`/subgrids/${activeSubgridId}/content-moderation`);
-            console.log('[loadContentModerationSettings] API Response:', response);
-            const settings = response?.data || {};
-            console.log('[loadContentModerationSettings] Settings:', settings);
-            setContentModerationEnabled(settings.enabled ?? true);
-            setProhibitedWords(settings.prohibitedWords || []);
-            setContentModerationAction(settings.action || 'block');
-            setBlockedMessage(settings.blockedMessage || 'Your message contains prohibited content and cannot be sent.');
-        } catch (err: any) {
-            console.error('[loadContentModerationSettings] Error:', err);
-        } finally {
-            setContentModerationLoading(false);
-        }
-    };
+    // Content Moderation (Prohibited Words) functions - using React Query mutations
+    const contentModerationLoading = contentModerationQuery.isLoading ||
+        updateContentModerationMutation.isPending ||
+        addProhibitedWordsMutation.isPending ||
+        removeProhibitedWordsMutation.isPending;
+    const prohibitedWords = contentModerationSettings.prohibitedWords || [];
 
     const saveContentModerationSettings = async () => {
         if (!activeSubgridId) return;
-        setContentModerationLoading(true);
         try {
-            await communityPatch(`/subgrids/${activeSubgridId}/content-moderation`, {
-                enabled: contentModerationEnabled,
-                action: contentModerationAction,
-                blockedMessage,
+            await updateContentModerationMutation.mutateAsync({
+                enabled: localContentModerationEnabled,
+                action: localContentModerationAction,
+                blockedMessage: localBlockedMessage,
             });
             showSuccessModal('Settings Saved', 'Content moderation settings have been updated.');
         } catch (err: any) {
@@ -1226,8 +1333,6 @@ const CreditUnionAdminScreen = () => {
             } else {
                 Alert.alert('Error', err.message || 'Failed to save content moderation settings.');
             }
-        } finally {
-            setContentModerationLoading(false);
         }
     };
 
@@ -1246,14 +1351,9 @@ const CreditUnionAdminScreen = () => {
             }
             return;
         }
-        setContentModerationLoading(true);
         try {
-            console.log('[addProhibitedWord] Calling API...');
-            const response = await communityPost(`/subgrids/${activeSubgridId}/content-moderation/words`, {
-                words: [word],
-            });
-            console.log('[addProhibitedWord] API Response:', response);
-            setProhibitedWords((prev) => [...prev, word]);
+            console.log('[addProhibitedWord] Using mutation...');
+            await addProhibitedWordsMutation.mutateAsync([word]);
             setNewProhibitedWord('');
         } catch (err: any) {
             console.error('[addProhibitedWord] Error:', err);
@@ -1262,8 +1362,6 @@ const CreditUnionAdminScreen = () => {
             } else {
                 Alert.alert('Error', err.message || 'Failed to add prohibited word.');
             }
-        } finally {
-            setContentModerationLoading(false);
         }
     };
 
@@ -1273,14 +1371,9 @@ const CreditUnionAdminScreen = () => {
             console.log('[removeProhibitedWord] No activeSubgridId');
             return;
         }
-        setContentModerationLoading(true);
         try {
-            console.log('[removeProhibitedWord] Calling API...');
-            const response = await communityDelete(`/subgrids/${activeSubgridId}/content-moderation/words`, {
-                words: [word],
-            });
-            console.log('[removeProhibitedWord] API Response:', response);
-            setProhibitedWords((prev) => prev.filter((w) => w !== word));
+            console.log('[removeProhibitedWord] Using mutation...');
+            await removeProhibitedWordsMutation.mutateAsync([word]);
         } catch (err: any) {
             console.error('[removeProhibitedWord] Error:', err);
             if (Platform.OS === 'web') {
@@ -1288,10 +1381,10 @@ const CreditUnionAdminScreen = () => {
             } else {
                 Alert.alert('Error', err.message || 'Failed to remove prohibited word.');
             }
-        } finally {
-            setContentModerationLoading(false);
         }
     };
+
+    const [testingModeration, setTestingModeration] = useState(false);
 
     const testContentModeration = async () => {
         console.log('[testContentModeration] Called with:', { activeSubgridId, contentModerationTestText });
@@ -1299,7 +1392,7 @@ const CreditUnionAdminScreen = () => {
             console.log('[testContentModeration] Missing required fields');
             return;
         }
-        setContentModerationLoading(true);
+        setTestingModeration(true);
         try {
             console.log('[testContentModeration] Calling API...');
             const response = await communityPost(`/subgrids/${activeSubgridId}/content-moderation/test`, {
@@ -1327,7 +1420,7 @@ const CreditUnionAdminScreen = () => {
                 Alert.alert('Error', err.message || 'Failed to test content moderation.');
             }
         } finally {
-            setContentModerationLoading(false);
+            setTestingModeration(false);
         }
     };
 
@@ -1340,9 +1433,10 @@ const CreditUnionAdminScreen = () => {
         if (!activeSubgridId || !flag?._id) return;
         setModerationActionLoading(true);
         try {
-            await communityPost(`/subgrids/${activeSubgridId}/moderation/${flag._id}/action`, {
-                action,
-                reason: flag.reason || '',
+            await moderationActionMutation.mutateAsync({
+                flagId: flag._id,
+                action: action as 'approve' | 'reject' | 'delete',
+                notes: flag.reason || '',
             });
             setModerationQueue((prev) => prev.filter((item) => item._id !== flag._id));
             if (activeModerationItem?._id === flag._id) {
@@ -1379,14 +1473,11 @@ const CreditUnionAdminScreen = () => {
         if (!newChannelName.trim() || !activeSubgridId) return;
         const channelName = newChannelName.trim();
         try {
-            await communityPost(`/subgrids/${activeSubgridId}/channels`, {
+            await createChannelMutation.mutateAsync({
                 name: channelName,
                 type: newChannelType,
-                visibility: isPrivateChannel ? 'admin' : 'public',
-                categoryId: newChannelCategoryId || null,
+                category: newChannelCategoryId || undefined,
             });
-            const response = await communityGet(`/subgrids/${activeSubgridId}/channels`);
-            setChannels(response?.data || []);
             setCreateChannelModalOpen(false);
             setNewChannelName('');
             setNewChannelType('text');
@@ -1423,14 +1514,14 @@ const CreditUnionAdminScreen = () => {
         const channelName = editChannelName.trim();
         if (!channelName) return;
         try {
-            await communityPatch(`/subgrids/${activeSubgridId}/channels/${editChannelId}`, {
-                name: channelName,
-                type: editChannelType,
-                visibility: editChannelPrivate ? 'admin' : 'public',
-                categoryId: editChannelCategoryId || null,
+            await updateChannelMutation.mutateAsync({
+                channelId: editChannelId,
+                data: {
+                    name: channelName,
+                    type: editChannelType,
+                    category: editChannelCategoryId || undefined,
+                },
             });
-            const response = await communityGet(`/subgrids/${activeSubgridId}/channels`);
-            setChannels(response?.data || []);
             setEditChannelModalOpen(false);
             showSuccessModal('Channel Updated', `Channel "${channelName}" has been updated successfully!`);
         } catch (err: any) {
@@ -1458,13 +1549,11 @@ const CreditUnionAdminScreen = () => {
 
     const handleSaveChannelPermissions = async () => {
         if (!permissionChannelId || !activeSubgridId) return;
-        const visibility = channelPermissions.members ? 'public' : 'admin';
         try {
-            await communityPatch(`/subgrids/${activeSubgridId}/channels/${permissionChannelId}`, {
-                visibility,
+            await updateChannelMutation.mutateAsync({
+                channelId: permissionChannelId,
+                data: {},
             });
-            const response = await communityGet(`/subgrids/${activeSubgridId}/channels`);
-            setChannels(response?.data || []);
             setChannelPermissionModalOpen(false);
             showSuccessModal('Permissions Updated', 'Channel permissions have been updated successfully.');
         } catch (err: any) {
@@ -1498,9 +1587,7 @@ const CreditUnionAdminScreen = () => {
     const handleAddChannelMember = async (userId: string) => {
         if (!managingChannelId || !activeSubgridId) return;
         try {
-            await communityPost(`/subgrids/${activeSubgridId}/channels/${managingChannelId}/members`, {
-                userIds: [userId],
-            });
+            await addChannelMemberMutation.mutateAsync({ channelId: managingChannelId, userId });
             const response = await communityGet(`/subgrids/${activeSubgridId}/channels/${managingChannelId}/members`);
             setChannelMembers(response?.data || []);
         } catch (err: any) {
@@ -1515,7 +1602,7 @@ const CreditUnionAdminScreen = () => {
     const handleRemoveChannelMember = async (userId: string) => {
         if (!managingChannelId || !activeSubgridId) return;
         try {
-            await communityDelete(`/subgrids/${activeSubgridId}/channels/${managingChannelId}/members/${userId}`);
+            await removeChannelMemberMutation.mutateAsync({ channelId: managingChannelId, userId });
             setChannelMembers(prev => prev.filter(m => (m._id || m.userId) !== userId));
         } catch (err: any) {
             if (Platform.OS === 'web') {
@@ -1529,28 +1616,18 @@ const CreditUnionAdminScreen = () => {
     const toggleEngagementSetting = async (key: EngagementSettingKey) => {
         if (!activeSubgridId) return;
 
-        const newValue = !engagementSettings[key];
-        const updatedSettings = { ...engagementSettings, [key]: newValue };
+        const newValue = !localEngagementSettings[key];
+        const updatedSettings = { ...localEngagementSettings, [key]: newValue };
 
         // Optimistic update
-        setEngagementSettings(updatedSettings);
+        setLocalEngagementSettings(updatedSettings);
 
         try {
-            await communityPatch(`/subgrids/${activeSubgridId}`, {
-                engagementSettings: updatedSettings,
-            });
-            // Update the subgrids state to keep it in sync
-            setSubgrids((prev) =>
-                prev.map((s) =>
-                    s._id === activeSubgridId
-                        ? { ...s, engagementSettings: updatedSettings }
-                        : s
-                )
-            );
+            await updateEngagementSettingsMutation.mutateAsync(updatedSettings);
         } catch (err) {
             console.error('Failed to save engagement setting:', err);
             // Revert on error
-            setEngagementSettings((prev) => ({ ...prev, [key]: !newValue }));
+            setLocalEngagementSettings((prev) => ({ ...prev, [key]: !newValue }));
         }
     };
 
@@ -1589,24 +1666,11 @@ const CreditUnionAdminScreen = () => {
 
         try {
             if (action === 'remove') {
-                // Remove member from subgrid
-                await communityDelete(`/subgrids/${activeSubgridId}/members/${memberId}`);
-                setMembers((prev) => prev.filter((m) => {
-                    const id = m.userId || m.user?._id || m._id;
-                    return String(id) !== String(memberId);
-                }));
+                await removeMemberMutation.mutateAsync(memberId);
                 showSuccessModal('Stakeholder Removed', 'The stakeholder has been removed from this server.');
             } else {
-                // Mute or unmute member
                 const newStatus = action === 'mute' ? 'muted' : 'active';
-                await communityPatch(`/subgrids/${activeSubgridId}/members/${memberId}`, { status: newStatus });
-                setMembers((prev) => prev.map((m) => {
-                    const id = m.userId || m.user?._id || m._id;
-                    if (String(id) === String(memberId)) {
-                        return { ...m, status: newStatus };
-                    }
-                    return m;
-                }));
+                await updateMemberStatusMutation.mutateAsync({ memberId, status: newStatus });
                 showSuccessModal(
                     action === 'mute' ? 'Stakeholder Muted' : 'Stakeholder Unmuted',
                     action === 'mute' ? 'The stakeholder has been muted and cannot send messages.' : 'The stakeholder can now send messages again.'
@@ -1624,64 +1688,27 @@ const CreditUnionAdminScreen = () => {
 
         try {
             if (action === 'remove') {
-                // Remove member from subgrid
-                await communityDelete(`/subgrids/${activeSubgridId}/members/${memberId}`);
-                setMembers((prev) => prev.filter((m) => {
-                    const id = m.userId || m.user?._id || m._id;
-                    return String(id) !== String(memberId);
-                }));
+                await removeMemberMutation.mutateAsync(memberId);
                 showSuccessModal('Member Removed', 'The member has been removed from this server.');
             } else if (action === 'suspend' || action === 'unsuspend') {
-                // Suspend or unsuspend member
                 const newStatus = action === 'suspend' ? 'suspended' : 'active';
-                await communityPatch(`/subgrids/${activeSubgridId}/members/${memberId}`, { status: newStatus });
-                setMembers((prev) => prev.map((m) => {
-                    const id = m.userId || m.user?._id || m._id;
-                    if (String(id) === String(memberId)) {
-                        return { ...m, status: newStatus };
-                    }
-                    return m;
-                }));
+                await updateMemberStatusMutation.mutateAsync({ memberId, status: newStatus });
                 showSuccessModal(
                     action === 'suspend' ? 'Member Suspended' : 'Member Unsuspended',
                     action === 'suspend' ? 'The member has been suspended and cannot access the server.' : 'The member can now access the server again.'
                 );
             } else if (action === 'mute' || action === 'unmute') {
-                // Mute or unmute member
                 const newStatus = action === 'mute' ? 'muted' : 'active';
-                await communityPatch(`/subgrids/${activeSubgridId}/members/${memberId}`, { status: newStatus });
-                setMembers((prev) => prev.map((m) => {
-                    const id = m.userId || m.user?._id || m._id;
-                    if (String(id) === String(memberId)) {
-                        return { ...m, status: newStatus };
-                    }
-                    return m;
-                }));
+                await updateMemberStatusMutation.mutateAsync({ memberId, status: newStatus });
                 showSuccessModal(
                     action === 'mute' ? 'Member Muted' : 'Member Unmuted',
                     action === 'mute' ? 'The member has been muted and cannot send messages.' : 'The member can now send messages again.'
                 );
             } else if (action === 'promote') {
-                // Promote member to moderator
-                await communityPatch(`/subgrids/${activeSubgridId}/members/${memberId}`, { role: 'moderator' });
-                setMembers((prev) => prev.map((m) => {
-                    const id = m.userId || m.user?._id || m._id;
-                    if (String(id) === String(memberId)) {
-                        return { ...m, role: 'moderator' };
-                    }
-                    return m;
-                }));
+                await updateMemberRoleMutation.mutateAsync({ memberId, role: 'moderator' });
                 showSuccessModal('Member Promoted', 'The member has been promoted to Moderator.');
             } else if (action === 'demote') {
-                // Demote member to regular member
-                await communityPatch(`/subgrids/${activeSubgridId}/members/${memberId}`, { role: 'member' });
-                setMembers((prev) => prev.map((m) => {
-                    const id = m.userId || m.user?._id || m._id;
-                    if (String(id) === String(memberId)) {
-                        return { ...m, role: 'member' };
-                    }
-                    return m;
-                }));
+                await updateMemberRoleMutation.mutateAsync({ memberId, role: 'member' });
                 showSuccessModal('Member Demoted', 'The member has been changed to regular member.');
             }
             // Close modals
@@ -1694,53 +1721,35 @@ const CreditUnionAdminScreen = () => {
         }
     };
 
-    // Custom Roles Functions
-    const loadCustomRoles = async () => {
-        if (!activeSubgridId) return;
-        setLoadingRoles(true);
-        try {
-            const response = await getCustomRoles(activeSubgridId);
-            setCustomRoles(response?.data || []);
-        } catch (err: any) {
-            console.error('Failed to load custom roles:', err);
-        } finally {
-            setLoadingRoles(false);
-        }
-    };
+    // Custom Roles Functions - using React Query mutations
+    const savingRole = createCustomRoleMutation.isPending || updateCustomRoleMutation.isPending;
 
     const handleCreateRole = async () => {
         if (!activeSubgridId || !newRoleName.trim()) return;
-        setSavingRole(true);
         try {
-            const response = await createCustomRole(activeSubgridId, {
+            await createCustomRoleMutation.mutateAsync({
                 name: newRoleName.trim(),
                 color: newRoleColor,
             });
-            if (response?.data) {
-                setCustomRoles(prev => [...prev, response.data]);
-            }
             setCreateRoleModalOpen(false);
             setNewRoleName('');
             setNewRoleColor('#3B82F6');
             showSuccessModal('Role Created', `The "${newRoleName}" role has been created successfully.`);
         } catch (err: any) {
             setError(err.message || 'Failed to create role');
-        } finally {
-            setSavingRole(false);
         }
     };
 
     const handleUpdateRole = async () => {
         if (!activeSubgridId || !editingRole || !newRoleName.trim()) return;
-        setSavingRole(true);
         try {
-            const response = await updateCustomRole(activeSubgridId, editingRole._id, {
-                name: newRoleName.trim(),
-                color: newRoleColor,
+            await updateCustomRoleMutation.mutateAsync({
+                roleId: editingRole._id,
+                data: {
+                    name: newRoleName.trim(),
+                    color: newRoleColor,
+                },
             });
-            if (response?.data) {
-                setCustomRoles(prev => prev.map(r => r._id === editingRole._id ? response.data : r));
-            }
             setEditingRole(null);
             setCreateRoleModalOpen(false);
             setNewRoleName('');
@@ -1748,16 +1757,13 @@ const CreditUnionAdminScreen = () => {
             showSuccessModal('Role Updated', 'The role has been updated successfully.');
         } catch (err: any) {
             setError(err.message || 'Failed to update role');
-        } finally {
-            setSavingRole(false);
         }
     };
 
     const handleDeleteRole = async (roleId: string, roleName: string) => {
         if (!activeSubgridId) return;
         try {
-            await deleteCustomRole(activeSubgridId, roleId);
-            setCustomRoles(prev => prev.filter(r => r._id !== roleId));
+            await deleteCustomRoleMutation.mutateAsync(roleId);
             showSuccessModal('Role Deleted', `The "${roleName}" role has been deleted.`);
         } catch (err: any) {
             setError(err.message || 'Failed to delete role');
@@ -1767,22 +1773,7 @@ const CreditUnionAdminScreen = () => {
     const handleAssignRole = async (memberId: string, roleId: string | null) => {
         if (!activeSubgridId) return;
         try {
-            if (roleId) {
-                await assignCustomRole(activeSubgridId, memberId, roleId);
-            } else {
-                await removeCustomRole(activeSubgridId, memberId);
-            }
-            // Refresh members to show updated role
-            const response = await communityGet(`/subgrids/${activeSubgridId}/members`);
-            const membersData = (response?.data || []).map((m: Member) => ({
-                ...m,
-                userName: m.firstName && m.lastName
-                    ? `${m.firstName} ${m.lastName}`
-                    : m.username || m.user?.firstName && m.user?.lastName
-                        ? `${m.user?.firstName} ${m.user?.lastName}`
-                        : m.user?.username || m.email || 'Unknown User',
-            }));
-            setMembers(membersData);
+            await assignCustomRoleMutation.mutateAsync({ memberId, roleId });
             setAssignRoleModalOpen(false);
             setAssigningMember(null);
             showSuccessModal('Role Updated', 'Member role has been updated successfully.');
@@ -1834,20 +1825,17 @@ const CreditUnionAdminScreen = () => {
 
         try {
             if (type === 'channel') {
-                await communityDelete(`/subgrids/${activeSubgridId}/channels/${id}`);
-                const response = await communityGet(`/subgrids/${activeSubgridId}/channels`);
-                setChannels(response?.data || []);
+                await deleteChannelMutation.mutateAsync(id);
                 if (activeChannelId === id) {
                     setActiveChannelId('');
                 }
                 showSuccessModal('Channel Deleted', 'The channel has been deleted successfully.');
             } else if (type === 'post') {
-                await communityDelete(`/subgrids/${activeSubgridId}/posts/${id}`);
-                setPosts(prev => prev.filter(p => p._id !== id));
+                await deletePostMutation.mutateAsync(id);
                 setItemMenuOpen(null);
                 showSuccessModal('Post Deleted', 'The post has been deleted successfully.');
             } else if (type === 'message') {
-                await communityDelete(`/subgrids/${activeSubgridId}/messages/${id}`);
+                await deleteMessageMutation.mutateAsync(id);
                 setMessages(prev => prev.filter(m => m._id !== id));
                 setItemMenuOpen(null);
                 showSuccessModal('Message Deleted', 'The message has been deleted successfully.');
@@ -1868,12 +1856,9 @@ const CreditUnionAdminScreen = () => {
         if (!newCategoryName.trim() || !activeSubgridId) return;
         const categoryName = newCategoryName.trim();
         try {
-            await communityPost(`/subgrids/${activeSubgridId}/categories`, {
+            await createCategoryMutation.mutateAsync({
                 name: categoryName,
-                visibility: isPrivateCategory ? 'private' : 'public',
             });
-            const response = await communityGet(`/subgrids/${activeSubgridId}/categories`);
-            setCategories(response?.data || []);
             setCreateCategoryModalOpen(false);
             setNewCategoryName('');
             setIsPrivateCategory(false);
@@ -1894,13 +1879,7 @@ const CreditUnionAdminScreen = () => {
             : true;
         if (!confirmDelete) return;
         try {
-            await communityDelete(`/subgrids/${activeSubgridId}/categories/${categoryId}`);
-            const [catRes, chanRes] = await Promise.all([
-                communityGet(`/subgrids/${activeSubgridId}/categories`),
-                communityGet(`/subgrids/${activeSubgridId}/channels`),
-            ]);
-            setCategories(catRes?.data || []);
-            setChannels(chanRes?.data || []);
+            await deleteCategoryMutation.mutateAsync(categoryId);
             showSuccessModal('Category Deleted', `Category "${categoryName}" has been deleted. Its channels are now uncategorized.`);
         } catch (err: any) {
             setError(err.message || 'Failed to delete category.');
@@ -1917,19 +1896,12 @@ const CreditUnionAdminScreen = () => {
         // For events, date is required; for announcements, date is optional
         if (newEventType === 'event' && !newEventDate.trim()) return;
         try {
-            const eventData: any = {
+            await createEventMutation.mutateAsync({
                 title: newEventTitle.trim(),
                 description: newEventDescription.trim(),
-                eventType: newEventType,
                 location: newEventLocation.trim(),
-            };
-            // Only include startDate if provided (required for events, optional for announcements)
-            if (newEventDate.trim()) {
-                eventData.startDate = newEventDate;
-            }
-            await communityPost(`/subgrids/${activeSubgridId}/events`, eventData);
-            const response = await communityGet(`/subgrids/${activeSubgridId}/events`);
-            setEvents(response?.data || []);
+                startDate: newEventDate.trim() || new Date().toISOString(),
+            });
             setCreateEventModalOpen(false);
             setNewEventTitle('');
             setNewEventDescription('');
@@ -1944,8 +1916,7 @@ const CreditUnionAdminScreen = () => {
     const handleDeleteEvent = async (eventId: string) => {
         if (!activeSubgridId) return;
         try {
-            await communityDelete(`/subgrids/${activeSubgridId}/events/${eventId}`);
-            setEvents(prev => prev.filter(e => e._id !== eventId));
+            await deleteEventMutation.mutateAsync(eventId);
         } catch (err: any) {
             setError(err.message || 'Failed to delete event.');
         }
@@ -1967,14 +1938,12 @@ const CreditUnionAdminScreen = () => {
     const handleUpdateServer = async () => {
         if (!activeSubgridId) return;
         try {
-            await communityPatch(`/subgrids/${activeSubgridId}`, {
+            await updateSubgridMutation.mutateAsync({
                 name: serverName.trim(),
                 description: serverDescription.trim(),
                 logoUrl: serverLogoUrl || '',
                 coverImageUrl: bannerColors[selectedBanner][0],
             });
-            const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-            setSubgrids(response?.data || []);
             setServerSettingsModalOpen(false);
         } catch (err: any) {
             setError(err.message || 'Failed to update server.');
@@ -2016,9 +1985,7 @@ const CreditUnionAdminScreen = () => {
                 throw new Error('Upload failed to return a URL.');
             }
             setServerLogoUrl(uploadUrl);
-            await communityPatch(`/subgrids/${activeSubgridId}`, { logoUrl: uploadUrl });
-            const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-            setSubgrids(response?.data || []);
+            await updateSubgridMutation.mutateAsync({ logoUrl: uploadUrl });
             showSuccessModal('Server Icon Updated', 'Your server icon has been updated.');
         } catch (err: any) {
             console.error('[ServerIcon] Error:', err);
@@ -2031,10 +1998,8 @@ const CreditUnionAdminScreen = () => {
     const handleRemoveServerIcon = async () => {
         if (!activeSubgridId) return;
         try {
-            await communityPatch(`/subgrids/${activeSubgridId}`, { logoUrl: '' });
+            await updateSubgridMutation.mutateAsync({ logoUrl: '' });
             setServerLogoUrl('');
-            const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-            setSubgrids(response?.data || []);
         } catch (err: any) {
             setError(err.message || 'Failed to remove server icon.');
         }
@@ -2043,14 +2008,11 @@ const CreditUnionAdminScreen = () => {
     const handleCreateServer = async () => {
         if (!tenantId || !newServerName.trim()) return;
         try {
-            const response = await communityPost(`/tenants/${tenantId}/subgrids`, {
+            const created = await createSubgridMutation.mutateAsync({
                 name: newServerName.trim(),
                 description: newServerDescription.trim(),
                 visibility: newServerVisibility,
             });
-            const created = response?.data;
-            const refreshed = await communityGet(`/tenants/${tenantId}/subgrids`);
-            setSubgrids(refreshed?.data || []);
             if (created?._id) {
                 setActiveSubgridId(created._id);
             }
@@ -2080,11 +2042,10 @@ const CreditUnionAdminScreen = () => {
             });
         if (!confirm) return;
         try {
-            await communityPatch(`/subgrids/${activeSubgridId}`, { status: 'archived' });
-            const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-            const updated = response?.data || [];
-            setSubgrids(updated);
-            setActiveSubgridId(updated[0]?._id || '');
+            await updateSubgridMutation.mutateAsync({ status: 'archived' });
+            // Set to first available subgrid after archive
+            const updatedSubgrids = subgridsQuery.data || [];
+            setActiveSubgridId(updatedSubgrids[0]?._id || '');
             showSuccessModal('Server Archived', 'The server has been archived.');
         } catch (err: any) {
             setError(err.message || 'Failed to archive server.');
@@ -2240,7 +2201,7 @@ const CreditUnionAdminScreen = () => {
     const handlePinMessage = async (messageId: string) => {
         if (!activeSubgridId) return;
         try {
-            await communityPost(`/subgrids/${activeSubgridId}/messages/${messageId}/pin`, {});
+            await pinMessageMutation.mutateAsync(messageId);
             // Refresh pinned messages
             const response = await communityGet(`/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}&pinned=true`);
             setPinnedMessages(response?.data || []);
@@ -2252,7 +2213,7 @@ const CreditUnionAdminScreen = () => {
     const handleUnpinMessage = async (messageId: string) => {
         if (!activeSubgridId) return;
         try {
-            await communityDelete(`/subgrids/${activeSubgridId}/messages/${messageId}/pin`);
+            await unpinMessageMutation.mutateAsync(messageId);
             setPinnedMessages(prev => prev.filter(m => m._id !== messageId));
         } catch (err: any) {
             setError(err.message || 'Failed to unpin message.');
@@ -2321,21 +2282,27 @@ const CreditUnionAdminScreen = () => {
                 { type: 'voice-note', subgridId: activeSubgridId }
             );
 
-            if (uploadResult?.url) {
+            if (uploadResult?.success && uploadResult?.data) {
                 // Send message with voice attachment
-                await communityPost(`/subgrids/${activeSubgridId}/messages`, {
+                const messageResponse = await communityPost(`/subgrids/${activeSubgridId}/messages`, {
                     channelId: activeChannelId,
                     body: '',
+                    kind: 'audio',
                     attachments: [{
-                        type: 'voice',
-                        value: uploadResult.url,
+                        type: 'audio',
+                        value: uploadResult.data.url || uploadResult.data.secure_url,
+                        label: 'Voice note',
                         mimeType,
                         durationMs,
                     }],
                 });
-                // Refresh messages
-                const response = await communityGet(`/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`);
-                setMessages(response?.data || []);
+                // Add the new message to state
+                if (messageResponse?.data) {
+                    setMessages(prev => {
+                        if (prev.some(m => m._id === messageResponse.data._id)) return prev;
+                        return [...prev, messageResponse.data];
+                    });
+                }
             }
         } catch (err: any) {
             console.error('Failed to send voice note:', err.message);
@@ -2378,23 +2345,21 @@ const CreditUnionAdminScreen = () => {
             return;
         }
 
-        // Native recording using expo-av
+        // Native recording using expo-audio
         try {
-            const permission = await Audio.requestPermissionsAsync();
+            const permission = await AudioModule.requestRecordingPermissionsAsync();
             if (!permission.granted) {
                 setRecordingError('Microphone permission denied');
                 return;
             }
 
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+            await setAudioModeAsync({
+                allowsRecording: true,
+                playsInSilentMode: true,
             });
 
-            const { recording: newRecording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            expoRecordingRef.current = newRecording;
+            await audioRecorder.prepareToRecordAsync();
+            audioRecorder.record();
             setIsRecording(true);
             recordingInterval.current = setInterval(() => {
                 setRecordingDuration((prev) => prev + 1);
@@ -2418,39 +2383,69 @@ const CreditUnionAdminScreen = () => {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
-                const uri = expoRecordingRef.current.getURI();
+                await audioRecorder.stop();
+                const uri = audioRecorder.uri;
                 const durationMs = Date.now() - recordingStartRef.current;
 
-                if (uri && activeSubgridId) {
-                    const result = await uploadFile(
-                        { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' },
-                        { type: 'voice-note', subgridId: activeSubgridId }
-                    );
+                if (uri && activeSubgridId && activeChannelId) {
+                    console.log('[Voice Note CU Admin] Starting upload, URI:', uri, 'subgridId:', activeSubgridId, 'channelId:', activeChannelId);
+                    let result;
+                    try {
+                        result = await uploadFile(
+                            { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' },
+                            { type: 'voice-note', subgridId: activeSubgridId }
+                        );
+                        console.log('[Voice Note CU Admin] Upload result:', JSON.stringify(result));
+                    } catch (uploadError: any) {
+                        console.error('[Voice Note CU Admin] Upload failed:', uploadError?.message || uploadError);
+                        setRecordingError('Failed to upload voice note.');
+                        return;
+                    }
 
-                    if (result?.url) {
-                        await communityPost(`/subgrids/${activeSubgridId}/messages`, {
+                    if (result?.success && result?.data) {
+                        console.log('[Voice Note CU Admin] Sending message with attachment URL:', result.data.url || result.data.secure_url);
+                        const messageResponse = await communityPost(`/subgrids/${activeSubgridId}/messages`, {
                             channelId: activeChannelId,
                             body: '',
+                            kind: 'audio',
                             attachments: [{
-                                type: 'voice',
-                                value: result.url,
+                                type: 'audio',
+                                value: result.data.url || result.data.secure_url,
+                                label: 'Voice note',
                                 mimeType: 'audio/m4a',
                                 durationMs,
                             }],
                         });
-                        const response = await communityGet(`/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`);
-                        setMessages(response?.data || []);
+                        console.log('[Voice Note CU Admin] Message response:', JSON.stringify(messageResponse));
+                        // Add the new message to state
+                        if (messageResponse?.data && messageResponse.data._id) {
+                            console.log('[Voice Note CU Admin] Adding message to state:', messageResponse.data._id, 'attachments:', JSON.stringify(messageResponse.data.attachments));
+                            setMessages(prev => {
+                                console.log('[Voice Note CU Admin] Current messages count:', prev.length);
+                                if (prev.some(m => m._id === messageResponse.data._id)) {
+                                    console.log('[Voice Note CU Admin] Message already exists in state');
+                                    return prev;
+                                }
+                                const newMessages = [...prev, messageResponse.data];
+                                console.log('[Voice Note CU Admin] New messages count:', newMessages.length);
+                                return newMessages;
+                            });
+                        } else {
+                            console.error('[Voice Note CU Admin] No message data or _id in response:', JSON.stringify(messageResponse));
+                        }
+                    } else {
+                        console.error('[Voice Note CU Admin] Upload result missing success or data:', result);
                     }
+                } else {
+                    console.error('[Voice Note CU Admin] Missing required data:', { uri: !!uri, activeSubgridId, activeChannelId });
                 }
             } catch (err: any) {
                 setRecordingError(err.message || 'Failed to save recording.');
             } finally {
-                expoRecordingRef.current = null;
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                await setAudioModeAsync({ allowsRecording: false });
             }
         }
     };
@@ -2479,13 +2474,12 @@ const CreditUnionAdminScreen = () => {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
+                await audioRecorder.stop();
             } catch { }
-            expoRecordingRef.current = null;
-            await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+            await setAudioModeAsync({ allowsRecording: false });
         }
     };
 
@@ -2498,60 +2492,34 @@ const CreditUnionAdminScreen = () => {
     // Like a feed item (post or message)
     const handleLikeItem = async (itemId: string, isPost: boolean) => {
         if (!activeSubgridId) return;
-        const endpoint = isPost ? 'posts' : 'messages';
+        const itemType = isPost ? 'posts' : 'messages';
         const items = isPost ? posts : messages;
-        const setItems = isPost ? setPosts : setMessages;
         try {
             const item = items.find(i => i._id === itemId);
-            if (item?.userLiked) {
-                // Unlike
-                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
-                setItems(prev => prev.map(i =>
-                    i._id === itemId
-                        ? { ...i, likeCount: Math.max(0, (i.likeCount || 0) - 1), userLiked: false }
-                        : i
-                ));
+            if ((item as any)?.userLiked) {
+                await unlikeItemMutation.mutateAsync({ itemId, itemType });
             } else {
-                // Like
-                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`, {});
-                setItems(prev => prev.map(i =>
-                    i._id === itemId
-                        ? { ...i, likeCount: (i.likeCount || 0) + 1, userLiked: true }
-                        : i
-                ));
+                await likeItemMutation.mutateAsync({ itemId, itemType });
             }
         } catch (err: any) {
-            console.error(`Failed to like/unlike ${endpoint}:`, err.message);
+            console.error(`Failed to like/unlike ${itemType}:`, err.message);
         }
     };
 
     // Reshare a feed item (post or message)
     const handleReshareItem = async (itemId: string, isPost: boolean) => {
         if (!activeSubgridId) return;
-        const endpoint = isPost ? 'posts' : 'messages';
+        const itemType = isPost ? 'posts' : 'messages';
         const items = isPost ? posts : messages;
-        const setItems = isPost ? setPosts : setMessages;
         try {
             const item = items.find(i => i._id === itemId);
-            if (item?.userReshared) {
-                // Unreshare
-                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
-                setItems(prev => prev.map(i =>
-                    i._id === itemId
-                        ? { ...i, reshareCount: Math.max(0, (i.reshareCount || 0) - 1), userReshared: false }
-                        : i
-                ));
+            if ((item as any)?.userReshared) {
+                await unreshareItemMutation.mutateAsync({ itemId, itemType });
             } else {
-                // Reshare
-                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`, {});
-                setItems(prev => prev.map(i =>
-                    i._id === itemId
-                        ? { ...i, reshareCount: (i.reshareCount || 0) + 1, userReshared: true }
-                        : i
-                ));
+                await reshareItemMutation.mutateAsync({ itemId, itemType });
             }
         } catch (err: any) {
-            console.error(`Failed to reshare/unreshare ${endpoint}:`, err.message);
+            console.error(`Failed to reshare/unreshare ${itemType}:`, err.message);
         }
     };
 
@@ -2599,31 +2567,17 @@ const CreditUnionAdminScreen = () => {
 
         setCommentLoading(true);
         try {
-            const endpoint = commentTarget.isPost
-                ? `/subgrids/${activeSubgridId}/posts/${commentTarget.id}/comments`
-                : `/subgrids/${activeSubgridId}/messages/${commentTarget.id}/comments`;
-
-            const res = await communityPost(endpoint, { body: commentText.trim() });
+            const itemType = commentTarget.isPost ? 'posts' : 'messages';
+            const res = await createCommentMutation.mutateAsync({
+                itemId: commentTarget.id,
+                itemType,
+                body: commentText.trim(),
+            });
             console.log('[Comment] Created comment:', res);
 
             // Add the new comment to the list
-            setComments(prev => [...prev, res.comment || res]);
+            setComments(prev => [...prev, res?.comment || res]);
             setCommentText('');
-
-            // Update local state for comment count
-            if (commentTarget.isPost) {
-                setPosts(prev => prev.map(p =>
-                    p._id === commentTarget.id
-                        ? { ...p, commentCount: (p.commentCount || 0) + 1 }
-                        : p
-                ));
-            } else {
-                setMessages(prev => prev.map(m =>
-                    m._id === commentTarget.id
-                        ? { ...m, commentCount: (m.commentCount || 0) + 1 }
-                        : m
-                ));
-            }
         } catch (err: any) {
             console.error('[Comment] Error creating comment:', err);
             setError('Failed to post comment');
@@ -3143,16 +3097,17 @@ const CreditUnionAdminScreen = () => {
 
                 {/* Main Content - full width on mobile when showing content */}
                 {(!isMobile || mobileShowContent) && (
-                <Pressable
+                <KeyboardAvoidingView
                     style={[styles.mainContent, isMobile && styles.mainContentMobile]}
-                    onPress={() => {
-                        if (serverMenuOpen) setServerMenuOpen(false);
-                    }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
                 >
+                <View style={{ flex: 1 }}>
+                    {/* Close server menu when tapping outside - handled by onScroll instead */}
                     {showEventsView ? (
                         /* Events View */
                         <>
-                            <View style={styles.contentHeader}>
+                            <View style={[styles.contentHeader, isMobile && { paddingTop: insets.top + 14 }]}>
                                 <View style={styles.contentHeaderLeft}>
                                     {isMobile && (
                                         <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
@@ -3255,7 +3210,7 @@ const CreditUnionAdminScreen = () => {
                         /* Channel View */
                         <>
                     {/* Channel Header */}
-                    <View style={styles.contentHeader}>
+                    <View style={[styles.contentHeader, isMobile && { paddingTop: insets.top + 14 }]}>
                         <View style={styles.contentHeaderLeft}>
                             {isMobile && (
                                 <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
@@ -3305,13 +3260,19 @@ const CreditUnionAdminScreen = () => {
                         <>
                             {/* Feed */}
                             <ScrollView
-                                ref={feedScrollRef}
+                                ref={feedScrollRef as any}
                                 style={styles.feedContainer}
                                 contentContainerStyle={styles.feedContent}
                                 showsVerticalScrollIndicator={false}
-                                onContentSizeChange={() => {
-                                    // Auto-scroll to bottom when content changes (new messages)
-                                    feedScrollRef.current?.scrollToEnd({ animated: false });
+                                keyboardShouldPersistTaps="handled"
+                                bounces={true}
+                                scrollEnabled={true}
+                                nestedScrollEnabled={true}
+                                removeClippedSubviews={false}
+                                onContentSizeChange={handleContentSizeChange}
+                                onLayout={handleScrollViewLayout}
+                                onScrollBeginDrag={() => {
+                                    if (serverMenuOpen) setServerMenuOpen(false);
                                 }}
                             >
                                 {feedItems.length === 0 && feedSearchQuery.trim() && (
@@ -3602,7 +3563,7 @@ const CreditUnionAdminScreen = () => {
 
                             {/* Recording UI */}
                             {isRecording ? (
-                                <View style={styles.recordingContainer}>
+                                <View style={[styles.recordingContainer, isMobile && { marginBottom: Math.max(insets.bottom, 12) }]}>
                                     <View style={styles.recordingIndicator}>
                                         <View style={styles.recordingDot} />
                                         <Text style={styles.recordingText}>Recording {formatRecordingTime(recordingDuration)}</Text>
@@ -3618,7 +3579,7 @@ const CreditUnionAdminScreen = () => {
                                 </View>
                             ) : (
                                 /* Message Input */
-                                <View style={styles.messageInputContainer}>
+                                <View style={[styles.messageInputContainer, isMobile && { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}>
                                     <View style={styles.messageInputLeft}>
                                         <TouchableOpacity style={styles.inputIcon} onPress={handlePickImage}>
                                             <PlusCircle size={22} color={colors.textMuted} />
@@ -3631,32 +3592,51 @@ const CreditUnionAdminScreen = () => {
                                             placeholderTextColor={colors.textSubtle}
                                             value={messageDraft}
                                             onChangeText={setMessageDraft}
-                                            onSubmitEditing={handleSendMessage}
+                                            multiline
                                         />
                                         <View style={styles.messageInputActions}>
+                                            {/* Attach button - always visible */}
                                             <TouchableOpacity style={styles.inputActionIcon} onPress={handlePickFile}>
                                                 <Paperclip size={20} color={colors.textMuted} />
                                             </TouchableOpacity>
-                                            <TouchableOpacity style={styles.inputActionIcon} onPress={() => setShowEmojiPicker(true)}>
-                                                <Smile size={20} color={colors.textMuted} />
+                                            {/* Emoji and mic buttons - only on web (mobile uses native keyboard emoji) */}
+                                            {Platform.OS === 'web' && (
+                                                <>
+                                                    <TouchableOpacity style={styles.inputActionIcon} onPress={() => setShowEmojiPicker(true)}>
+                                                        <Smile size={20} color={colors.textMuted} />
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity style={styles.inputActionIcon} onPress={handleStartRecording}>
+                                                        <Mic size={20} color={colors.textMuted} />
+                                                    </TouchableOpacity>
+                                                </>
+                                            )}
+                                            {/* Send button - always visible on mobile */}
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.sendBtn,
+                                                    !(messageDraft.trim() || attachments.length > 0) && styles.sendBtnDisabled
+                                                ]}
+                                                onPress={handleSendMessage}
+                                                disabled={!(messageDraft.trim() || attachments.length > 0)}
+                                            >
+                                                <Send size={18} color={(messageDraft.trim() || attachments.length > 0) ? '#FFFFFF' : colors.textMuted} />
                                             </TouchableOpacity>
-                                            <TouchableOpacity style={styles.inputActionIcon} onPress={handleStartRecording}>
-                                                <Mic size={20} color={colors.textMuted} />
-                                            </TouchableOpacity>
-                                            {(messageDraft.trim() || attachments.length > 0) ? (
-                                                <TouchableOpacity style={styles.sendBtn} onPress={handleSendMessage}>
-                                                    <Send size={18} color="#FFFFFF" />
-                                                </TouchableOpacity>
-                                            ) : null}
                                         </View>
                                     </View>
+                                    {/* Voice recording button - only on mobile when no content */}
+                                    {Platform.OS !== 'web' && !(messageDraft.trim() || attachments.length > 0) && (
+                                        <TouchableOpacity style={styles.voiceMicBtn} onPress={handleStartRecording}>
+                                            <Mic size={22} color={colors.textMuted} />
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                             )}
                         </>
                     )}
                         </>
                     )}
-                </Pressable>
+                </View>
+                </KeyboardAvoidingView>
                 )}
 
                 {/* Members Sidebar */}
@@ -4660,14 +4640,14 @@ const CreditUnionAdminScreen = () => {
                                             <TouchableOpacity
                                                 style={[
                                                     styles.engagementToggle,
-                                                    engagementSettings.joinMessage && styles.engagementToggleOn,
+                                                    localEngagementSettings.joinMessage && styles.engagementToggleOn,
                                                 ]}
                                                 onPress={() => toggleEngagementSetting('joinMessage')}
                                             >
                                                 <View
                                                     style={[
                                                         styles.engagementToggleKnob,
-                                                        engagementSettings.joinMessage && styles.engagementToggleKnobOn,
+                                                        localEngagementSettings.joinMessage && styles.engagementToggleKnobOn,
                                                     ]}
                                                 />
                                             </TouchableOpacity>
@@ -4685,14 +4665,14 @@ const CreditUnionAdminScreen = () => {
                                             <TouchableOpacity
                                                 style={[
                                                     styles.engagementToggle,
-                                                    engagementSettings.uploadNotice && styles.engagementToggleOn,
+                                                    localEngagementSettings.uploadNotice && styles.engagementToggleOn,
                                                 ]}
                                                 onPress={() => toggleEngagementSetting('uploadNotice')}
                                             >
                                                 <View
                                                     style={[
                                                         styles.engagementToggleKnob,
-                                                        engagementSettings.uploadNotice && styles.engagementToggleKnobOn,
+                                                        localEngagementSettings.uploadNotice && styles.engagementToggleKnobOn,
                                                     ]}
                                                 />
                                             </TouchableOpacity>
@@ -4713,14 +4693,14 @@ const CreditUnionAdminScreen = () => {
                                             <TouchableOpacity
                                                 style={[
                                                     styles.engagementToggle,
-                                                    engagementSettings.emojiReactions && styles.engagementToggleOn,
+                                                    localEngagementSettings.emojiReactions && styles.engagementToggleOn,
                                                 ]}
                                                 onPress={() => toggleEngagementSetting('emojiReactions')}
                                             >
                                                 <View
                                                     style={[
                                                         styles.engagementToggleKnob,
-                                                        engagementSettings.emojiReactions && styles.engagementToggleKnobOn,
+                                                        localEngagementSettings.emojiReactions && styles.engagementToggleKnobOn,
                                                     ]}
                                                 />
                                             </TouchableOpacity>
@@ -4740,14 +4720,14 @@ const CreditUnionAdminScreen = () => {
                                             <TouchableOpacity
                                                 style={[
                                                     styles.engagementToggle,
-                                                    engagementSettings.autoEmoji && styles.engagementToggleOn,
+                                                    localEngagementSettings.autoEmoji && styles.engagementToggleOn,
                                                 ]}
                                                 onPress={() => toggleEngagementSetting('autoEmoji')}
                                             >
                                                 <View
                                                     style={[
                                                         styles.engagementToggleKnob,
-                                                        engagementSettings.autoEmoji && styles.engagementToggleKnobOn,
+                                                        localEngagementSettings.autoEmoji && styles.engagementToggleKnobOn,
                                                     ]}
                                                 />
                                             </TouchableOpacity>
@@ -4765,14 +4745,14 @@ const CreditUnionAdminScreen = () => {
                                             <TouchableOpacity
                                                 style={[
                                                     styles.engagementToggle,
-                                                    engagementSettings.stickersAutocomplete && styles.engagementToggleOn,
+                                                    localEngagementSettings.stickersAutocomplete && styles.engagementToggleOn,
                                                 ]}
                                                 onPress={() => toggleEngagementSetting('stickersAutocomplete')}
                                             >
                                                 <View
                                                     style={[
                                                         styles.engagementToggleKnob,
-                                                        engagementSettings.stickersAutocomplete && styles.engagementToggleKnobOn,
+                                                        localEngagementSettings.stickersAutocomplete && styles.engagementToggleKnobOn,
                                                     ]}
                                                 />
                                             </TouchableOpacity>
@@ -5503,13 +5483,13 @@ const CreditUnionAdminScreen = () => {
                                                 <TouchableOpacity
                                                     style={[
                                                         styles.toggleSwitch,
-                                                        contentModerationEnabled && styles.toggleSwitchActive
+                                                        localContentModerationEnabled && styles.toggleSwitchActive
                                                     ]}
-                                                    onPress={() => setContentModerationEnabled(!contentModerationEnabled)}
+                                                    onPress={() => setContentModerationEnabled(!localContentModerationEnabled)}
                                                 >
                                                     <View style={[
                                                         styles.toggleKnob,
-                                                        contentModerationEnabled && styles.toggleKnobActive
+                                                        localContentModerationEnabled && styles.toggleKnobActive
                                                     ]} />
                                                 </TouchableOpacity>
                                             </View>
@@ -5519,79 +5499,79 @@ const CreditUnionAdminScreen = () => {
                                         <View style={styles.contentModerationSection}>
                                             <Text style={styles.contentModerationLabel}>Filter Action</Text>
                                             <Text style={styles.contentModerationHint}>What happens when prohibited content is detected</Text>
-                                            <View style={styles.contentModerationActions}>
+                                            <View style={styles.localContentModerationActions}>
                                                 <TouchableOpacity
                                                     style={[
-                                                        styles.contentModerationActionBtn,
-                                                        contentModerationAction === 'block' && styles.contentModerationActionBtnActive
+                                                        styles.localContentModerationActionBtn,
+                                                        localContentModerationAction === 'block' && styles.localContentModerationActionBtnActive
                                                     ]}
                                                     onPress={() => setContentModerationAction('block')}
                                                 >
                                                     <Ban
                                                         size={18}
-                                                        color={contentModerationAction === 'block' ? '#fff' : colors.textMuted}
+                                                        color={localContentModerationAction === 'block' ? '#fff' : colors.textMuted}
                                                     />
                                                     <Text style={[
-                                                        styles.contentModerationActionText,
-                                                        contentModerationAction === 'block' && styles.contentModerationActionTextActive
+                                                        styles.localContentModerationActionText,
+                                                        localContentModerationAction === 'block' && styles.localContentModerationActionTextActive
                                                     ]}>Block</Text>
                                                     <Text style={[
-                                                        styles.contentModerationActionHint,
-                                                        contentModerationAction === 'block' && styles.contentModerationActionHintActive
+                                                        styles.localContentModerationActionHint,
+                                                        localContentModerationAction === 'block' && styles.localContentModerationActionHintActive
                                                     ]}>Prevent sending</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
                                                     style={[
-                                                        styles.contentModerationActionBtn,
-                                                        contentModerationAction === 'flag' && styles.contentModerationActionBtnActive
+                                                        styles.localContentModerationActionBtn,
+                                                        localContentModerationAction === 'flag' && styles.localContentModerationActionBtnActive
                                                     ]}
                                                     onPress={() => setContentModerationAction('flag')}
                                                 >
                                                     <Flag
                                                         size={18}
-                                                        color={contentModerationAction === 'flag' ? '#fff' : colors.textMuted}
+                                                        color={localContentModerationAction === 'flag' ? '#fff' : colors.textMuted}
                                                     />
                                                     <Text style={[
-                                                        styles.contentModerationActionText,
-                                                        contentModerationAction === 'flag' && styles.contentModerationActionTextActive
+                                                        styles.localContentModerationActionText,
+                                                        localContentModerationAction === 'flag' && styles.localContentModerationActionTextActive
                                                     ]}>Flag</Text>
                                                     <Text style={[
-                                                        styles.contentModerationActionHint,
-                                                        contentModerationAction === 'flag' && styles.contentModerationActionHintActive
+                                                        styles.localContentModerationActionHint,
+                                                        localContentModerationAction === 'flag' && styles.localContentModerationActionHintActive
                                                     ]}>Send but flag for review</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
                                                     style={[
-                                                        styles.contentModerationActionBtn,
-                                                        contentModerationAction === 'censor' && styles.contentModerationActionBtnActive
+                                                        styles.localContentModerationActionBtn,
+                                                        localContentModerationAction === 'censor' && styles.localContentModerationActionBtnActive
                                                     ]}
                                                     onPress={() => setContentModerationAction('censor')}
                                                 >
                                                     <Eye
                                                         size={18}
-                                                        color={contentModerationAction === 'censor' ? '#fff' : colors.textMuted}
+                                                        color={localContentModerationAction === 'censor' ? '#fff' : colors.textMuted}
                                                     />
                                                     <Text style={[
-                                                        styles.contentModerationActionText,
-                                                        contentModerationAction === 'censor' && styles.contentModerationActionTextActive
+                                                        styles.localContentModerationActionText,
+                                                        localContentModerationAction === 'censor' && styles.localContentModerationActionTextActive
                                                     ]}>Censor</Text>
                                                     <Text style={[
-                                                        styles.contentModerationActionHint,
-                                                        contentModerationAction === 'censor' && styles.contentModerationActionHintActive
+                                                        styles.localContentModerationActionHint,
+                                                        localContentModerationAction === 'censor' && styles.localContentModerationActionHintActive
                                                     ]}>Replace with ***</Text>
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
 
                                         {/* Blocked Message */}
-                                        {contentModerationAction === 'block' && (
+                                        {localContentModerationAction === 'block' && (
                                             <View style={styles.contentModerationSection}>
                                                 <Text style={styles.contentModerationLabel}>Blocked Message</Text>
                                                 <Text style={styles.contentModerationHint}>Message shown to users when their content is blocked</Text>
                                                 <TextInput
                                                     style={styles.contentModerationInput}
-                                                    value={blockedMessage}
-                                                    onChangeText={setBlockedMessage}
+                                                    value={localBlockedMessage}
+                                                    onChangeText={setLocalBlockedMessage}
                                                     placeholder="Your message contains prohibited content..."
                                                     placeholderTextColor={colors.textSubtle}
                                                     multiline
@@ -5726,7 +5706,7 @@ const CreditUnionAdminScreen = () => {
                                                         </Text>
                                                     </View>
                                                 )}
-                                                {contentModerationTestResult.isProhibited && contentModerationAction === 'censor' && (
+                                                {contentModerationTestResult.isProhibited && localContentModerationAction === 'censor' && (
                                                     <View style={styles.contentModerationTestResultDetails}>
                                                         <Text style={styles.contentModerationTestResultLabel}>Censored output:</Text>
                                                         <Text style={styles.contentModerationTestResultValue}>
@@ -6653,7 +6633,7 @@ const CreditUnionAdminScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset: number = 0, topInset: number = 0) =>
     StyleSheet.create({
         container: {
             flex: 1,
@@ -6784,7 +6764,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         mobileTopBar: {
             flexDirection: 'column',
             paddingHorizontal: 16,
-            paddingTop: Platform.OS === 'ios' ? 50 : Platform.OS === 'android' ? 40 : 16,
+            paddingTop: topInset + 12,
             paddingBottom: 12,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
@@ -7291,7 +7271,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 8,
             paddingHorizontal: 8,
             paddingTop: 8,
-            paddingBottom: Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 24 : 8,
+            paddingBottom: bottomInset + 8,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
@@ -7516,6 +7496,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         feedContent: {
             padding: 16,
             gap: 16,
+            flexGrow: 1,
+            paddingBottom: 20,
         },
         welcomeCard: {
             backgroundColor: colors.surface,
@@ -7981,7 +7963,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 12,
             paddingHorizontal: 16,
             paddingTop: 12,
-            paddingBottom: Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 24 : 12,
+            paddingBottom: bottomInset + 12,
         },
         messageInputLeft: {
             flexDirection: 'row',
@@ -8019,9 +8001,24 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         sendBtn: {
             backgroundColor: colors.primary,
-            borderRadius: 10,
-            padding: 10,
+            borderRadius: 18,
+            width: 36,
+            height: 36,
+            justifyContent: 'center',
+            alignItems: 'center',
             marginLeft: 6,
+        },
+        sendBtnDisabled: {
+            backgroundColor: colors.surfaceMuted,
+        },
+        voiceMicBtn: {
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: colors.surfaceMuted,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginLeft: 8,
         },
         membersSidebar: {
             width: 200,
@@ -10513,11 +10510,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         toggleKnobActive: {
             transform: [{ translateX: 22 }],
         },
-        contentModerationActions: {
+        localContentModerationActions: {
             flexDirection: 'row',
             gap: 12,
         },
-        contentModerationActionBtn: {
+        localContentModerationActionBtn: {
             flex: 1,
             alignItems: 'center',
             padding: 16,
@@ -10526,26 +10523,26 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             borderColor: colors.border,
             backgroundColor: colors.surface,
         },
-        contentModerationActionBtnActive: {
+        localContentModerationActionBtnActive: {
             backgroundColor: colors.primary,
             borderColor: colors.primary,
         },
-        contentModerationActionText: {
+        localContentModerationActionText: {
             fontSize: 14,
             fontWeight: '600',
             color: colors.text,
             marginTop: 8,
         },
-        contentModerationActionTextActive: {
+        localContentModerationActionTextActive: {
             color: '#FFFFFF',
         },
-        contentModerationActionHint: {
+        localContentModerationActionHint: {
             fontSize: 11,
             color: colors.textMuted,
             marginTop: 4,
             textAlign: 'center',
         },
-        contentModerationActionHintActive: {
+        localContentModerationActionHintActive: {
             color: 'rgba(255,255,255,0.8)',
         },
         contentModerationInput: {

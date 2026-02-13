@@ -11,6 +11,7 @@ const FriendRequest = require('../models/FriendRequest');
 const Friendship = require('../models/Friendship');
 const FriendBlock = require('../models/FriendBlock');
 const UserPresence = require('../models/UserPresence');
+const SubgridBan = require('../models/SubgridBan');
 const { getTenantConnection } = require('../services/tenantDb');
 const { defineModels } = require('../services/tenantModels');
 const { generateInviteToken, hashInviteToken, signEmbedToken } = require('../utils/tokenUtils');
@@ -81,6 +82,142 @@ const touchMemberActivity = async (tenantId, subgridId, userId) => {
     );
 };
 
+const truncateNotificationText = (value, limit = 100) => {
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (!text) {
+        return '';
+    }
+    return text.length > limit ? `${text.substring(0, limit)}...` : text;
+};
+
+const resolveAttachmentType = (attachment) => {
+    if (!attachment) {
+        return 'unknown';
+    }
+
+    const detectFromUrl = (url) => {
+        const lower = String(url || '').toLowerCase();
+        if (!lower) return 'unknown';
+
+        if (lower.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || lower.includes('/image/upload/')) {
+            return 'image';
+        }
+
+        if (
+            lower.match(/\.(mp3|wav|webm|m4a|ogg|aac)(\?|$)/i) ||
+            lower.includes('/video/upload/') ||
+            lower.includes('/raw/upload/')
+        ) {
+            return 'audio';
+        }
+
+        return 'file';
+    };
+
+    if (typeof attachment === 'string') {
+        return detectFromUrl(attachment);
+    }
+
+    const rawType = attachment?.type || attachment?.mimeType;
+    if (typeof rawType === 'string' && rawType) {
+        const normalized = rawType.toLowerCase();
+        if (normalized === 'audio' || normalized.startsWith('audio/')) return 'audio';
+        if (normalized === 'image' || normalized.startsWith('image/')) return 'image';
+        if (normalized === 'file' || normalized === 'document') return 'file';
+        if (normalized === 'emoji') return 'emoji';
+        if (normalized === 'sticker') return 'sticker';
+    }
+
+    const candidateUrl =
+        attachment?.value ||
+        attachment?.uri ||
+        attachment?.url ||
+        attachment?.src ||
+        attachment?.secure_url ||
+        attachment?.secureUrl ||
+        '';
+
+    if (typeof candidateUrl === 'string' && candidateUrl) {
+        return detectFromUrl(candidateUrl);
+    }
+
+    return 'unknown';
+};
+
+const buildAttachmentPreview = (attachments) => {
+    const list = Array.isArray(attachments) ? attachments.filter(Boolean) : [];
+    if (list.length === 0) {
+        return '';
+    }
+
+    const counts = {
+        audio: 0,
+        image: 0,
+        file: 0,
+        emoji: 0,
+        sticker: 0,
+        unknown: 0,
+    };
+
+    const types = list.map((attachment) => {
+        const type = resolveAttachmentType(attachment);
+        if (counts[type] !== undefined) {
+            counts[type] += 1;
+        } else {
+            counts.unknown += 1;
+        }
+        return type;
+    });
+
+    const total = types.length;
+    if (total === 1) {
+        const attachment = list[0];
+        const type = types[0];
+        if (type === 'audio') {
+            const durationMs = attachment && typeof attachment === 'object' ? attachment.durationMs : null;
+            if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0) {
+                const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+                const mins = Math.floor(totalSeconds / 60);
+                const secs = totalSeconds % 60;
+                return `Voice message (${mins}:${String(secs).padStart(2, '0')})`;
+            }
+            return 'Voice message';
+        }
+        if (type === 'image') return 'Photo';
+        if (type === 'emoji') return 'Emoji';
+        if (type === 'sticker') return 'Sticker';
+        if (type === 'file') return 'File';
+        return 'Attachment';
+    }
+
+    if (counts.audio === total) return `${total} voice messages`;
+    if (counts.image === total) return `${total} photos`;
+    if (counts.file === total) return `${total} files`;
+    if (counts.sticker === total) return `${total} stickers`;
+    if (counts.emoji === total) return `${total} emojis`;
+
+    return `${total} attachments`;
+};
+
+const buildChatNotificationBody = ({ body, kind, attachments }) => {
+    const text = typeof body === 'string' ? body.trim() : '';
+    if (text) {
+        return truncateNotificationText(text, 100);
+    }
+
+    const attachmentPreview = buildAttachmentPreview(attachments);
+    if (attachmentPreview) {
+        return truncateNotificationText(attachmentPreview, 100);
+    }
+
+    const normalizedKind = typeof kind === 'string' ? kind.toLowerCase() : '';
+    if (normalizedKind === 'audio') return 'Voice message';
+    if (normalizedKind === 'sticker') return 'Sticker';
+    if (normalizedKind === 'emoji') return 'Emoji';
+
+    return 'New message';
+};
+
 /**
  * Send push notification to user if they're offline
  * Also creates an in-app notification for the user's notification inbox
@@ -88,10 +225,11 @@ const touchMemberActivity = async (tenantId, subgridId, userId) => {
  */
 const sendPushToOfflineUser = async (userId, notificationType, notificationData) => {
     try {
+        const normalizedUserId = String(userId);
         // Get user with push tokens and preferences
-        const user = await User.findById(userId).select('pushTokens notificationPreferences firstName lastName');
+        const user = await User.findById(normalizedUserId).select('pushTokens notificationPreferences firstName lastName');
         if (!user) {
-            console.log(`[Push] User ${userId} not found`);
+            console.log(`[Push] User ${normalizedUserId} not found`);
             return;
         }
 
@@ -106,27 +244,37 @@ const sendPushToOfflineUser = async (userId, notificationType, notificationData)
         // Always create an in-app notification (regardless of online status)
         try {
             await Notification.create({
-                userId,
+                userId: normalizedUserId,
                 type: notificationType,
                 title: notificationData.title,
                 body: notificationData.body,
                 data: notificationData.data || {},
                 imageUrl: notificationData.imageUrl || null,
             });
-            console.log(`[Notification] Created in-app notification for user ${userId}`);
+            console.log(`[Notification] Created in-app notification for user ${normalizedUserId}`);
         } catch (notifError) {
             console.error(`[Notification] Failed to create in-app notification:`, notifError.message);
         }
 
-        // Check if user is online via WebSocket - if so, skip push notification
-        if (websocketService.isUserOnline(userId)) {
-            console.log(`[Push] User ${userId} is online, skipping push notification`);
+        // Check if user has push tokens
+        if (!user.pushTokens || user.pushTokens.length === 0) {
+            console.log(`[Push] User ${normalizedUserId} has no push tokens`);
             return;
         }
 
-        // Check if user has push tokens
-        if (!user.pushTokens || user.pushTokens.length === 0) {
-            console.log(`[Push] User ${userId} has no push tokens`);
+        const notificationRoomType = notificationData?.data?.roomType;
+        const notificationRoomId = notificationData?.data?.roomId;
+
+        // If we know the room context, only skip push when the user is actively in that room.
+        // Otherwise, fall back to skipping push when the user is online anywhere.
+        if (notificationRoomType && notificationRoomId) {
+            const roomUsers = websocketService.getOnlineUsersInRoom(notificationRoomType, String(notificationRoomId));
+            if (roomUsers.includes(normalizedUserId)) {
+                console.log(`[Push] User ${normalizedUserId} is active in ${notificationRoomType}:${notificationRoomId}, skipping push notification`);
+                return;
+            }
+        } else if (websocketService.isUserOnline(normalizedUserId)) {
+            console.log(`[Push] User ${normalizedUserId} is online, skipping push notification`);
             return;
         }
 
@@ -137,7 +285,7 @@ const sendPushToOfflineUser = async (userId, notificationType, notificationData)
         }));
 
         const results = await pushNotificationService.sendBulkNotifications(notifications);
-        console.log(`[Push] Sent ${results.length} push notifications to user ${userId}:`, results.map(r => r.status));
+        console.log(`[Push] Sent ${results.length} push notifications to user ${normalizedUserId}:`, results.map(r => r.status));
 
         // Clean up invalid tokens
         const invalidTokens = results
@@ -145,13 +293,13 @@ const sendPushToOfflineUser = async (userId, notificationType, notificationData)
             .map(r => r.token);
 
         if (invalidTokens.length > 0) {
-            console.log(`[Push] Removing ${invalidTokens.length} invalid tokens for user ${userId}`);
-            await User.findByIdAndUpdate(userId, {
+            console.log(`[Push] Removing ${invalidTokens.length} invalid tokens for user ${normalizedUserId}`);
+            await User.findByIdAndUpdate(normalizedUserId, {
                 $pull: { pushTokens: { token: { $in: invalidTokens } } }
             });
         }
     } catch (error) {
-        console.error(`[Push] Failed to send push notification to user ${userId}:`, error.message);
+        console.error(`[Push] Failed to send push notification to user ${String(userId)}:`, error.message);
     }
 };
 
@@ -1776,7 +1924,12 @@ exports.addChannelMembers = async (req, res) => {
                     });
 
                     // Emit WebSocket event so they see the DM in real-time
-                    const dmRoomId = [adminId, userId].sort().join('_');
+                    // Use string comparison for consistent room ID (works with MongoDB ObjectIds)
+                    const adminIdStr = String(adminId);
+                    const userIdStr = String(userId);
+                    const dmRoomId = adminIdStr < userIdStr
+                        ? `${adminIdStr}_${userIdStr}`
+                        : `${userIdStr}_${adminIdStr}`;
                     websocketService.sendToUser(userId, 'new_message', {
                         roomType: 'dm',
                         roomId: dmRoomId,
@@ -2238,6 +2391,12 @@ exports.createMessage = async (req, res) => {
                 const sender = await User.findById(authorId);
                 const senderName = sender ? `${sender.firstName} ${sender.lastName}`.trim() : 'Someone';
 
+                const messageNotificationBody = buildChatNotificationBody({
+                    body: filteredBody,
+                    kind: kind || (normalizedAttachments.length > 0 ? 'audio' : 'text'),
+                    attachments: normalizedAttachments,
+                });
+
                 // Get all members of the subgrid who might be in this channel
                 const members = await SubgridMembership.find({
                     subgridId,
@@ -2249,11 +2408,13 @@ exports.createMessage = async (req, res) => {
                 for (const member of members) {
                     sendPushToOfflineUser(member.userId, 'message', {
                         title: `${senderName} in #${channel.name}`,
-                        body: filteredBody.length > 100 ? filteredBody.substring(0, 100) + '...' : filteredBody,
+                        body: messageNotificationBody,
                         data: {
                             type: 'message',
                             subgridId,
                             channelId,
+                            roomType: 'channel',
+                            roomId: String(channelId),
                             messageId: String(message._id),
                             senderId: String(authorId),
                             senderName,
@@ -3302,8 +3463,12 @@ exports.createDirectMessage = async (req, res) => {
         await touchMemberActivity(subgrid.tenantId, subgridId, senderId);
 
         // Emit WebSocket event for real-time sync to both sender and recipient
-        // IMPORTANT: Use String() to ensure consistent room ID format across web and mobile
-        const dmRoomId = [String(senderId), String(recipientId)].sort().join('_');
+        // IMPORTANT: Use string comparison for consistent room ID (works with MongoDB ObjectIds)
+        const senderIdStr = String(senderId);
+        const recipientIdStr = String(recipientId);
+        const dmRoomId = senderIdStr < recipientIdStr
+            ? `${senderIdStr}_${recipientIdStr}`
+            : `${recipientIdStr}_${senderIdStr}`;
 
         // Convert Mongoose document to plain object with stringified IDs for WebSocket
         const messageForWs = {
@@ -3334,12 +3499,20 @@ exports.createDirectMessage = async (req, res) => {
                 const sender = await User.findById(senderId);
                 const senderName = sender ? `${sender.firstName} ${sender.lastName}`.trim() : 'Someone';
 
+                const dmNotificationBody = buildChatNotificationBody({
+                    body: filteredBody,
+                    kind: kind || (normalizedAttachments.length > 0 ? 'audio' : 'text'),
+                    attachments: normalizedAttachments,
+                });
+
                 sendPushToOfflineUser(recipientId, 'dm', {
                     title: senderName,
-                    body: filteredBody.length > 100 ? filteredBody.substring(0, 100) + '...' : filteredBody,
+                    body: dmNotificationBody,
                     data: {
                         type: 'dm',
                         subgridId,
+                        roomType: 'dm',
+                        roomId: dmRoomId,
                         senderId: String(senderId),
                         senderName,
                         messageId: String(message._id),
@@ -3429,7 +3602,12 @@ exports.deleteDirectMessage = async (req, res) => {
 
         await DirectMessage.findByIdAndUpdate(directMessageId, { status: 'removed' });
 
-        const dmRoomId = [message.senderId, message.recipientId].sort().join('_');
+        // Use string comparison for consistent room ID (works with MongoDB ObjectIds)
+        const msgSenderIdStr = String(message.senderId);
+        const msgRecipientIdStr = String(message.recipientId);
+        const dmRoomId = msgSenderIdStr < msgRecipientIdStr
+            ? `${msgSenderIdStr}_${msgRecipientIdStr}`
+            : `${msgRecipientIdStr}_${msgSenderIdStr}`;
         websocketService.emitMessageDeleted('dm', dmRoomId, String(directMessageId));
 
         return res.status(200).json({ success: true, message: 'Direct message deleted' });
@@ -4935,5 +5113,134 @@ exports.createMessageComment = async (req, res) => {
         });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to create comment', error: error.message });
+    }
+};
+
+// ==================
+// SUBGRID BANS
+// ==================
+
+/**
+ * GET /subgrids/:subgridId/bans
+ * List all banned users in a subgrid
+ */
+exports.listBannedUsers = async (req, res) => {
+    try {
+        const { subgridId } = req.params;
+
+        const bans = await SubgridBan.find({ subgridId })
+            .populate('userId', 'firstName lastName email username avatarUrl')
+            .populate('bannedBy', 'firstName lastName username')
+            .sort({ createdAt: -1 });
+
+        const formattedBans = bans.map(ban => ({
+            _id: ban._id,
+            userId: ban.userId?._id,
+            user: ban.userId ? {
+                _id: ban.userId._id,
+                firstName: ban.userId.firstName,
+                lastName: ban.userId.lastName,
+                email: ban.userId.email,
+                username: ban.userId.username,
+                avatarUrl: ban.userId.avatarUrl,
+            } : null,
+            bannedBy: ban.bannedBy ? {
+                _id: ban.bannedBy._id,
+                firstName: ban.bannedBy.firstName,
+                lastName: ban.bannedBy.lastName,
+                username: ban.bannedBy.username,
+            } : null,
+            reason: ban.reason,
+            createdAt: ban.createdAt,
+        }));
+
+        return res.status(200).json({
+            success: true,
+            data: formattedBans,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to list banned users', error: error.message });
+    }
+};
+
+/**
+ * POST /subgrids/:subgridId/bans
+ * Ban a user from a subgrid
+ */
+exports.banUser = async (req, res) => {
+    try {
+        const { subgridId } = req.params;
+        const { userId, reason } = req.body;
+        const adminId = req.user?.id;
+
+        if (!userId) {
+            return res.status(400).json({ message: 'userId is required' });
+        }
+
+        // Check if user is already banned
+        const existingBan = await SubgridBan.findOne({ subgridId, userId });
+        if (existingBan) {
+            return res.status(400).json({ message: 'User is already banned' });
+        }
+
+        // Create ban record
+        const ban = await SubgridBan.create({
+            subgridId,
+            userId,
+            bannedBy: adminId,
+            reason: reason || '',
+        });
+
+        // Remove user from subgrid membership
+        await SubgridMembership.deleteOne({ subgridId, userId });
+
+        // Notify via websocket
+        websocketService.sendToRoom('subgrid', subgridId, 'user_banned', {
+            subgridId,
+            userId,
+            reason: reason || '',
+            timestamp: new Date().toISOString(),
+        });
+
+        return res.status(201).json({
+            success: true,
+            data: ban,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to ban user', error: error.message });
+    }
+};
+
+/**
+ * DELETE /subgrids/:subgridId/bans/:odl
+ * Unban a user from a subgrid (odl = objectId or odl = odl string - this is userId)
+ */
+exports.unbanUser = async (req, res) => {
+    try {
+        const { subgridId, odl } = req.params;
+
+        // odl can be either the ban _id or the userId
+        const ban = await SubgridBan.findOneAndDelete({
+            subgridId,
+            $or: [{ _id: odl }, { userId: odl }],
+        });
+
+        if (!ban) {
+            return res.status(404).json({ message: 'Ban not found' });
+        }
+
+        // Notify via websocket
+        websocketService.sendToRoom('subgrid', subgridId, 'user_unbanned', {
+            subgridId,
+            userId: ban.userId,
+            timestamp: new Date().toISOString(),
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'User unbanned successfully',
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to unban user', error: error.message });
     }
 };

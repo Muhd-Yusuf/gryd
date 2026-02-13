@@ -17,9 +17,10 @@ import { ArrowLeft, Sun, Moon, Camera, X, Check, AtSign, User, UserCircle, Mail,
 import { useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { getAuthUser, communityGet, communityPatch, resolveTenantId, logout, uploadAvatar, uploadBanner, updateAuthUser, StakeholderBadge } from '../../lib/api';
+import { resolveTenantId, logout, updateAuthUser, StakeholderBadge } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../../components/UserAvatar';
+import { useUserProfile, useUserMemberships, useUploadAvatar, useUploadBanner, useUpdateUsername } from '../../hooks/queries';
 
 type UserProfile = {
     userId: string;
@@ -46,117 +47,66 @@ const ProfileScreen = () => {
     const styles = useMemo(() => createStyles(colors, width), [colors, width]);
     const router = useRouter();
     const navigation = useNavigation();
-    const [user, setUser] = useState<UserProfile | null>(null);
-    const [memberships, setMemberships] = useState<SubgridMembership[]>([]);
-    const [saving, setSaving] = useState(false);
-    const [savingBanner, setSavingBanner] = useState(false);
+
+    // React Query hooks
+    const profileQuery = useUserProfile();
+    const uploadAvatarMutation = useUploadAvatar();
+    const uploadBannerMutation = useUploadBanner();
+    const updateUsernameMutation = useUpdateUsername();
+
+    // Tenant ID for memberships
+    const [tenantId, setTenantId] = useState('');
+    const membershipsQuery = useUserMemberships(tenantId);
+
+    // Local UI state
     const [error, setError] = useState('');
-    const [profileImage, setProfileImage] = useState<string | null>(null);
-    const [bannerImage, setBannerImage] = useState<string | null>(null);
     const [stagedImage, setStagedImage] = useState<{ uri: string; name: string; type: string } | null>(null);
     const [stagedBanner, setStagedBanner] = useState<{ uri: string; name: string; type: string } | null>(null);
     const [username, setUsername] = useState('');
     const [editingUsername, setEditingUsername] = useState(false);
-    const [savingUsername, setSavingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
 
+    // Derived data from React Query
+    const user: UserProfile | null = profileQuery.data ? {
+        userId: profileQuery.data.userId,
+        email: profileQuery.data.email,
+        firstName: profileQuery.data.firstName,
+        lastName: profileQuery.data.lastName,
+        role: profileQuery.data.role,
+        avatarUrl: profileQuery.data.avatarUrl,
+        bannerUrl: profileQuery.data.bannerUrl,
+        stakeholderBadge: profileQuery.data.stakeholderBadge,
+        company: profileQuery.data.company,
+        username: profileQuery.data.username,
+    } : null;
+
+    const memberships: SubgridMembership[] = membershipsQuery.data || [];
+    const saving = uploadAvatarMutation.isPending;
+    const savingBanner = uploadBannerMutation.isPending;
+    const savingUsername = updateUsernameMutation.isPending;
+    const profileImage = user?.avatarUrl || null;
+    const bannerImage = user?.bannerUrl || null;
+
+    // Load tenant ID on mount
     useEffect(() => {
-        loadProfile();
+        resolveTenantId().then(id => {
+            if (id) setTenantId(id);
+        });
     }, []);
 
-    const loadProfile = async () => {
-        setError('');
-        try {
-            const authUser = await getAuthUser();
-            if (!authUser) {
-                router.replace('/login');
-                return;
-            }
-
-            // Load full user profile from API (includes avatar and banner)
-            try {
-                const profileRes = await communityGet('/users/me');
-                if (profileRes?.data) {
-                    const profileData = {
-                        userId: profileRes.data.userId,
-                        email: profileRes.data.email,
-                        firstName: profileRes.data.firstName,
-                        lastName: profileRes.data.lastName,
-                        role: profileRes.data.role,
-                        avatarUrl: profileRes.data.avatarUrl,
-                        bannerUrl: profileRes.data.bannerUrl,
-                        stakeholderBadge: profileRes.data.stakeholderBadge,
-                        company: profileRes.data.company,
-                        username: profileRes.data.username,
-                    };
-                    setUser(profileData);
-                    await updateAuthUser(profileData);
-                    if (profileRes.data.avatarUrl) {
-                        setProfileImage(profileRes.data.avatarUrl);
-                    }
-                    if (profileRes.data.bannerUrl) {
-                        setBannerImage(profileRes.data.bannerUrl);
-                    }
-                    if (profileRes.data.username) {
-                        setUsername(profileRes.data.username);
-                    }
-                } else {
-                    // Fall back to auth user data
-                    setUser({
-                        userId: authUser.userId,
-                        email: authUser.email,
-                        firstName: authUser.firstName,
-                        lastName: authUser.lastName,
-                        role: authUser.role,
-                        stakeholderBadge: authUser.stakeholderBadge,
-                    });
-                }
-            } catch {
-                // Fall back to auth user data
-                setUser({
-                    userId: authUser.userId,
-                    email: authUser.email,
-                    firstName: authUser.firstName,
-                    lastName: authUser.lastName,
-                    role: authUser.role,
-                    stakeholderBadge: authUser.stakeholderBadge,
-                });
-            }
-
-            // Load subgrid memberships
-            const tenantId = await resolveTenantId();
-            if (tenantId) {
-                try {
-                    const subgridsRes = await communityGet(`/tenants/${tenantId}/subgrids`);
-                    const subgrids = subgridsRes?.data || [];
-
-                    const membershipPromises = subgrids.map(async (subgrid: any) => {
-                        try {
-                            const roleRes = await communityGet(`/subgrids/${subgrid._id}/my-role`);
-                            return {
-                                subgridId: subgrid._id,
-                                subgridName: subgrid.name || 'Community',
-                                role: roleRes?.data?.role || 'member',
-                            };
-                        } catch {
-                            return {
-                                subgridId: subgrid._id,
-                                subgridName: subgrid.name || 'Community',
-                                role: 'member',
-                            };
-                        }
-                    });
-
-                    const membershipResults = await Promise.all(membershipPromises);
-                    setMemberships(membershipResults);
-                } catch (err) {
-                    console.log('Failed to load memberships');
-                }
-            }
-        } catch (err: any) {
-            console.error('Failed to load profile:', err.message);
+    // Sync username from profile data
+    useEffect(() => {
+        if (user?.username && !editingUsername) {
+            setUsername(user.username);
         }
-    };
+    }, [user?.username, editingUsername]);
+
+    // Redirect to login if no profile
+    useEffect(() => {
+        if (!profileQuery.isLoading && !profileQuery.data) {
+            router.replace('/login');
+        }
+    }, [profileQuery.isLoading, profileQuery.data]);
 
     const pickImage = async () => {
         try {
@@ -222,29 +172,18 @@ const ProfileScreen = () => {
     const handleSaveBanner = async () => {
         if (!stagedBanner) return;
 
-        setSavingBanner(true);
         setError('');
         try {
-            const response = await uploadBanner(stagedBanner);
+            await uploadBannerMutation.mutateAsync(stagedBanner);
+            setStagedBanner(null);
 
-            const bannerUrl = response?.bannerUrl || response?.url || response?.secureUrl || response?.secure_url;
-            if (bannerUrl) {
-                setBannerImage(bannerUrl);
-                await updateAuthUser({ bannerUrl });
-                setStagedBanner(null);
-
-                if (Platform.OS === 'web') {
-                    window.alert('Banner updated successfully!');
-                } else {
-                    Alert.alert('Success', 'Banner updated successfully!');
-                }
+            if (Platform.OS === 'web') {
+                window.alert('Banner updated successfully!');
             } else {
-                throw new Error('No banner URL returned from server');
+                Alert.alert('Success', 'Banner updated successfully!');
             }
         } catch (err: any) {
             setError(err.message || 'Failed to save banner');
-        } finally {
-            setSavingBanner(false);
         }
     };
 
@@ -256,34 +195,18 @@ const ProfileScreen = () => {
     const handleSaveAvatar = async () => {
         if (!stagedImage) return;
 
-        setSaving(true);
         setError('');
         try {
-            // Upload using the proper avatar upload endpoint
-            const response = await uploadAvatar(stagedImage);
+            await uploadAvatarMutation.mutateAsync(stagedImage);
+            setStagedImage(null);
 
-            // Get the avatar URL from response
-            const avatarUrl = response?.avatarUrl || response?.url || response?.secureUrl || response?.secure_url;
-            if (avatarUrl) {
-                setProfileImage(avatarUrl);
-                await updateAuthUser({ avatarUrl });
-
-                // Clear staged image after successful save
-                setStagedImage(null);
-
-                // Show success message
-                if (Platform.OS === 'web') {
-                    window.alert('Profile picture updated successfully!');
-                } else {
-                    Alert.alert('Success', 'Profile picture updated successfully!');
-                }
+            if (Platform.OS === 'web') {
+                window.alert('Profile picture updated successfully!');
             } else {
-                throw new Error('No avatar URL returned from server');
+                Alert.alert('Success', 'Profile picture updated successfully!');
             }
         } catch (err: any) {
             setError(err.message || 'Failed to save profile picture');
-        } finally {
-            setSaving(false);
         }
     };
 
@@ -304,26 +227,17 @@ const ProfileScreen = () => {
             return;
         }
 
-        setSavingUsername(true);
         setUsernameError('');
         try {
-            const response = await communityPatch('/users/me', { username: trimmedUsername });
-            if (response?.success) {
-                setUser(prev => prev ? { ...prev, username: trimmedUsername } : prev);
-                await updateAuthUser({ username: trimmedUsername });
-                setEditingUsername(false);
-                if (Platform.OS === 'web') {
-                    window.alert('Username updated successfully!');
-                } else {
-                    Alert.alert('Success', 'Username updated successfully!');
-                }
+            await updateUsernameMutation.mutateAsync(trimmedUsername);
+            setEditingUsername(false);
+            if (Platform.OS === 'web') {
+                window.alert('Username updated successfully!');
             } else {
-                throw new Error(response?.message || 'Failed to update username');
+                Alert.alert('Success', 'Username updated successfully!');
             }
         } catch (err: any) {
             setUsernameError(err.message || 'Failed to save username');
-        } finally {
-            setSavingUsername(false);
         }
     };
 

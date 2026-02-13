@@ -7,7 +7,7 @@
  * - Admin can grant/revoke speaker permissions
  */
 
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
     StyleSheet,
     View,
@@ -21,19 +21,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Mic, MicOff, PhoneOff, Users, Volume2, Crown, Shield, Hand, UserPlus, UserMinus } from 'lucide-react-native';
 import { useTheme } from '../../lib/theme';
-import {
-    getAuthUser,
-    communityGet,
-    joinVoiceChannel,
-    leaveVoiceChannel,
-    getVoiceChannelParticipants,
-    waveToSpeak,
-    cancelWave,
-    grantSpeaker,
-    revokeSpeaker,
-    muteParticipant,
-    updateVoiceChannelMuteState,
-} from '../../lib/api';
 import { useAgoraCall } from '../../hooks';
 import { useAgoraCallWeb } from '../../hooks/useAgoraCallWeb';
 import UserAvatar from '../../components/UserAvatar';
@@ -43,6 +30,18 @@ import {
     testVoiceRoleAssignment,
     runVoiceChannelConnectionTests,
 } from '../../lib/voiceChannelTestUtils';
+import {
+    useCurrentUser,
+    useVoiceChannelParticipants,
+    useJoinVoiceChannel,
+    useLeaveVoiceChannel,
+    useWaveToSpeak,
+    useCancelWave,
+    useGrantSpeaker,
+    useRevokeSpeaker,
+    useMuteParticipant,
+    useUpdateMuteState,
+} from '../../hooks/queries';
 
 // Type for participant details
 interface ParticipantDetails {
@@ -112,19 +111,51 @@ const VoiceChannelScreen = () => {
     const appId = normalizeParam(params.appId);
 
     const isWeb = Platform.OS === 'web';
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-    const [currentUserName, setCurrentUserName] = useState('You');
-    const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
-
-    // Participants and channel state
-    const [participants, setParticipants] = useState<ParticipantDetails[]>([]);
-    const [hostId, setHostId] = useState<string | null>(null);
-    const [waveRequests, setWaveRequests] = useState<WaveRequest[]>([]);
-    const [myVoiceRole, setMyVoiceRole] = useState<'host' | 'speaker' | 'listener'>('listener');
-    const [isHandRaised, setIsHandRaised] = useState(false);
 
     // UI state
     const [showParticipantActions, setShowParticipantActions] = useState<string | null>(null);
+
+    // React Query hooks
+    const { data: currentUser } = useCurrentUser();
+    const participantsQuery = useVoiceChannelParticipants(channelId, subgridId);
+    const joinMutation = useJoinVoiceChannel();
+    const leaveMutation = useLeaveVoiceChannel();
+    const waveMutation = useWaveToSpeak();
+    const cancelWaveMutation = useCancelWave();
+    const grantSpeakerMutation = useGrantSpeaker();
+    const revokeSpeakerMutation = useRevokeSpeaker();
+    const muteParticipantMutation = useMuteParticipant();
+    const updateMuteMutation = useUpdateMuteState();
+
+    // Derived state from current user
+    const currentUserId = currentUser?.userId || null;
+    const currentUserName = currentUser
+        ? [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ').trim() || currentUser.email || 'You'
+        : 'You';
+    const currentUserAvatar = currentUser?.avatarUrl || null;
+
+    // Derived state from participants query
+    const participantsData = participantsQuery.data || { participants: [], hostId: null, waveRequests: [] };
+    const participants: ParticipantDetails[] = (participantsData.participants || []).map((p: any) => ({
+        agoraUid: p.agoraUid || 0,
+        userId: p.userId?.toString() || '',
+        displayName: p.userDetails?.displayName || `User ${p.agoraUid || 'Unknown'}`,
+        username: p.userDetails?.username || null,
+        avatarUrl: p.userDetails?.avatarUrl || null,
+        memberRole: p.userDetails?.memberRole || 'member',
+        stakeholderBadge: p.userDetails?.stakeholderBadge || null,
+        company: p.userDetails?.company || null,
+        voiceRole: p.voiceRole || 'listener',
+        isMuted: p.isMuted || false,
+        isHandRaised: p.isHandRaised || false,
+    }));
+    const hostId = participantsData.hostId || null;
+    const waveRequests: WaveRequest[] = participantsData.waveRequests || [];
+
+    // Find my participant info
+    const myParticipant = currentUserId ? participants.find(p => p.userId === currentUserId) : null;
+    const myVoiceRole = myParticipant?.voiceRole || 'listener';
+    const isHandRaised = myParticipant?.isHandRaised || false;
 
     // Agora hooks
     const webHook = useAgoraCallWeb({
@@ -152,124 +183,45 @@ const VoiceChannelScreen = () => {
         toggleMute: agoraToggleMute,
     } = isWeb ? webHook : nativeHook;
 
-    // Fetch current user details
-    useEffect(() => {
-        let isActive = true;
-        getAuthUser()
-            .then((user) => {
-                if (!isActive || !user) return;
-                setCurrentUserId(user.userId);
-                const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
-                setCurrentUserName(name || user.email || 'You');
-                setCurrentUserAvatar(user.avatarUrl || null);
-            })
-            .catch(() => {});
-        return () => { isActive = false; };
-    }, []);
-
-    // Fetch participants and channel state
-    const fetchParticipantsData = useCallback(async () => {
-        if (!channelId) return;
-
-        try {
-            const response = await getVoiceChannelParticipants(channelId, subgridId);
-            if (!response?.success) return;
-
-            const data = response.data;
-            const participantList: ParticipantDetails[] = (data.participants || []).map((p: any) => ({
-                agoraUid: p.agoraUid || 0,
-                userId: p.userId?.toString() || '',
-                displayName: p.userDetails?.displayName || `User ${p.agoraUid || 'Unknown'}`,
-                username: p.userDetails?.username || null,
-                avatarUrl: p.userDetails?.avatarUrl || null,
-                memberRole: p.userDetails?.memberRole || 'member',
-                stakeholderBadge: p.userDetails?.stakeholderBadge || null,
-                company: p.userDetails?.company || null,
-                voiceRole: p.voiceRole || 'listener',
-                isMuted: p.isMuted || false,
-                isHandRaised: p.isHandRaised || false,
-            }));
-
-            setParticipants(participantList);
-            setHostId(data.hostId || null);
-            setWaveRequests(data.waveRequests || []);
-
-            // Update my role
-            if (currentUserId) {
-                const myParticipant = participantList.find(p => p.userId === currentUserId);
-                if (myParticipant) {
-                    setMyVoiceRole(myParticipant.voiceRole);
-                    setIsHandRaised(myParticipant.isHandRaised);
-                }
-            }
-        } catch (err) {
-            console.error('[VoiceChannel] Failed to fetch participants:', err);
-        }
-    }, [channelId, subgridId, currentUserId]);
-
-    // Join voice channel and start polling participants
+    // Join voice channel when connected
     useEffect(() => {
         if (callState !== 'connected' || !channelId || !uid) return;
 
-        let isActive = true;
-
-        const registerAndFetch = async () => {
-            try {
-                await joinVoiceChannel(channelId, subgridId, uid);
-            } catch (err) {
-                console.error('[VoiceChannel] Failed to join:', err);
-            }
-            if (isActive) fetchParticipantsData();
-        };
-
-        registerAndFetch();
-
-        const interval = setInterval(() => {
-            if (isActive) fetchParticipantsData();
-        }, 3000);
+        joinMutation.mutate({ channelId, subgridId, agoraUid: uid });
 
         return () => {
-            isActive = false;
-            clearInterval(interval);
-            leaveVoiceChannel(channelId, uid).catch(() => {});
+            leaveMutation.mutate({ channelId, agoraUid: uid });
         };
-    }, [callState, channelId, subgridId, uid, fetchParticipantsData]);
+    }, [callState, channelId, subgridId, uid]);
 
     // Toggle mute with server sync
     const handleToggleMute = useCallback(async () => {
         agoraToggleMute();
         const newMutedState = !isMuted;
         try {
-            await updateVoiceChannelMuteState(channelId, newMutedState);
+            await updateMuteMutation.mutateAsync({ channelId, isMuted: newMutedState });
         } catch (err) {
             console.error('[VoiceChannel] Failed to update mute state:', err);
         }
-    }, [agoraToggleMute, isMuted, channelId]);
+    }, [agoraToggleMute, isMuted, channelId, updateMuteMutation]);
 
     // Wave to speak (raise hand)
     const handleWaveToSpeak = useCallback(async () => {
-        if (isHandRaised) {
-            try {
-                await cancelWave(channelId);
-                setIsHandRaised(false);
-            } catch (err) {
-                console.error('[VoiceChannel] Failed to cancel wave:', err);
+        try {
+            if (isHandRaised) {
+                await cancelWaveMutation.mutateAsync(channelId);
+            } else {
+                await waveMutation.mutateAsync(channelId);
             }
-        } else {
-            try {
-                await waveToSpeak(channelId);
-                setIsHandRaised(true);
-            } catch (err) {
-                console.error('[VoiceChannel] Failed to wave:', err);
-            }
+        } catch (err) {
+            console.error('[VoiceChannel] Failed to wave:', err);
         }
-    }, [channelId, isHandRaised]);
+    }, [channelId, isHandRaised, waveMutation, cancelWaveMutation]);
 
     // Grant speaker (host/speaker action)
     const handleGrantSpeaker = useCallback(async (targetUserId: string) => {
         try {
-            await grantSpeaker(channelId, targetUserId);
-            fetchParticipantsData();
+            await grantSpeakerMutation.mutateAsync({ channelId, targetUserId });
             setShowParticipantActions(null);
         } catch (err: any) {
             console.error('[VoiceChannel] Failed to grant speaker:', err);
@@ -277,13 +229,12 @@ const VoiceChannelScreen = () => {
                 Alert.alert('Error', err.message || 'Failed to grant speaker permission');
             }
         }
-    }, [channelId, fetchParticipantsData]);
+    }, [channelId, grantSpeakerMutation]);
 
     // Revoke speaker (host action)
     const handleRevokeSpeaker = useCallback(async (targetUserId: string) => {
         try {
-            await revokeSpeaker(channelId, targetUserId);
-            fetchParticipantsData();
+            await revokeSpeakerMutation.mutateAsync({ channelId, targetUserId });
             setShowParticipantActions(null);
         } catch (err: any) {
             console.error('[VoiceChannel] Failed to revoke speaker:', err);
@@ -291,13 +242,12 @@ const VoiceChannelScreen = () => {
                 Alert.alert('Error', err.message || 'Failed to revoke speaker permission');
             }
         }
-    }, [channelId, fetchParticipantsData]);
+    }, [channelId, revokeSpeakerMutation]);
 
     // Mute participant (host/speaker action)
     const handleMuteParticipant = useCallback(async (targetUserId: string, mute: boolean) => {
         try {
-            await muteParticipant(channelId, targetUserId, mute);
-            fetchParticipantsData();
+            await muteParticipantMutation.mutateAsync({ channelId, targetUserId, mute });
             setShowParticipantActions(null);
         } catch (err: any) {
             console.error('[VoiceChannel] Failed to mute participant:', err);
@@ -305,7 +255,7 @@ const VoiceChannelScreen = () => {
                 Alert.alert('Error', err.message || 'Failed to mute participant');
             }
         }
-    }, [channelId, fetchParticipantsData]);
+    }, [channelId, muteParticipantMutation]);
 
     const handleLeave = async () => {
         await hangup();

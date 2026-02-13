@@ -96,24 +96,46 @@ exports.getOverview = async (req, res) => {
         // Count total members across all subgrids
         const totalMembers = await SubgridMembership.countDocuments();
 
-        // Count active channels across all tenants
+        // Count active channels across all tenants (with timeout protection)
         let totalChannels = 0;
-        for (const subgrid of allSubgrids) {
-            try {
-                // Handle both populated and non-populated tenantId
-                const tenantId = subgrid.tenantId?._id || subgrid.tenantId;
-                if (!tenantId) continue;
+        const CHANNEL_COUNT_TIMEOUT = 3000; // 3 second timeout per tenant
 
-                const tenantDb = await getTenantConnection(tenantId);
+        // Helper to count channels with timeout
+        const countChannelsForSubgrid = async (subgrid) => {
+            try {
+                const tenantId = subgrid.tenantId?._id || subgrid.tenantId;
+                if (!tenantId) return 0;
+
+                const tenantDb = await Promise.race([
+                    getTenantConnection(tenantId),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Connection timeout')), CHANNEL_COUNT_TIMEOUT)
+                    ),
+                ]);
+
                 if (tenantDb) {
                     const { Channel } = defineModels(tenantDb);
-                    const channelCount = await Channel.countDocuments({ subgridId: String(subgrid._id) });
-                    totalChannels += channelCount;
+                    const channelCount = await Promise.race([
+                        Channel.countDocuments({ subgridId: String(subgrid._id) }),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('Query timeout')), CHANNEL_COUNT_TIMEOUT)
+                        ),
+                    ]);
+                    return channelCount;
                 }
+                return 0;
             } catch (err) {
-                // Skip if tenant DB unavailable
-                console.error('[superAdmin.getOverview] Channel count error:', err.message);
+                // Skip silently if tenant DB unavailable or timeout
+                return 0;
             }
+        };
+
+        // Run channel counts in parallel batches of 5 to avoid overwhelming DB
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < allSubgrids.length; i += BATCH_SIZE) {
+            const batch = allSubgrids.slice(i, i + BATCH_SIZE);
+            const counts = await Promise.all(batch.map(countChannelsForSubgrid));
+            totalChannels += counts.reduce((a, b) => a + b, 0);
         }
 
         // Build customer growth chart data

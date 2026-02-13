@@ -1,0 +1,29 @@
+{
+  "cli": {
+    "version": ">= 16.28.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://gryd.onrender.com",
+        "EXPO_PUBLIC_AGORA_APP_ID": "b8e8845f756941919a6b50dd82a5a35f"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://gryd.onrender.com",
+        "EXPO_PUBLIC_AGORA_APP_ID": "b8e8845f756941919a6b50dd82a5a35f"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

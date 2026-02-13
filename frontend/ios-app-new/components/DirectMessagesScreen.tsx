@@ -13,7 +13,9 @@ import {
     Alert,
     Animated,
     useWindowDimensions,
+    KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
     MessageSquare,
@@ -49,6 +51,7 @@ import {
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../lib/theme';
 import {
     communityGet,
@@ -63,7 +66,7 @@ import {
     answerCall,
     declineCall,
 } from '../lib/api';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { Attachment, twemojiUrl } from '../lib/chatMedia';
 import UserAvatar from './UserAvatar';
 import { useAgoraCall } from '../hooks';
@@ -73,6 +76,15 @@ import { useWebSocketContext } from '../contexts/WebSocketContext';
 import CallModal from './CallModal';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
 import { MessageBubble, MessageComposer } from './messaging';
+import {
+    useSubgrids,
+    useFriends,
+    useMembers,
+    useDirectMessages,
+    useSendDirectMessage,
+    useCurrentUser,
+} from '../hooks/queries';
+import { queryKeys } from '../lib/queryClient';
 
 // Incoming call notification type
 type IncomingCallNotification = {
@@ -166,29 +178,53 @@ type Subgrid = {
 export default function DirectMessagesScreen() {
     const { colors, mode, toggleTheme } = useTheme();
     const router = useRouter();
+    const queryClient = useQueryClient();
     const { width } = useWindowDimensions();
     const isMobile = width < 900;
+    const insets = useSafeAreaInsets();
+    // Calculate safe area values for mobile
+    const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
+    const topInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.top, 16) : 0;
     const [mobileShowContent, setMobileShowContent] = useState(false);
 
     // WebSocket for real-time messages
     const { isConnected, joinRoom, leaveRoom, subscribe } = useWebSocketContext();
 
-    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
+    const [tenantId, setTenantId] = useState<string>('');
     const [activeSubgridId, setActiveSubgridId] = useState<string | null>(null);
-    const [friends, setFriends] = useState<string[]>([]);
-    const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>({});
     const [lastMessages, setLastMessages] = useState<Record<string, DirectMessage>>({});
-    const [members, setMembers] = useState<Member[]>([]);
     const [channels, setChannels] = useState<Channel[]>([]);
     const [mutualFriends, setMutualFriends] = useState<string[]>([]);
     const [mutualFriendUsers, setMutualFriendUsers] = useState<Record<string, UserProfile>>({});
     const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
-    const [messages, setMessages] = useState<DirectMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
-    const [currentUserId, setCurrentUserId] = useState<string>('');
+    const [currentUserIdState, setCurrentUserIdState] = useState<string>('');
     const [currentUserInfo, setCurrentUserInfo] = useState<{ firstName?: string; lastName?: string; email?: string; avatarUrl?: string } | null>(null);
     const scrollViewRef = useRef<ScrollView>(null);
 
+    // React Query hooks
+    const currentUserQuery = useCurrentUser();
+    const subgridsQuery = useSubgrids(tenantId);
+    const friendsQuery = useFriends(activeSubgridId || '');
+    const membersQuery = useMembers(activeSubgridId || '');
+    const messagesQuery = useDirectMessages(activeSubgridId || '', selectedFriendId || '');
+    const sendDmMutation = useSendDirectMessage(activeSubgridId || '', selectedFriendId || '');
+
+    // Derive currentUserId from React Query (primary) or state (fallback)
+    const currentUserId = currentUserQuery.data?.userId || currentUserIdState;
+
+    // Derive data from queries
+    const subgrids = subgridsQuery.data || [];
+    const friendsData = friendsQuery.data || { friends: [], users: {} };
+    const friends = friendsData.friends || [];
+    const friendUsers = friendsData.users || {};
+    const members = membersQuery.data || [];
+    const messages = messagesQuery.data || [];
+
+    // Debug: Log currentUserId source for troubleshooting
+    useEffect(() => {
+        console.log('[DirectMessages] currentUserId resolved:', currentUserId, 'source:', currentUserQuery.data?.userId ? 'ReactQuery' : currentUserIdState ? 'State' : 'None');
+    }, [currentUserId, currentUserQuery.data?.userId, currentUserIdState]);
 
     // Incoming call state
     const [incomingCall, setIncomingCall] = useState<IncomingCallNotification | null>(null);
@@ -209,7 +245,9 @@ export default function DirectMessagesScreen() {
     const audioChunksRef = useRef<Blob[]>([]);
     const recordingStartRef = useRef<number>(0);
     const activeAudioStreamRef = useRef<any | null>(null);
-    const expoRecordingRef = useRef<Audio.Recording | null>(null);
+
+    // expo-audio recorder hook (for native platforms)
+    const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
     const emojis = [
         '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😌',
@@ -273,13 +311,11 @@ export default function DirectMessagesScreen() {
 
     const onCallEnded = useCallback((callId: string, reason: string) => {
         console.log('[DirectMessages] Call ended:', callId, reason);
-        // Refresh messages to show call history
+        // Refresh messages to show call history - invalidate React Query cache
         if (activeSubgridId && selectedFriendId) {
-            communityGet(`/subgrids/${activeSubgridId}/direct-messages?peerId=${selectedFriendId}`)
-                .then(response => setMessages(response?.data || []))
-                .catch(() => {});
+            queryClient.invalidateQueries({ queryKey: queryKeys.messages.dm(activeSubgridId, selectedFriendId) });
         }
-    }, [activeSubgridId, selectedFriendId]);
+    }, [activeSubgridId, selectedFriendId, queryClient]);
 
     const onCallError = useCallback((err: Error) => {
         Alert.alert('Call Error', err.message);
@@ -303,14 +339,13 @@ export default function DirectMessagesScreen() {
         }
     }, [agoraCall.callState, agoraCall.currentCall?.callId, markCallConnected]);
 
-    // Load initial data
+    // Load initial data - resolve tenant ID and user info
     useEffect(() => {
         const loadData = async () => {
             try {
-                const tenantId = await resolveTenantId();
+                const resolvedTenantId = await resolveTenantId();
                 // Use resolveUserId to ensure user ID is properly loaded (important for mobile)
                 let userId = await resolveUserId();
-                console.log('[DirectMessages] Resolved userId from resolveUserId:', userId);
 
                 // Load current user info
                 const user = await getAuthUser();
@@ -323,126 +358,114 @@ export default function DirectMessagesScreen() {
                     });
                     // ALWAYS prefer userId from auth user if available (more reliable on mobile)
                     if (user.userId) {
-                        console.log('[DirectMessages] Using userId from getAuthUser:', user.userId);
                         userId = user.userId;
                     }
                 }
 
-                // Set currentUserId with the best available value
+                // Set currentUserId with the best available value (fallback for React Query)
                 if (userId) {
-                    console.log('[DirectMessages] Setting currentUserId to:', userId);
-                    setCurrentUserId(userId);
-                } else {
-                    console.warn('[DirectMessages] No userId available from any source!');
+                    setCurrentUserIdState(userId);
+                    console.log('[DirectMessages] Set currentUserIdState:', userId);
                 }
 
-                if (!tenantId) {
-                    console.warn('[DirectMessages] No tenant ID resolved');
+                if (!resolvedTenantId) {
                     return;
                 }
 
-                const subgridsRes = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const subgridsList = subgridsRes?.data || [];
-                setSubgrids(subgridsList);
-                if (subgridsList.length > 0) {
-                    setActiveSubgridId(subgridsList[0]._id);
-                }
-            } catch (error) {
-                console.error('[DirectMessages] Failed to load initial data:', error);
+                setTenantId(resolvedTenantId);
+            } catch {
+                // Failed to load initial data
             }
         };
         loadData();
     }, []);
 
-    const refreshFriends = useCallback(async (subgridId: string) => {
-        try {
-            const response = await communityGet(`/subgrids/${subgridId}/friends`);
-            const friendIds = response?.data?.friends || [];
-            const users = response?.data?.users || {};
-            const normalizedIds = Array.isArray(friendIds) ? friendIds : [];
-            console.log('[DirectMessages] refreshFriends loaded:', normalizedIds.length, 'friends');
-            setFriends(normalizedIds);
-            setFriendUsers(users);
-
-            // Fetch last message for each friend to enable sorting by recent activity
-            if (normalizedIds.length > 0) {
-                const lastMsgsPromises = normalizedIds.slice(0, 20).map(async (friendId: string) => {
-                    try {
-                        const msgRes = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${friendId}&limit=1`);
-                        const msgs = msgRes?.data || [];
-                        // API returns newest first, so msgs[0] is the most recent
-                        return { friendId, lastMsg: msgs.length > 0 ? msgs[0] : null };
-                    } catch {
-                        return { friendId, lastMsg: null };
-                    }
-                });
-                const results = await Promise.all(lastMsgsPromises);
-                const lastMsgsMap: Record<string, DirectMessage> = {};
-                results.forEach(({ friendId, lastMsg }) => {
-                    if (lastMsg) {
-                        lastMsgsMap[friendId] = lastMsg;
-                    }
-                });
-                setLastMessages(lastMsgsMap);
-            }
-
-            // Only clear selection if previously selected friend is no longer in list
-            setSelectedFriendId((prev) => {
-                if (prev && !normalizedIds.includes(prev)) {
-                    return null;
-                }
-                return prev;
+    // Set active subgrid when subgrids load
+    useEffect(() => {
+        if (subgrids.length > 0) {
+            setActiveSubgridId((current) => {
+                if (!current) return subgrids[0]._id;
+                return current;
             });
+        }
+    }, [subgrids]);
+
+    // Fetch last messages for each friend to enable sorting by most recent
+    const fetchLastMessages = useCallback(async (subgridId: string, friendIds: string[]) => {
+        if (friendIds.length === 0) return;
+
+        try {
+            const lastMsgsPromises = friendIds.slice(0, 20).map(async (friendId: string) => {
+                try {
+                    const msgRes = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${friendId}&limit=1`);
+                    const msgs = msgRes?.data || [];
+                    return { friendId, lastMsg: msgs.length > 0 ? msgs[0] : null };
+                } catch {
+                    return { friendId, lastMsg: null };
+                }
+            });
+            const results = await Promise.all(lastMsgsPromises);
+            const lastMsgsMap: Record<string, DirectMessage> = {};
+            results.forEach(({ friendId, lastMsg }) => {
+                if (lastMsg) {
+                    lastMsgsMap[friendId] = lastMsg;
+                }
+            });
+            setLastMessages(lastMsgsMap);
         } catch (error) {
-            console.error('[DirectMessages] Failed to load friends:', error);
-            setFriends([]);
-            setFriendUsers({});
+            console.error('[DirectMessages] Failed to load last messages:', error);
         }
     }, []);
 
-    // Load friends and members when subgrid changes
+    // Fetch last messages when friends list changes
+    useEffect(() => {
+        if (activeSubgridId && friends.length > 0) {
+            fetchLastMessages(activeSubgridId, friends);
+        }
+    }, [activeSubgridId, friends, fetchLastMessages]);
+
+    const refreshFriends = useCallback(async (subgridId: string) => {
+        // Invalidate React Query cache to refetch friends
+        queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.friends(subgridId) });
+        // Last messages will be fetched by the effect above when friends query updates
+    }, [queryClient]);
+
+    // Load channels when subgrid changes (friends and members handled by React Query)
     useEffect(() => {
         if (!activeSubgridId) return;
 
         refreshFriends(activeSubgridId);
 
-        Promise.allSettled([
-            communityGet(`/subgrids/${activeSubgridId}/members`),
-            communityGet(`/subgrids/${activeSubgridId}/channels`),
-        ]).then(([membersRes, channelsRes]) => {
-            if (membersRes.status === 'fulfilled') {
-                const rawMembers = membersRes.value?.data;
-                setMembers(Array.isArray(rawMembers) ? rawMembers : []);
-            }
-            if (channelsRes.status === 'fulfilled') {
-                const rawChannels = channelsRes.value?.data;
-                setChannels(Array.isArray(rawChannels) ? rawChannels : []);
-            }
+        // Fetch channels (members now handled by React Query via membersQuery)
+        communityGet(`/subgrids/${activeSubgridId}/channels`).then((channelsRes) => {
+            const rawChannels = channelsRes?.data;
+            setChannels(Array.isArray(rawChannels) ? rawChannels : []);
         });
     }, [activeSubgridId, refreshFriends]);
 
-    // Load messages when friend changes (ensure currentUserId is set first)
+    // Scroll to bottom when messages change (WhatsApp style - newest at bottom)
+    const prevMessagesCountRef = useRef<number>(0);
+    const lastFriendIdRef = useRef<string | null>(null);
+
     useEffect(() => {
-        if (!activeSubgridId || !selectedFriendId || !currentUserId) {
-            console.log('[DirectMessages] Skipping message fetch - activeSubgridId:', activeSubgridId, 'selectedFriendId:', selectedFriendId, 'currentUserId:', currentUserId);
-            return;
+        // Reset count when switching to a different friend
+        if (selectedFriendId !== lastFriendIdRef.current) {
+            prevMessagesCountRef.current = 0;
+            lastFriendIdRef.current = selectedFriendId;
         }
 
-        console.log('[DirectMessages] Fetching messages - currentUserId:', currentUserId, 'selectedFriendId:', selectedFriendId);
-        communityGet(`/subgrids/${activeSubgridId}/direct-messages?peerId=${selectedFriendId}`)
-            .then((res) => {
-                const msgs = res?.data || [];
-                console.log('[DirectMessages] Fetched', msgs.length, 'messages. First msg senderId:', msgs[0]?.senderId, 'currentUserId:', currentUserId);
-                setMessages(Array.isArray(msgs) ? msgs : []);
-                setTimeout(() => {
-                    scrollViewRef.current?.scrollToEnd({ animated: true });
-                }, 100);
-            })
-            .catch((err) => {
-                console.error('[DirectMessages] Error fetching messages:', err);
-                setMessages([]);
-            });
-    }, [activeSubgridId, selectedFriendId, currentUserId]);
+        const prevCount = prevMessagesCountRef.current;
+        const currentCount = messages.length;
+
+        // Scroll to bottom on initial load or new messages
+        if (currentCount > 0 && (prevCount === 0 || currentCount > prevCount)) {
+            setTimeout(() => {
+                scrollViewRef.current?.scrollToEnd({ animated: prevCount > 0 });
+            }, 150);
+        }
+
+        prevMessagesCountRef.current = currentCount;
+    }, [messages.length, selectedFriendId]);
 
     // Use refs to avoid stale closures in WebSocket handlers
     const currentUserIdRef = useRef(currentUserId);
@@ -456,58 +479,61 @@ export default function DirectMessagesScreen() {
         selectedFriendIdRef.current = selectedFriendId;
     }, [selectedFriendId]);
 
-    // Subscribe to WebSocket for real-time DM updates
+    // Subscribe to WebSocket for real-time DM updates - update React Query cache
     useEffect(() => {
         console.log('[DirectMessages] WebSocket effect - isConnected:', isConnected, 'currentUserId:', currentUserId, 'selectedFriendId:', selectedFriendId);
 
-        if (!isConnected || !currentUserId || !selectedFriendId) {
-            console.log('[DirectMessages] Skipping subscription - missing:', { isConnected, currentUserId: !!currentUserId, selectedFriendId: !!selectedFriendId });
+        if (!isConnected || !currentUserId || !selectedFriendId || !activeSubgridId) {
+            console.log('[DirectMessages] Skipping subscription - missing:', { isConnected, currentUserId: !!currentUserId, selectedFriendId: !!selectedFriendId, activeSubgridId: !!activeSubgridId });
             return;
         }
 
-        // Create consistent DM room ID (sorted user IDs)
-        const sortedIds = [String(currentUserId), String(selectedFriendId)].sort();
-        const dmRoomId = `${sortedIds[0]}_${sortedIds[1]}`;
+        // Create consistent DM room ID (sorted user IDs alphabetically for consistency with backend)
+        const userIdStr = String(currentUserId);
+        const friendIdStr = String(selectedFriendId);
+        const dmRoomId = userIdStr < friendIdStr
+            ? `${userIdStr}_${friendIdStr}`
+            : `${friendIdStr}_${userIdStr}`;
 
         console.log('[DirectMessages] Joining DM room:', dmRoomId);
         joinRoom('dm', dmRoomId);
 
-        // Subscribe to new messages - use refs to always get current values
+        // Subscribe to new messages - update React Query cache
         const unsubNewMessage = subscribe('new_message', (data: any) => {
-            console.log('[DirectMessages] new_message event received:', data?.roomType, data?.roomId);
-            // Only handle DM messages
-            if (data.roomType === 'dm' && data.message) {
+            console.log('[DirectMessages] new_message event received:', JSON.stringify(data, null, 2));
+
+            // Accept DM messages regardless of roomType (some servers might not send it)
+            if (data.message) {
                 const msgSenderId = String(data.message?.senderId || data.senderId || '');
                 const msgRecipientId = String(data.message?.recipientId || data.recipientId || '');
                 const myUserId = String(currentUserIdRef.current || '');
                 const friendId = String(selectedFriendIdRef.current || '');
 
-                console.log('[DirectMessages] Message details - sender:', msgSenderId, 'recipient:', msgRecipientId, 'me:', myUserId, 'friend:', friendId);
+                console.log('[DirectMessages] Message check - senderId:', msgSenderId, 'recipientId:', msgRecipientId, 'myUserId:', myUserId, 'friendId:', friendId);
 
-                // Check if this message belongs to this conversation
+                // Check if this message is part of our conversation
                 const isForThisConversation =
                     (msgSenderId === myUserId && msgRecipientId === friendId) ||
-                    (msgSenderId === friendId && msgRecipientId === myUserId);
+                    (msgSenderId === friendId && msgRecipientId === myUserId) ||
+                    // Fallback: check if roomId matches our DM room
+                    (data.roomType === 'dm' && String(data.roomId) === dmRoomId);
 
                 console.log('[DirectMessages] isForThisConversation:', isForThisConversation);
 
                 if (isForThisConversation) {
-                    setMessages((prev) => {
-                        // Avoid duplicates
-                        if (prev.some((m) => m._id === data.message._id)) {
-                            console.log('[DirectMessages] Duplicate message, skipping');
-                            return prev;
+                    // Update React Query cache
+                    queryClient.setQueryData(
+                        queryKeys.messages.dm(activeSubgridId, selectedFriendId),
+                        (old: any[] | undefined) => {
+                            console.log('[DirectMessages] Updating cache, old count:', old?.length || 0);
+                            if (!old) return [data.message];
+                            if (old.some(m => m._id === data.message._id)) return old;
+                            return [...old, data.message];
                         }
-                        console.log('[DirectMessages] Adding new message to state');
-                        return [...prev, data.message];
-                    });
-                    // Scroll to bottom for new messages
-                    setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 100);
+                    );
                 }
 
-                // Update lastMessages for conversation list sorting (WhatsApp-like)
+                // Update lastMessages for conversation list sorting
                 const otherUserId = msgSenderId === myUserId ? msgRecipientId : msgSenderId;
                 if (otherUserId) {
                     setLastMessages((prev) => ({
@@ -521,8 +547,12 @@ export default function DirectMessagesScreen() {
         // Subscribe to message updates
         const unsubMessageUpdated = subscribe('message_updated', (data: any) => {
             if (data.roomType === 'dm' && data.message) {
-                setMessages((prev) =>
-                    prev.map((m) => (m._id === data.message._id ? data.message : m))
+                queryClient.setQueryData(
+                    queryKeys.messages.dm(activeSubgridId, selectedFriendId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [data.message];
+                        return old.map(m => m._id === data.message._id ? data.message : m);
+                    }
                 );
             }
         });
@@ -530,7 +560,13 @@ export default function DirectMessagesScreen() {
         // Subscribe to message deletions
         const unsubMessageDeleted = subscribe('message_deleted', (data: any) => {
             if (data.roomType === 'dm' && data.messageId) {
-                setMessages((prev) => prev.filter((m) => m._id !== data.messageId));
+                queryClient.setQueryData(
+                    queryKeys.messages.dm(activeSubgridId, selectedFriendId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [];
+                        return old.filter(m => m._id !== data.messageId);
+                    }
+                );
             }
         });
 
@@ -540,7 +576,7 @@ export default function DirectMessagesScreen() {
             unsubMessageUpdated();
             unsubMessageDeleted();
         };
-    }, [isConnected, currentUserId, selectedFriendId, joinRoom, leaveRoom, subscribe]);
+    }, [isConnected, currentUserId, selectedFriendId, activeSubgridId, joinRoom, leaveRoom, subscribe, queryClient]);
 
     useEffect(() => {
         if (!activeSubgridId || !selectedFriendId) {
@@ -774,7 +810,7 @@ export default function DirectMessagesScreen() {
     const getAvatarUrl = (id?: string) => {
         if (!id) return null;
         if (String(id) === String(currentUserId)) {
-            return currentUserInfo?.avatarUrl || memberMap[id]?.avatarUrl || null;
+            return currentUserQuery.data?.avatarUrl || currentUserInfo?.avatarUrl || memberMap[id]?.avatarUrl || null;
         }
         return friendUsers[id]?.avatarUrl || mutualFriendUsers[id]?.avatarUrl || memberMap[id]?.avatarUrl || null;
     };
@@ -930,27 +966,25 @@ export default function DirectMessagesScreen() {
                 setUploading(false);
             }
 
-            const response = await communityPost(`/subgrids/${activeSubgridId}/direct-messages`, {
-                recipientId: selectedFriendId,
-                body,
-                attachments: uploadedAttachments,
+            // Use React Query mutation to send message (handles cache update automatically)
+            // Pass subgridId and peerId explicitly to ensure correct values are used
+            const response = await sendDmMutation.mutateAsync({
+                content: body,
+                mediaUrls: uploadedAttachments.length > 0
+                    ? uploadedAttachments.map(a => a.value || '').filter(Boolean)
+                    : undefined,
+                subgridId: activeSubgridId,
+                peerId: selectedFriendId,
             });
 
-            // Add the sent message to state immediately (optimistic update)
-            // The WebSocket will also deliver it, but we handle duplicates
-            if (response?.data) {
-                setMessages((prev) => {
-                    if (prev.some((m) => m._id === response.data._id)) {
-                        return prev;
-                    }
-                    return [...prev, response.data];
-                });
-                // Update lastMessages for conversation list sorting (WhatsApp-like)
+            // Update lastMessages for conversation list sorting (WhatsApp-like)
+            if (response) {
                 setLastMessages((prev) => ({
                     ...prev,
-                    [selectedFriendId]: response.data,
+                    [selectedFriendId]: response,
                 }));
             }
+            // Scroll to bottom to show newest message (WhatsApp style)
             setTimeout(() => {
                 scrollViewRef.current?.scrollToEnd({ animated: true });
             }, 100);
@@ -979,7 +1013,16 @@ export default function DirectMessagesScreen() {
 
         try {
             await communityDelete(`/subgrids/${activeSubgridId}/direct-messages/${messageId}`);
-            setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+            // Update React Query cache to remove the deleted message
+            if (selectedFriendId) {
+                queryClient.setQueryData(
+                    queryKeys.messages.dm(activeSubgridId, selectedFriendId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [];
+                        return old.filter((msg: any) => msg._id !== messageId);
+                    }
+                );
+            }
         } catch (error) {
             console.error('Failed to delete message:', error);
         }
@@ -1004,7 +1047,8 @@ export default function DirectMessagesScreen() {
         if (!activeSubgridId || !selectedFriendId) return;
         try {
             await communityDelete(`/subgrids/${activeSubgridId}/friends/${selectedFriendId}`);
-            setFriends((prev) => (prev || []).filter((id) => id !== selectedFriendId));
+            // Invalidate React Query cache to refresh friends list
+            queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.friends(activeSubgridId) });
             setSelectedFriendId(null);
         } catch (error) {
             console.error('Failed to remove friend:', error);
@@ -1015,7 +1059,8 @@ export default function DirectMessagesScreen() {
         if (!activeSubgridId || !selectedFriendId) return;
         try {
             await communityPost(`/subgrids/${activeSubgridId}/friends/${selectedFriendId}/block`, {});
-            setFriends((prev) => (prev || []).filter((id) => id !== selectedFriendId));
+            // Invalidate React Query cache to refresh friends list
+            queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.friends(activeSubgridId) });
             setSelectedFriendId(null);
         } catch (error) {
             console.error('Failed to block friend:', error);
@@ -1132,27 +1177,14 @@ export default function DirectMessagesScreen() {
                         URL.revokeObjectURL(blobUrl);
 
                         if (result?.success && result?.data && activeSubgridId && selectedFriendId) {
-                            const response = await communityPost(`/subgrids/${activeSubgridId}/direct-messages`, {
-                                recipientId: selectedFriendId,
-                                body: '',
-                                kind: 'audio',
-                                attachments: [{
-                                    type: 'audio',
-                                    value: result.data.url || result.data.secure_url,
-                                    label: 'Voice note',
-                                    mimeType: blob.type || 'audio/webm',
-                                    durationMs,
-                                }],
+                            const audioUrl = result.data.url || result.data.secure_url;
+                            // Use React Query mutation to send voice message (handles cache update)
+                            await sendDmMutation.mutateAsync({
+                                content: '',
+                                mediaUrls: [audioUrl],
+                                subgridId: activeSubgridId,
+                                peerId: selectedFriendId,
                             });
-                            // Add sent message optimistically (WebSocket will also deliver it)
-                            if (response?.data) {
-                                setMessages((prev) => {
-                                    if (prev.some((m) => m._id === response.data._id)) {
-                                        return prev;
-                                    }
-                                    return [...prev, response.data];
-                                });
-                            }
                         }
                     } catch (uploadErr: any) {
                         console.error('Failed to upload voice note:', uploadErr);
@@ -1173,23 +1205,21 @@ export default function DirectMessagesScreen() {
             return;
         }
 
-        // Native recording using expo-av
+        // Native recording using expo-audio
         try {
-            const permission = await Audio.requestPermissionsAsync();
+            const permission = await AudioModule.requestRecordingPermissionsAsync();
             if (!permission.granted) {
                 console.error('Microphone permission denied');
                 return;
             }
 
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+            await setAudioModeAsync({
+                allowsRecording: true,
+                playsInSilentMode: true,
             });
 
-            const { recording: newRecording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            expoRecordingRef.current = newRecording;
+            await audioRecorder.prepareToRecordAsync();
+            audioRecorder.record();
             setIsRecording(true);
             recordingInterval.current = setInterval(() => {
                 setRecordingDuration((prev) => prev + 1);
@@ -1213,49 +1243,43 @@ export default function DirectMessagesScreen() {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
-                const uri = expoRecordingRef.current.getURI();
+                await audioRecorder.stop();
+                const uri = audioRecorder.uri;
                 const durationMs = Date.now() - recordingStartRef.current;
 
                 if (uri && activeSubgridId && selectedFriendId) {
                     // Upload the voice note
-                    const result = await uploadFile(
-                        { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' },
-                        { type: 'voice-note', subgridId: activeSubgridId }
-                    );
+                    console.log('[Voice Note] Starting upload, URI:', uri);
+                    let result;
+                    try {
+                        result = await uploadFile(
+                            { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' },
+                            { type: 'voice-note', subgridId: activeSubgridId }
+                        );
+                        console.log('[Voice Note] Upload result:', result);
+                    } catch (uploadError: any) {
+                        console.error('[Voice Note] Upload failed:', uploadError?.message || uploadError);
+                        return;
+                    }
 
-                    if (result?.success && result?.data) {
-                        const response = await communityPost(`/subgrids/${activeSubgridId}/direct-messages`, {
-                            recipientId: selectedFriendId,
-                            body: '',
-                            kind: 'audio',
-                            attachments: [{
-                                type: 'audio',
-                                value: result.data.url || result.data.secure_url,
-                                label: 'Voice note',
-                                mimeType: 'audio/m4a',
-                                durationMs,
-                            }],
+                    if (result?.success && result?.data && activeSubgridId && selectedFriendId) {
+                        const audioUrl = result.data.url || result.data.secure_url;
+                        // Use React Query mutation to send voice message (handles cache update)
+                        await sendDmMutation.mutateAsync({
+                            content: '',
+                            mediaUrls: [audioUrl],
+                            subgridId: activeSubgridId,
+                            peerId: selectedFriendId,
                         });
-                        // Add sent message optimistically (WebSocket will also deliver it)
-                        if (response?.data) {
-                            setMessages((prev) => {
-                                if (prev.some((m) => m._id === response.data._id)) {
-                                    return prev;
-                                }
-                                return [...prev, response.data];
-                            });
-                        }
                     }
                 }
             } catch (err: any) {
                 console.error('Failed to save recording:', err.message);
             } finally {
-                expoRecordingRef.current = null;
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                await setAudioModeAsync({ allowsRecording: false });
             }
         }
     };
@@ -1284,15 +1308,14 @@ export default function DirectMessagesScreen() {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
+                await audioRecorder.stop();
             } catch (err) {
                 // Ignore errors during cancel
             }
-            expoRecordingRef.current = null;
-            await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+            await setAudioModeAsync({ allowsRecording: false });
         }
     };
 
@@ -1306,10 +1329,11 @@ export default function DirectMessagesScreen() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // Group messages by date
+    // Group messages by date (oldest first - WhatsApp style, newest at bottom)
     const groupMessagesByDate = (msgs: DirectMessage[]) => {
         const groups: { date: string; messages: DirectMessage[] }[] = [];
         let currentDate = '';
+        // Sort oldest first so newest messages appear at the bottom (WhatsApp style)
         const sorted = [...msgs].sort((a, b) => {
             return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
         });
@@ -1338,8 +1362,10 @@ export default function DirectMessagesScreen() {
         selectedFriendUser?.createdAt ||
         '';
     const messageGroups = groupMessagesByDate(messages);
-    const currentUserName = currentUserInfo
-        ? [currentUserInfo.firstName, currentUserInfo.lastName].filter(Boolean).join(' ').trim() || currentUserInfo.email || 'User'
+    // Prefer React Query user data, fall back to manually loaded currentUserInfo
+    const userData = currentUserQuery.data || currentUserInfo;
+    const currentUserName = userData
+        ? [userData.firstName, userData.lastName].filter(Boolean).join(' ').trim() || userData.email || 'User'
         : 'User';
 
     const addFriendCandidates = useMemo(() => {
@@ -1364,7 +1390,7 @@ export default function DirectMessagesScreen() {
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [members, friends, currentUserId, addFriendSearch]);
 
-    const styles = useMemo(() => createStyles(colors), [colors]);
+    const styles = useMemo(() => createStyles(colors, bottomInset, topInset), [colors, bottomInset, topInset]);
 
     return (
         <View style={styles.container}>
@@ -1446,7 +1472,10 @@ export default function DirectMessagesScreen() {
                                 {activeSubgrid?.logoUrl ? (
                                     <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
                                 ) : (
-                                    <View style={styles.mobileTopBarLogoPlaceholder}>
+                                    <View style={[
+                                        styles.mobileTopBarLogoPlaceholder,
+                                        activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }
+                                    ]}>
                                         <Text style={styles.mobileTopBarLogoText}>
                                             {(activeSubgrid?.name || 'SV').substring(0, 2).toUpperCase()}
                                         </Text>
@@ -1505,7 +1534,7 @@ export default function DirectMessagesScreen() {
                                             ? `📞 ${lastMsg.callType === 'video' ? 'Video' : 'Voice'} call`
                                             : '';
                                 const lastMsgTime = formatLastMessageTime(lastMsg?.createdAt);
-                                const isSentByMe = lastMsg?.senderId === currentUserId;
+                                const isSentByMe = String(lastMsg?.senderId || '') === String(currentUserId || '');
                                 return (
                                     <TouchableOpacity
                                         key={friendId}
@@ -1578,11 +1607,15 @@ export default function DirectMessagesScreen() {
 
                 {/* Chat Area - full width on mobile, shown when viewing content */}
                 {(!isMobile || mobileShowContent) && (
-                <View style={[styles.chatArea, isMobile && styles.chatAreaMobile]}>
+                <KeyboardAvoidingView
+                    style={[styles.chatArea, isMobile && styles.chatAreaMobile]}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+                >
                     {selectedFriendId ? (
                         <>
                             {/* Chat Header */}
-                            <View style={styles.chatHeader}>
+                            <View style={[styles.chatHeader, isMobile && { paddingTop: insets.top + 12 }]}>
                                 <View style={styles.chatHeaderLeft}>
                                     {isMobile && (
                                         <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
@@ -1668,12 +1701,14 @@ export default function DirectMessagesScreen() {
                                                 <View style={styles.dateLine} />
                                             </View>
                                             {group.messages.map((msg) => {
-                                                const senderName = getSenderName(msg.senderId || '');
-                                                const msgSenderId = String(msg.senderId || '');
-                                                const myUserId = String(currentUserId || '');
-                                                const isOwnMessage = msgSenderId === myUserId;
-                                                // Debug: log ID comparison to troubleshoot delete button visibility
-                                                console.log('[DM] isOwnMessage check - msgId:', msg._id, 'senderId:', msgSenderId, 'currentUserId:', myUserId, 'isOwn:', isOwnMessage);
+                                                // Handle different field names for sender ID
+                                                const actualSenderId = msg.senderId || (msg as any).userId || (msg as any).fromUserId || (msg as any).from || '';
+                                                const senderName = getSenderName(actualSenderId);
+                                                const msgSenderId = String(actualSenderId).trim();
+                                                const myUserId = String(currentUserId || '').trim();
+                                                const isOwnMessage = msgSenderId === myUserId && msgSenderId !== '';
+                                                // Debug: log ID comparison to troubleshoot message alignment
+                                                console.log('[DM] isOwnMessage check - msgId:', msg._id, 'senderId:', msgSenderId, 'currentUserId:', myUserId, 'isOwn:', isOwnMessage, 'rawMsg:', JSON.stringify(msg));
                                                 const attachmentList = normalizeAttachments(msg);
 
                                                 // Render call history entry (like WhatsApp)
@@ -1803,7 +1838,7 @@ export default function DirectMessagesScreen() {
                             </ScrollView>
 
                             {/* Message Input */}
-                            <View style={styles.inputContainer}>
+                            <View style={[styles.inputContainer, isMobile && { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}>
                                 {/* Attachment Preview */}
                                 {attachments.length > 0 && (
                                     <View style={styles.attachmentPreviewContainer}>
@@ -1853,25 +1888,42 @@ export default function DirectMessagesScreen() {
                                                 placeholderTextColor={colors.textMuted}
                                                 value={newMessage}
                                                 onChangeText={setNewMessage}
-                                                onSubmitEditing={handleSendMessage}
+                                                multiline
                                             />
                                             <View style={styles.inputActions}>
-                                                <TouchableOpacity style={styles.inputActionBtn} onPress={handlePickFile}>
-                                                    <Paperclip size={20} color={colors.textMuted} />
+                                                {/* Only show these actions on web - on mobile, use native keyboard emoji button */}
+                                                {Platform.OS === 'web' && (
+                                                    <>
+                                                        <TouchableOpacity style={styles.inputActionBtn} onPress={handlePickFile}>
+                                                            <Paperclip size={20} color={colors.textMuted} />
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity style={styles.inputActionBtn} onPress={() => setShowEmojiPicker(true)}>
+                                                            <Smile size={20} color={colors.textMuted} />
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity style={styles.inputActionBtn} onPress={handleStartRecording}>
+                                                            <Mic size={20} color={colors.textMuted} />
+                                                        </TouchableOpacity>
+                                                    </>
+                                                )}
+                                                {/* Send button - always visible on mobile when there's content */}
+                                                <TouchableOpacity
+                                                    style={[
+                                                        styles.inputSendBtn,
+                                                        !(newMessage.trim() || attachments.length > 0) && styles.inputSendBtnDisabled
+                                                    ]}
+                                                    onPress={handleSendMessage}
+                                                    disabled={!(newMessage.trim() || attachments.length > 0)}
+                                                >
+                                                    <Send size={18} color={newMessage.trim() || attachments.length > 0 ? '#FFFFFF' : colors.textMuted} />
                                                 </TouchableOpacity>
-                                                <TouchableOpacity style={styles.inputActionBtn} onPress={() => setShowEmojiPicker(true)}>
-                                                    <Smile size={20} color={colors.textMuted} />
-                                                </TouchableOpacity>
-                                                <TouchableOpacity style={styles.inputActionBtn} onPress={handleStartRecording}>
-                                                    <Mic size={20} color={colors.textMuted} />
-                                                </TouchableOpacity>
-                                                {newMessage.trim() || attachments.length > 0 ? (
-                                                    <TouchableOpacity style={styles.inputSendBtn} onPress={handleSendMessage}>
-                                                        <Send size={18} color="#FFFFFF" />
-                                                    </TouchableOpacity>
-                                                ) : null}
                                             </View>
                                         </View>
+                                        {/* Voice recording button - only on mobile when no content */}
+                                        {Platform.OS !== 'web' && !(newMessage.trim() || attachments.length > 0) && (
+                                            <TouchableOpacity style={styles.inputMicBtn} onPress={handleStartRecording}>
+                                                <Mic size={22} color={colors.textMuted} />
+                                            </TouchableOpacity>
+                                        )}
                                     </View>
                                 )}
                             </View>
@@ -1881,7 +1933,7 @@ export default function DirectMessagesScreen() {
                             <Text style={styles.emptyText}>Select a friend to start messaging</Text>
                         </View>
                     )}
-                </View>
+                </KeyboardAvoidingView>
                 )}
 
                 {/* Profile Sidebar - hidden on mobile */}
@@ -2103,7 +2155,7 @@ export default function DirectMessagesScreen() {
                 error={agoraCall.error}
                 peerName={selectedFriendName}
                 peerAvatar={friendUsers[selectedFriendId || '']?.avatarUrl}
-                selfAvatar={currentUserInfo?.avatarUrl}
+                selfAvatar={currentUserQuery.data?.avatarUrl || currentUserInfo?.avatarUrl}
                 engine={agoraCall.engine}
                 onAnswer={() => {}}
                 onDecline={() => {}}
@@ -2117,7 +2169,7 @@ export default function DirectMessagesScreen() {
     );
 }
 
-const createStyles = (colors: any) =>
+const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0) =>
     StyleSheet.create({
         container: {
             flex: 1,
@@ -2326,7 +2378,7 @@ const createStyles = (colors: any) =>
             gap: 8,
             paddingHorizontal: 8,
             paddingTop: 8,
-            paddingBottom: Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 24 : 8,
+            paddingBottom: bottomInset + 8,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
@@ -2552,7 +2604,9 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 12,
         },
         messageRowSelf: {
-            justifyContent: 'flex-end',
+            flexDirection: 'row-reverse',
+            paddingRight: 0,
+            paddingLeft: 40,
         },
         messageBubble: {
             maxWidth: '75%',
@@ -2593,7 +2647,7 @@ const createStyles = (colors: any) =>
             color: 'rgba(255, 255, 255, 0.7)',
         },
         messageDeleteBtn: {
-            marginRight: 8,
+            marginLeft: 8,
             padding: 8,
             backgroundColor: 'rgba(239, 68, 68, 0.1)',
             borderRadius: 16,
@@ -2724,7 +2778,7 @@ const createStyles = (colors: any) =>
             flexDirection: 'column',
             paddingHorizontal: 16,
             paddingTop: 12,
-            paddingBottom: Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 24 : 12,
+            paddingBottom: bottomInset + 12,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
@@ -2756,9 +2810,24 @@ const createStyles = (colors: any) =>
         },
         inputSendBtn: {
             backgroundColor: '#5865F2',
-            borderRadius: 6,
-            padding: 8,
+            borderRadius: 18,
+            width: 36,
+            height: 36,
+            justifyContent: 'center',
+            alignItems: 'center',
             marginLeft: 4,
+        },
+        inputSendBtnDisabled: {
+            backgroundColor: colors.surfaceMuted,
+        },
+        inputMicBtn: {
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: colors.surfaceMuted,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginLeft: 8,
         },
         profileSidebar: {
             width: 280,
@@ -3249,7 +3318,7 @@ const createStyles = (colors: any) =>
         mobileTopBar: {
             flexDirection: 'column',
             paddingHorizontal: 16,
-            paddingTop: Platform.OS === 'ios' ? 50 : Platform.OS === 'android' ? 40 : 16,
+            paddingTop: topInset + 12,
             paddingBottom: 12,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,

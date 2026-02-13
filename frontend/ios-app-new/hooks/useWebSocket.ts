@@ -94,7 +94,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
         const tenantId = getTenantId();
 
         if (!userId) {
-            console.warn('[WebSocket] No user ID available, cannot connect');
             return;
         }
 
@@ -115,7 +114,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
         const socket = socketRef.current;
 
         socket.on('connect', () => {
-            console.log('[WebSocket] Connected:', socket.id);
             setStatus('connected');
 
             // Authenticate after connection
@@ -128,36 +126,31 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
             });
         });
 
-        socket.on('authenticated', (data) => {
-            console.log('[WebSocket] Authenticated:', data);
+        socket.on('authenticated', () => {
+            // Authenticated
         });
 
-        socket.on('auth_error', (error) => {
-            console.error('[WebSocket] Auth error:', error);
+        socket.on('auth_error', () => {
             setStatus('error');
         });
 
-        socket.on('disconnect', (reason) => {
-            console.log('[WebSocket] Disconnected:', reason);
+        socket.on('disconnect', () => {
             setStatus('disconnected');
         });
 
-        socket.on('connect_error', (error) => {
-            console.error('[WebSocket] Connection error:', error);
+        socket.on('connect_error', () => {
             setStatus('error');
         });
 
-        socket.on('reconnect', (attemptNumber) => {
-            console.log('[WebSocket] Reconnected after', attemptNumber, 'attempts');
+        socket.on('reconnect', () => {
             setStatus('connected');
         });
 
-        socket.on('reconnect_error', (error) => {
-            console.error('[WebSocket] Reconnect error:', error);
+        socket.on('reconnect_error', () => {
+            // Reconnect error
         });
 
         socket.on('reconnect_failed', () => {
-            console.error('[WebSocket] Reconnection failed');
             setStatus('error');
         });
     }, [reconnection, reconnectionAttempts, reconnectionDelay]);
@@ -173,7 +166,6 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
 
     const joinRoom = useCallback((roomType: string, roomId: string) => {
         if (!socketRef.current?.connected) {
-            console.warn('[WebSocket] Not connected, cannot join room');
             return;
         }
 

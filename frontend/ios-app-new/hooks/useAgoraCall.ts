@@ -1,25 +1,16 @@
 /**
- * Agora Call Hook - Native Stub for Expo Go
+ * Agora Call Hook - Native Entry Point
  *
- * react-native-agora requires native linking and doesn't work in Expo Go.
- * This stub provides a graceful fallback that shows an informative message.
+ * This file detects whether react-native-agora is available and loads
+ * the appropriate implementation:
+ * - Native builds (APK/IPA): Uses useAgoraCall.native.ts with full Agora functionality
+ * - Expo Go: Falls back to stub implementation with informative messages
  *
- * For full native call support:
- * - Use a development build (expo prebuild && expo run:ios/android)
- * - Or use EAS Build to create a custom development client
- *
- * NOTE: On web platform, useAgoraCall.web.ts should be loaded instead.
- * If you see this console log on web, the bundler is not resolving correctly.
+ * For web platform, useAgoraCall.web.ts is loaded by Metro's platform resolution.
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
-
-// Debug log to track which file is being loaded
-console.log('[useAgoraCall] Loading NATIVE STUB file (useAgoraCall.ts) - Platform:', Platform.OS);
-if (Platform.OS === 'web') {
-    console.warn('[useAgoraCall] WARNING: Web platform is loading native stub! This should not happen. Check metro.config.js');
-}
 import {
     initiateDMCall,
     answerCall,
@@ -69,7 +60,30 @@ interface UseAgoraCallOptions {
     onError?: (error: Error) => void;
 }
 
-export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
+// Check if react-native-agora is available (native build vs Expo Go)
+let nativeAgoraAvailable = false;
+let NativeAgoraHook: any = null;
+
+try {
+    // Try to import react-native-agora to check if it's available
+    // This will throw an error in Expo Go where native modules aren't linked
+    const agora = require('react-native-agora');
+    if (agora && agora.createAgoraRtcEngine) {
+        nativeAgoraAvailable = true;
+        // Dynamically import the native implementation
+        NativeAgoraHook = require('./useAgoraCall.native').useAgoraCall;
+        console.log('[useAgoraCall] Native Agora SDK available - using native implementation');
+    }
+} catch (e) {
+    console.log('[useAgoraCall] Native Agora SDK not available - using Expo Go stub');
+    nativeAgoraAvailable = false;
+}
+
+/**
+ * Stub implementation for Expo Go
+ * Shows informative messages that calls require a native build
+ */
+const useAgoraCallStub = (options: UseAgoraCallOptions = {}) => {
     const [callState, setCallState] = useState<CallState>('idle');
     const [callType, setCallType] = useState<CallType>('audio');
     const [currentCall, setCurrentCall] = useState<CallSession | null>(null);
@@ -83,18 +97,18 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const showExpoGoAlert = useCallback(() => {
         Alert.alert(
             'Calls Not Available',
-            'Voice and video calls require a native build. Please use the web version for calls, or build a standalone app.\n\nIn Expo Go, the Agora SDK is not available.',
+            'Voice and video calls require a native build (APK/IPA). Please use the web version for calls, or build a standalone app with EAS Build.\n\nIn Expo Go, the Agora SDK is not available.',
             [{ text: 'OK' }]
         );
     }, []);
 
     const startCall = useCallback(async (calleeId: string, type: CallType = 'audio', subgridId?: string) => {
         showExpoGoAlert();
-        options.onError?.(new Error('Calls not available in Expo Go. Use web version for calls.'));
+        options.onError?.(new Error('Calls not available in Expo Go. Use web version or build a native APK.'));
         return null;
     }, [options, showExpoGoAlert]);
 
-    const answer = useCallback(async (callId: string) => {
+    const answer = useCallback(async (callId: string, callTypeArg?: CallType) => {
         showExpoGoAlert();
         try {
             await answerCall(callId);
@@ -146,9 +160,6 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         // No-op in Expo Go
     }, []);
 
-    // Note: SSE call event subscription is now handled globally by CallContext
-    // This hook only handles Agora-specific call actions
-
     return {
         // State
         callState,
@@ -175,5 +186,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         engine: null,
     };
 };
+
+/**
+ * Main hook export - uses native implementation if available, otherwise stub
+ */
+export const useAgoraCall = nativeAgoraAvailable && NativeAgoraHook
+    ? NativeAgoraHook
+    : useAgoraCallStub;
 
 export default useAgoraCall;

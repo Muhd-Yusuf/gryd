@@ -15,7 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.thegryd.app"
+      "bundleIdentifier": "com.thegryd.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs access to your camera for video calls",
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice and video calls"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +28,15 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.thegryd.app"
+      "package": "com.thegryd.app",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "BLUETOOTH",
+        "BLUETOOTH_CONNECT"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,18 +45,39 @@
       "expo-router",
       "expo-font",
       [
+        "expo-av",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for voice notes"
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
           "color": "#22c55e",
           "sounds": []
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
       ]
     ],
     "extra": {
       "eas": {
-        "projectId": "your-project-id-here"
-      }
-    }
+        "projectId": "bf9e40cd-ad42-4e80-9861-aec2f06197e8"
+      },
+      "router": {}
+    },
+    "owner": "almuhandis"
   }
 }

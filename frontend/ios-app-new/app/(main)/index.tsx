@@ -15,7 +15,7 @@ import {
     Alert,
     Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     ChevronDown,
     Hash,
@@ -47,7 +47,8 @@ import {
     User,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, initiateChannelCall, uploadFile, logout } from '../../lib/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, resolveUserId, initiateChannelCall, uploadFile, logout } from '../../lib/api';
 import { cacheUsers, getCachedSubgrids, cacheSubgrids, cacheFriends } from '../../lib/userCache';
 import { useTheme } from '../../lib/theme';
 import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
@@ -55,8 +56,22 @@ import UserAvatar from '../../components/UserAvatar';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { useWebSocketContext } from '../../contexts/WebSocketContext';
+import {
+    useSubgrids,
+    useChannels,
+    usePosts,
+    useMembers,
+    useFriends,
+    useEvents,
+    useCategories,
+    useChannelMessages,
+    useDirectMessages,
+    useSendChannelMessage,
+    useSendDirectMessage,
+} from '../../hooks/queries';
+import { queryKeys } from '../../lib/queryClient';
 
 type Channel = {
     _id: string;
@@ -227,39 +242,29 @@ const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', '
 
 const TenantCommunityScreen = () => {
     const { colors, mode, toggleTheme } = useTheme();
-    const styles = useMemo(() => createStyles(colors), [colors]);
     const { width } = useWindowDimensions();
     const isCompact = width < 1200;
     const isMobile = width < 900;
+    const insets = useSafeAreaInsets();
+    // Calculate safe area values for mobile
+    const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
+    const styles = useMemo(() => createStyles(colors, bottomInset), [colors, bottomInset]);
     const showCenterPanel = !isMobile;
     const showRightPanel = !isCompact;
-    const userId = getUserId();
+    const [userId, setUserId] = useState(getUserId());
+    const queryClient = useQueryClient();
     const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
     const [tenantId, setTenantId] = useState(getTenantId());
-    const [subgrids, setSubgrids] = useState<Subgrid[]>(() => {
-        const tid = getTenantId();
-        return tid ? (getCachedSubgrids(tid) || []) : [];
-    });
     const [activeSubgridId, setActiveSubgridId] = useState(() => {
         const tid = getTenantId();
         const cached = tid ? getCachedSubgrids(tid) : null;
         return cached && cached.length > 0 ? cached[0]._id : '';
     });
-    const [channels, setChannels] = useState<Channel[]>([]);
     const [activeChannelId, setActiveChannelId] = useState('');
-    const [posts, setPosts] = useState<Post[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
     const [channelDraft, setChannelDraft] = useState('');
-    const [members, setMembers] = useState<Member[]>([]);
-    const [events, setEvents] = useState<Event[]>([]);
-    const [categories, setCategories] = useState<Category[]>([]);
     const [showEventsView, setShowEventsView] = useState(false);
-    const [friends, setFriends] = useState<string[]>([]);
-    const [friendUsers, setFriendUsers] = useState<Record<string, UserProfile>>({});
     const [directMessagePeers, setDirectMessagePeers] = useState<string[]>([]);
     const [activeDmId, setActiveDmId] = useState('');
-    const [dmMessages, setDmMessages] = useState<Message[]>([]);
-    const [memberCount, setMemberCount] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
     const [activeRail, setActiveRail] = useState('home');
@@ -276,6 +281,35 @@ const TenantCommunityScreen = () => {
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'post' | 'message' } | null>(null);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const router = useRouter();
+
+    // React Query hooks for data fetching with caching
+    const subgridsQuery = useSubgrids(tenantId);
+    const channelsQuery = useChannels(activeSubgridId);
+    const postsQuery = usePosts(activeSubgridId);
+    const membersQuery = useMembers(activeSubgridId);
+    const friendsQuery = useFriends(activeSubgridId);
+    const eventsQuery = useEvents(activeSubgridId);
+    const categoriesQuery = useCategories(activeSubgridId);
+    const messagesQuery = useChannelMessages(activeSubgridId, activeChannelId);
+    const dmMessagesQuery = useDirectMessages(activeSubgridId, activeDmId);
+
+    // Mutations for sending messages
+    const sendChannelMessage = useSendChannelMessage(activeSubgridId, activeChannelId);
+    const sendDmMessage = useSendDirectMessage(activeSubgridId, activeDmId);
+
+    // Derive data from queries (memoize fallbacks to prevent infinite loops)
+    const subgrids = subgridsQuery.data || [];
+    const channels = channelsQuery.data || [];
+    const posts = postsQuery.data || [];
+    const members = membersQuery.data || [];
+    const memberCount = members.length;
+    const friendsData = friendsQuery.data;
+    const friends = useMemo(() => friendsData?.friends || [], [friendsData?.friends]);
+    const friendUsers = useMemo(() => friendsData?.users || {}, [friendsData?.users]);
+    const events = eventsQuery.data || [];
+    const categories = categoriesQuery.data || [];
+    const messages = messagesQuery.data || [];
+    const dmMessages = dmMessagesQuery.data || [];
 
     const handleLogout = async () => {
         try {
@@ -304,9 +338,11 @@ const TenantCommunityScreen = () => {
     const audioChunksRef = useRef<Blob[]>([]);
     const recordingStartRef = useRef<number>(0);
     const activeAudioStreamRef = useRef<any | null>(null);
-    const expoRecordingRef = useRef<Audio.Recording | null>(null);
     const waveformAnim = useRef(new Animated.Value(0)).current;
     const feedScrollRef = useRef<ScrollView>(null);
+
+    // expo-audio recorder hook (for native platforms)
+    const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
     const EMOJI_GRID = [
         ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊'],
@@ -315,8 +351,10 @@ const TenantCommunityScreen = () => {
         ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '💕', '💖'],
     ];
 
+    // Resolve tenant ID and user ID on mount
     useEffect(() => {
         let isActive = true;
+        // Resolve tenant ID
         resolveTenantId()
             .then((id) => {
                 if (isActive) {
@@ -328,169 +366,125 @@ const TenantCommunityScreen = () => {
                     setError(err.message || 'Failed to resolve tenant.');
                 }
             });
+        // Resolve user ID (important for mobile where async bootstrap is needed)
+        resolveUserId()
+            .then((id) => {
+                if (isActive && id) {
+                    setUserId(id);
+                    console.log('[MemberDashboard] Resolved userId:', id);
+                }
+            })
+            .catch((err) => {
+                console.error('[MemberDashboard] Failed to resolve userId:', err);
+            });
         return () => {
             isActive = false;
         };
     }, []);
 
+    // Set active subgrid when subgrids load
     useEffect(() => {
-        const loadSubgrids = async () => {
-            if (!tenantId) {
-                return;
+        if (subgrids.length > 0) {
+            // Use functional update to avoid infinite loop
+            setActiveSubgridId((current) => {
+                if (!current) return subgrids[0]._id;
+                return current;
+            });
+            // Cache subgrids for offline/instant loading
+            if (tenantId) {
+                cacheSubgrids(tenantId, subgrids);
             }
+        }
+    }, [subgrids, tenantId]);
 
-            // Use cached subgrids first for instant display
-            const cached = getCachedSubgrids(tenantId);
-            if (cached && cached.length > 0) {
-                setSubgrids(cached);
-                if (!activeSubgridId) {
-                    setActiveSubgridId(cached[0]._id);
-                }
-            }
-
-            // Fetch fresh data in background
-            try {
-                const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const list = response?.data || [];
-                setSubgrids(list);
-                cacheSubgrids(tenantId, list);
-                if (!activeSubgridId && list.length > 0) {
-                    setActiveSubgridId(list[0]._id);
-                }
-            } catch (err: any) {
-                console.error('Failed to load subgrids:', err.message);
-            }
-        };
-
-        loadSubgrids();
-    }, [tenantId, activeSubgridId]);
-
+    // Cache members for DM loading (backward compatibility)
     useEffect(() => {
-        const loadSubgridData = async () => {
-            if (!activeSubgridId) {
-                return;
-            }
-            try {
-                const results = await Promise.allSettled([
-                    communityGet(`/subgrids/${activeSubgridId}/channels`),
-                    communityGet(`/subgrids/${activeSubgridId}/posts`),
-                    communityGet(`/subgrids/${activeSubgridId}/members`),
-                    communityGet(`/subgrids/${activeSubgridId}/friends`),
-                    communityGet(`/subgrids/${activeSubgridId}/events`),
-                    communityGet(`/subgrids/${activeSubgridId}/categories`),
-                ]);
-                const [channelsRes, postsRes, membersRes, friendsRes, eventsRes, categoriesRes] = results;
-                if (channelsRes.status === 'fulfilled') {
-                    setChannels(channelsRes.value?.data || []);
+        if (members.length > 0) {
+            const memberProfiles: Record<string, any> = {};
+            members.forEach((m: any) => {
+                if (m.userId) {
+                    memberProfiles[m.userId] = {
+                        id: m.userId,
+                        firstName: m.firstName,
+                        lastName: m.lastName,
+                        email: m.email,
+                        avatarUrl: m.avatarUrl,
+                        role: m.role || m.userRole,
+                    };
                 }
-                // Don't clear on failure - keep existing data
-                if (postsRes.status === 'fulfilled') {
-                    setPosts(postsRes.value?.data || []);
-                }
-                if (membersRes.status === 'fulfilled') {
-                    const list = membersRes.value?.data || [];
-                    setMembers(list);
-                    setMemberCount(list.length);
-                    // Cache member profiles for instant DM loading
-                    const memberProfiles: Record<string, any> = {};
-                    list.forEach((m: any) => {
-                        if (m.userId) {
-                            memberProfiles[m.userId] = {
-                                id: m.userId,
-                                firstName: m.firstName,
-                                lastName: m.lastName,
-                                email: m.email,
-                                avatarUrl: m.avatarUrl,
-                                role: m.role || m.userRole,
-                            };
-                        }
-                    });
-                    cacheUsers(memberProfiles);
-                }
-                if (friendsRes.status === 'fulfilled') {
-                    const friendsList = friendsRes.value?.data?.friends || [];
-                    const users = friendsRes.value?.data?.users || {};
-                    setFriends(friendsList);
-                    setFriendUsers(users);
-                    // Cache friends data for instant DM loading
-                    cacheFriends(activeSubgridId, friendsList, users);
-                }
-                if (eventsRes.status === 'fulfilled') {
-                    setEvents(eventsRes.value?.data || []);
-                }
-                if (categoriesRes.status === 'fulfilled') {
-                    setCategories(categoriesRes.value?.data || []);
-                }
-            } catch (err: any) {
-                console.error('Failed to load community data:', err.message);
-            }
-        };
+            });
+            cacheUsers(memberProfiles);
+        }
+    }, [members]);
 
-        loadSubgridData();
-    }, [activeSubgridId]);
+    // Cache friends data
+    useEffect(() => {
+        if (activeSubgridId && friends.length > 0) {
+            cacheFriends(activeSubgridId, friends, friendUsers);
+        }
+    }, [activeSubgridId, friends, friendUsers]);
 
+    // Set active channel when channels load
     useEffect(() => {
         if (!channels.length) {
             setActiveChannelId('');
             return;
         }
-        if (!channels.some((channel) => channel._id === activeChannelId)) {
-            setActiveChannelId(channels[0]._id);
-        }
-    }, [channels, activeChannelId]);
-
-    useEffect(() => {
-        const loadMessages = async () => {
-            if (!activeSubgridId || !activeChannelId) {
-                setMessages([]);
-                return;
+        // Only set if current channel is not in the list (avoid infinite loop)
+        setActiveChannelId((current) => {
+            if (!current || !channels.some((channel) => channel._id === current)) {
+                return channels[0]._id;
             }
-            try {
-                const response = await communityGet(
-                    `/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`
-                );
-                setMessages(response?.data || []);
-            } catch {
-                setMessages([]);
-            }
-        };
-
-        loadMessages();
-    }, [activeSubgridId, activeChannelId]);
+            return current;
+        });
+    }, [channels]);
 
     // WebSocket: Join channel room and subscribe to new messages
     useEffect(() => {
-        if (!activeChannelId || !isConnected) return;
+        if (!activeChannelId || !activeSubgridId || !isConnected) return;
 
         const channelId = String(activeChannelId);
 
         // Join the channel room
         joinRoom('channel', channelId);
 
-        // Subscribe to new messages
+        // Subscribe to new messages - update React Query cache
         const unsubscribeNewMessage = subscribe('new_message', (data) => {
             if (data.roomType === 'channel' && String(data.roomId) === channelId && data.message) {
-                setMessages((prev) => {
-                    // Avoid duplicates
-                    if (prev.some(m => m._id === data.message._id)) return prev;
-                    return [...prev, data.message];
-                });
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, channelId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [data.message];
+                        if (old.some(m => m._id === data.message._id)) return old;
+                        return [...old, data.message];
+                    }
+                );
             }
         });
 
         // Subscribe to message updates
         const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
             if (data.roomType === 'channel' && String(data.roomId) === channelId && data.message) {
-                setMessages((prev) => prev.map(m =>
-                    m._id === data.message._id ? data.message : m
-                ));
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, channelId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [data.message];
+                        return old.map(m => m._id === data.message._id ? data.message : m);
+                    }
+                );
             }
         });
 
         // Subscribe to message deletions
         const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
             if (data.roomType === 'channel' && String(data.roomId) === channelId) {
-                setMessages((prev) => prev.filter(m => m._id !== data.messageId));
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, channelId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [];
+                        return old.filter(m => m._id !== data.messageId);
+                    }
+                );
             }
         });
 
@@ -500,41 +494,27 @@ const TenantCommunityScreen = () => {
             unsubscribeMessageUpdated();
             unsubscribeMessageDeleted();
         };
-    }, [activeChannelId, isConnected, subscribe, joinRoom, leaveRoom]);
+    }, [activeChannelId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient]);
 
+    // Set DM peers from friends
     useEffect(() => {
         const peers = friends.filter((friendId) => friendId && friendId !== userId);
         setDirectMessagePeers(peers);
-        if (peers.length > 0 && !peers.includes(activeDmId)) {
-            setActiveDmId(peers[0]);
-        }
-        if (!peers.length) {
-            setActiveDmId('');
-        }
-    }, [members, userId, activeDmId]);
-
-    useEffect(() => {
-        const loadDmMessages = async () => {
-            if (!activeSubgridId || !activeDmId) {
-                setDmMessages([]);
-                return;
+        // Only set activeDmId if needed (avoid infinite loop by using functional update)
+        setActiveDmId((current) => {
+            if (peers.length > 0 && !peers.includes(current)) {
+                return peers[0];
             }
-            try {
-                const response = await communityGet(
-                    `/subgrids/${activeSubgridId}/direct-messages?peerId=${activeDmId}`
-                );
-                setDmMessages(response?.data || []);
-            } catch {
-                setDmMessages([]);
+            if (!peers.length) {
+                return '';
             }
-        };
+            return current;
+        });
+    }, [friends, userId]);
 
-        loadDmMessages();
-    }, [activeSubgridId, activeDmId]);
-
-    // WebSocket: Subscribe to DM messages
+    // WebSocket: Subscribe to DM messages - update React Query cache
     useEffect(() => {
-        if (!activeDmId || !userId || !isConnected) return;
+        if (!activeDmId || !userId || !activeSubgridId || !isConnected) return;
 
         // Create DM room ID (consistent ordering)
         const sortedIds = [String(userId), String(activeDmId)].sort();
@@ -546,27 +526,40 @@ const TenantCommunityScreen = () => {
         // Subscribe to new DM messages
         const unsubscribeNewMessage = subscribe('new_message', (data) => {
             if (data.roomType === 'dm' && String(data.roomId) === dmRoomId && data.message) {
-                setDmMessages((prev) => {
-                    // Avoid duplicates
-                    if (prev.some(m => m._id === data.message._id)) return prev;
-                    return [...prev, data.message];
-                });
+                queryClient.setQueryData(
+                    queryKeys.messages.dm(activeSubgridId, activeDmId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [data.message];
+                        if (old.some(m => m._id === data.message._id)) return old;
+                        return [...old, data.message];
+                    }
+                );
             }
         });
 
         // Subscribe to DM message updates
         const unsubscribeMessageUpdated = subscribe('message_updated', (data) => {
             if (data.roomType === 'dm' && String(data.roomId) === dmRoomId && data.message) {
-                setDmMessages((prev) => prev.map(m =>
-                    m._id === data.message._id ? data.message : m
-                ));
+                queryClient.setQueryData(
+                    queryKeys.messages.dm(activeSubgridId, activeDmId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [data.message];
+                        return old.map(m => m._id === data.message._id ? data.message : m);
+                    }
+                );
             }
         });
 
         // Subscribe to DM message deletions
         const unsubscribeMessageDeleted = subscribe('message_deleted', (data) => {
             if (data.roomType === 'dm' && String(data.roomId) === dmRoomId) {
-                setDmMessages((prev) => prev.filter(m => m._id !== data.messageId));
+                queryClient.setQueryData(
+                    queryKeys.messages.dm(activeSubgridId, activeDmId),
+                    (old: any[] | undefined) => {
+                        if (!old) return [];
+                        return old.filter(m => m._id !== data.messageId);
+                    }
+                );
             }
         });
 
@@ -576,9 +569,9 @@ const TenantCommunityScreen = () => {
             unsubscribeMessageUpdated();
             unsubscribeMessageDeleted();
         };
-    }, [activeDmId, userId, isConnected, subscribe, joinRoom, leaveRoom]);
+    }, [activeDmId, userId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient]);
 
-    // WebSocket: Join subgrid room for channel/post/member updates
+    // WebSocket: Join subgrid room for channel/post/member updates - update React Query cache
     useEffect(() => {
         if (!activeSubgridId || !isConnected) return;
 
@@ -588,55 +581,75 @@ const TenantCommunityScreen = () => {
         // Subscribe to channel events
         const unsubscribeChannelCreated = subscribe('channel_created', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setChannels((prev) => [...prev, data.channel]);
+                queryClient.setQueryData(
+                    queryKeys.subgrids.channels(activeSubgridId),
+                    (old: any[] | undefined) => old ? [...old, data.channel] : [data.channel]
+                );
             }
         });
 
         const unsubscribeChannelUpdated = subscribe('channel_updated', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setChannels((prev) => prev.map(c =>
-                    c._id === data.channel._id ? data.channel : c
-                ));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.channels(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map(c => c._id === data.channel._id ? data.channel : c) : []
+                );
             }
         });
 
         const unsubscribeChannelDeleted = subscribe('channel_deleted', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setChannels((prev) => prev.filter(c => c._id !== data.channelId));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.channels(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.filter(c => c._id !== data.channelId) : []
+                );
             }
         });
 
         // Subscribe to post events
         const unsubscribePostCreated = subscribe('post_created', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setPosts((prev) => [data.post, ...prev]);
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? [data.post, ...old] : [data.post]
+                );
             }
         });
 
         const unsubscribePostUpdated = subscribe('post_updated', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setPosts((prev) => prev.map(p =>
-                    p._id === data.post._id ? data.post : p
-                ));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map(p => p._id === data.post._id ? data.post : p) : []
+                );
             }
         });
 
         const unsubscribePostDeleted = subscribe('post_deleted', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setPosts((prev) => prev.filter(p => p._id !== data.postId));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.filter(p => p._id !== data.postId) : []
+                );
             }
         });
 
         // Subscribe to member events
         const unsubscribeMemberJoined = subscribe('member_joined', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setMembers((prev) => [...prev, data.member]);
+                queryClient.setQueryData(
+                    queryKeys.subgrids.members(activeSubgridId),
+                    (old: any[] | undefined) => old ? [...old, data.member] : [data.member]
+                );
             }
         });
 
         const unsubscribeMemberLeft = subscribe('member_left', (data) => {
             if (data.subgridId === activeSubgridId) {
-                setMembers((prev) => prev.filter(m => m.userId !== data.userId));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.members(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.filter(m => m.userId !== data.userId) : []
+                );
             }
         });
 
@@ -651,7 +664,7 @@ const TenantCommunityScreen = () => {
             unsubscribeMemberJoined();
             unsubscribeMemberLeft();
         };
-    }, [activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom]);
+    }, [activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient]);
 
     const activeSubgrid = useMemo(
         () => subgrids.find((item) => item._id === activeSubgridId) || null,
@@ -899,19 +912,14 @@ const TenantCommunityScreen = () => {
 
         try {
             // Upload attachments first if any
-            const uploadedAttachments: Attachment[] = [];
+            const uploadedAttachments: string[] = [];
             if (attachments.length > 0) {
                 setUploading(true);
                 for (const file of attachments) {
                     try {
                         const result = await uploadFile(file, { type: 'attachment', subgridId: activeSubgridId });
                         if (result?.success && result?.data) {
-                            uploadedAttachments.push({
-                                type: file.type.startsWith('image/') ? 'image' : 'file',
-                                value: result.data.url || result.data.secure_url,
-                                label: file.name,
-                                mimeType: file.type,
-                            } as Attachment);
+                            uploadedAttachments.push(result.data.url || result.data.secure_url);
                         }
                     } catch (uploadErr: any) {
                         console.error('Failed to upload attachment:', uploadErr.message);
@@ -921,15 +929,14 @@ const TenantCommunityScreen = () => {
                 setUploading(false);
             }
 
-            await communityPost(`/subgrids/${activeSubgridId}/messages`, {
+            // Use React Query mutation to send message and update cache
+            // Pass subgridId and channelId explicitly to ensure correct values are used
+            await sendChannelMessage.mutateAsync({
+                content: body,
+                mediaUrls: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+                subgridId: activeSubgridId,
                 channelId: activeChannelId,
-                body,
-                attachments: uploadedAttachments,
             });
-            const response = await communityGet(
-                `/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`
-            );
-            setMessages(response?.data || []);
         } catch (err: any) {
             setError(err.message || 'Failed to send message.');
             setUploading(false);
@@ -1014,22 +1021,13 @@ const TenantCommunityScreen = () => {
                         URL.revokeObjectURL(blobUrl);
 
                         if (result?.success && result?.data && activeSubgridId && activeChannelId) {
-                            await communityPost(`/subgrids/${activeSubgridId}/messages`, {
+                            // Send voice message and update cache
+                            await sendChannelMessage.mutateAsync({
+                                content: '',
+                                mediaUrls: [result.data.url || result.data.secure_url],
+                                subgridId: activeSubgridId,
                                 channelId: activeChannelId,
-                                body: '',
-                                kind: 'audio',
-                                attachments: [{
-                                    type: 'audio',
-                                    value: result.data.url || result.data.secure_url,
-                                    label: 'Voice note',
-                                    mimeType: blob.type || 'audio/webm',
-                                    durationMs,
-                                }],
                             });
-                            const response = await communityGet(
-                                `/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`
-                            );
-                            setMessages(response?.data || []);
                         }
                     } catch (uploadErr: any) {
                         console.error('Failed to upload voice note:', uploadErr);
@@ -1050,23 +1048,21 @@ const TenantCommunityScreen = () => {
             return;
         }
 
-        // Native recording using expo-av
+        // Native recording using expo-audio
         try {
-            const permission = await Audio.requestPermissionsAsync();
+            const permission = await AudioModule.requestRecordingPermissionsAsync();
             if (!permission.granted) {
                 console.error('Microphone permission denied');
                 return;
             }
 
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+            await setAudioModeAsync({
+                allowsRecording: true,
+                playsInSilentMode: true,
             });
 
-            const { recording: newRecording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            expoRecordingRef.current = newRecording;
+            await audioRecorder.prepareToRecordAsync();
+            audioRecorder.record();
             setIsRecording(true);
             recordingInterval.current = setInterval(() => {
                 setRecordingDuration((prev) => prev + 1);
@@ -1090,11 +1086,11 @@ const TenantCommunityScreen = () => {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
-                const uri = expoRecordingRef.current.getURI();
+                await audioRecorder.stop();
+                const uri = audioRecorder.uri;
                 const durationMs = Date.now() - recordingStartRef.current;
 
                 if (uri && activeSubgridId && activeChannelId) {
@@ -1104,29 +1100,19 @@ const TenantCommunityScreen = () => {
                     );
 
                     if (result?.success && result?.data) {
-                        await communityPost(`/subgrids/${activeSubgridId}/messages`, {
+                        // Send voice message and update cache
+                        await sendChannelMessage.mutateAsync({
+                            content: '',
+                            mediaUrls: [result.data.url || result.data.secure_url],
+                            subgridId: activeSubgridId,
                             channelId: activeChannelId,
-                            body: '',
-                            kind: 'audio',
-                            attachments: [{
-                                type: 'audio',
-                                value: result.data.url || result.data.secure_url,
-                                label: 'Voice note',
-                                mimeType: 'audio/m4a',
-                                durationMs,
-                            }],
                         });
-                        const response = await communityGet(
-                            `/subgrids/${activeSubgridId}/messages?channelId=${activeChannelId}`
-                        );
-                        setMessages(response?.data || []);
                     }
                 }
             } catch (err: any) {
                 console.error('Failed to save recording:', err.message);
             } finally {
-                expoRecordingRef.current = null;
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                await setAudioModeAsync({ allowsRecording: false });
             }
         }
     };
@@ -1154,14 +1140,14 @@ const TenantCommunityScreen = () => {
             return;
         }
 
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
+                await audioRecorder.stop();
             } catch (err) {
                 // Ignore errors during cancel
             }
-            expoRecordingRef.current = null;
-            await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+            await setAudioModeAsync({ allowsRecording: false });
         }
     };
 
@@ -1181,10 +1167,10 @@ const TenantCommunityScreen = () => {
             audio.play();
             return;
         }
-        // Native playback using expo-av
+        // Native playback using expo-audio
         try {
-            const { sound } = await Audio.Sound.createAsync({ uri: source });
-            await sound.playAsync();
+            const player = createAudioPlayer(source);
+            player.play();
         } catch (err) {
             console.error('Failed to play audio:', err);
         }
@@ -1203,14 +1189,25 @@ const TenantCommunityScreen = () => {
         });
     }, [messages, posts]);
 
-    // Scroll to bottom when new messages arrive (WhatsApp-style)
+    // Scroll to bottom only on initial load of channel (WhatsApp-style)
+    const lastChannelIdRef = useRef<string | null>(null);
+    const initialScrollDoneRef = useRef<boolean>(false);
+
     useEffect(() => {
-        if (feedItems.length > 0 && feedScrollRef.current) {
-            setTimeout(() => {
-                feedScrollRef.current?.scrollToEnd({ animated: true });
-            }, 100);
+        // Reset scroll flag when channel changes
+        if (activeChannelId !== lastChannelIdRef.current) {
+            initialScrollDoneRef.current = false;
+            lastChannelIdRef.current = activeChannelId;
         }
-    }, [feedItems.length]);
+
+        // Only scroll once on initial load of channel content
+        if (feedItems.length > 0 && feedScrollRef.current && !initialScrollDoneRef.current) {
+            setTimeout(() => {
+                feedScrollRef.current?.scrollToEnd({ animated: false });
+                initialScrollDoneRef.current = true;
+            }, 150);
+        }
+    }, [feedItems.length, activeChannelId]);
 
     const openReportModal = (id: string, type: 'post' | 'message') => {
         setReportTarget({ id, type });
@@ -1289,11 +1286,17 @@ const TenantCommunityScreen = () => {
                     ? `/subgrids/${activeSubgridId}/posts/${deleteTarget.id}`
                     : `/subgrids/${activeSubgridId}/messages/${deleteTarget.id}`;
             await communityDelete(path);
-            // Update local state
+            // Update cache
             if (deleteTarget.type === 'post') {
-                setPosts((prev) => prev.filter((p) => p._id !== deleteTarget.id));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.filter((p) => p._id !== deleteTarget.id) : []
+                );
             } else {
-                setMessages((prev) => prev.filter((m) => m._id !== deleteTarget.id));
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, activeChannelId),
+                    (old: any[] | undefined) => old ? old.filter((m) => m._id !== deleteTarget.id) : []
+                );
             }
             setDeleteModalOpen(false);
             setDeleteTarget(null);
@@ -1330,22 +1333,24 @@ const TenantCommunityScreen = () => {
                 await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`, {});
             }
             console.log('[Like] API call successful');
-            // Update local state optimistically
+            // Update cache optimistically
             if (isPost) {
-                setPosts((prev) =>
-                    prev.map((p) =>
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map((p) =>
                         p._id === itemId
                             ? { ...p, userLiked: !isLiked, likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1) }
                             : p
-                    )
+                    ) : []
                 );
             } else {
-                setMessages((prev) =>
-                    prev.map((m) =>
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, activeChannelId),
+                    (old: any[] | undefined) => old ? old.map((m) =>
                         m._id === itemId
                             ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
                             : m
-                    )
+                    ) : []
                 );
             }
         } catch (err: any) {
@@ -1378,22 +1383,24 @@ const TenantCommunityScreen = () => {
                 await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`, {});
             }
             console.log('[Reshare] API call successful');
-            // Update local state optimistically
+            // Update cache optimistically
             if (isPost) {
-                setPosts((prev) =>
-                    prev.map((p) =>
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map((p) =>
                         p._id === itemId
                             ? { ...p, userReshared: !isReshared, reshareCount: (p.reshareCount || 0) + (isReshared ? -1 : 1) }
                             : p
-                    )
+                    ) : []
                 );
             } else {
-                setMessages((prev) =>
-                    prev.map((m) =>
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, activeChannelId),
+                    (old: any[] | undefined) => old ? old.map((m) =>
                         m._id === itemId
                             ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
                             : m
-                    )
+                    ) : []
                 );
             }
         } catch (err: any) {
@@ -1448,19 +1455,25 @@ const TenantCommunityScreen = () => {
             setComments(prev => [...prev, res.comment || res]);
             setCommentText('');
 
-            // Update local state for comment count
+            // Update cache for comment count
             if (commentTarget.isPost) {
-                setPosts(prev => prev.map(p =>
-                    p._id === commentTarget.id
-                        ? { ...p, commentCount: (p.commentCount || 0) + 1 }
-                        : p
-                ));
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map(p =>
+                        p._id === commentTarget.id
+                            ? { ...p, commentCount: (p.commentCount || 0) + 1 }
+                            : p
+                    ) : []
+                );
             } else {
-                setMessages(prev => prev.map(m =>
-                    m._id === commentTarget.id
-                        ? { ...m, commentCount: (m.commentCount || 0) + 1 }
-                        : m
-                ));
+                queryClient.setQueryData(
+                    queryKeys.messages.channel(activeSubgridId, activeChannelId),
+                    (old: any[] | undefined) => old ? old.map(m =>
+                        m._id === commentTarget.id
+                            ? { ...m, commentCount: (m.commentCount || 0) + 1 }
+                            : m
+                    ) : []
+                );
             }
         } catch (err: any) {
             console.error('[Comment] Error creating comment:', err);
@@ -1753,9 +1766,6 @@ const TenantCommunityScreen = () => {
                                 ref={feedScrollRef}
                                 contentContainerStyle={styles.feedList}
                                 showsVerticalScrollIndicator={false}
-                                onContentSizeChange={() => {
-                                    feedScrollRef.current?.scrollToEnd({ animated: false });
-                                }}
                             >
                                 {/* Channel Welcome Banner */}
                                 {activeChannel && (
@@ -2366,7 +2376,7 @@ const TenantCommunityScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset: number = 0) =>
     StyleSheet.create({
         safe: {
             flex: 1,
@@ -3015,6 +3025,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 8,
             paddingHorizontal: 12,
             paddingVertical: 8,
+            paddingBottom: bottomInset + 8,
         },
         composerIconBtn: {
             padding: 6,
@@ -3088,6 +3099,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             justifyContent: 'space-between',
             paddingHorizontal: 16,
             paddingVertical: 12,
+            paddingBottom: bottomInset + 12,
             backgroundColor: colors.surfaceMuted,
         },
         recordingIndicator: {

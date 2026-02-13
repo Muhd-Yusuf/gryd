@@ -1,61 +1,64 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import CreditUnionAdminScreen from '../../components/CreditUnionAdminScreen';
-import { getAuthUser, isAuthenticated, communityGet, resolveTenantId } from '../../lib/api';
+import { isAuthenticated, resolveTenantId, getTenantId } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
+import { useCurrentUser, useSubgrids, useMyRole } from '../../hooks/queries';
 
 export default function CreditUnionServerPage() {
     const router = useRouter();
     const { colors } = useTheme();
-    const [loading, setLoading] = useState(true);
-    const [hasAccess, setHasAccess] = useState(false);
+    const [tenantId, setTenantId] = useState(getTenantId());
+    const [isAuthChecked, setIsAuthChecked] = useState(false);
 
+    // React Query hooks
+    const userQuery = useCurrentUser();
+    const subgridsQuery = useSubgrids(tenantId);
+    const firstSubgridId = subgridsQuery.data?.[0]?._id || '';
+    const myRoleQuery = useMyRole(firstSubgridId);
+
+    // Check authentication on mount
     useEffect(() => {
-        const checkAccess = async () => {
+        const checkAuth = async () => {
             const authenticated = await isAuthenticated();
             if (!authenticated) {
                 router.replace('/login');
                 return;
             }
-
-            const user = await getAuthUser();
-
-            // Check user-level admin roles (super_admin, admin)
-            const isUserAdmin = user?.role === 'super_admin' || user?.role === 'admin';
-            if (isUserAdmin) {
-                setHasAccess(true);
-                setLoading(false);
-                return;
-            }
-
-            // Check subgrid membership role
-            try {
-                const tenantId = await resolveTenantId();
-                if (tenantId) {
-                    const subgridsRes = await communityGet(`/tenants/${tenantId}/subgrids`);
-                    const subgrids = subgridsRes?.data || [];
-                    if (subgrids.length > 0) {
-                        const subgridId = subgrids[0]._id;
-                        const roleRes = await communityGet(`/subgrids/${subgridId}/my-role`);
-                        const subgridRole = roleRes?.data?.role;
-                        // Allow subgrid_admin access to admin dashboard
-                        if (subgridRole === 'subgrid_admin' || subgridRole === 'owner') {
-                            setHasAccess(true);
-                            setLoading(false);
-                            return;
-                        }
-                    }
-                }
-            } catch (err) {
-                // Subgrid role check failed, fall through to denied
-            }
-
-            setHasAccess(false);
-            setLoading(false);
+            setIsAuthChecked(true);
         };
-        checkAccess();
+        checkAuth();
     }, []);
+
+    // Resolve tenant ID
+    useEffect(() => {
+        resolveTenantId()
+            .then((id) => id && setTenantId(id))
+            .catch(() => {});
+    }, []);
+
+    // Determine loading state
+    const loading = !isAuthChecked || userQuery.isLoading || (!!tenantId && subgridsQuery.isLoading) || (!!firstSubgridId && myRoleQuery.isLoading);
+
+    // Determine access
+    const hasAccess = useMemo(() => {
+        const user = userQuery.data;
+        if (!user) return false;
+
+        // Check user-level admin roles (super_admin, admin)
+        if (user.role === 'super_admin' || user.role === 'admin') {
+            return true;
+        }
+
+        // Check subgrid membership role
+        const subgridRole = myRoleQuery.data;
+        if (subgridRole === 'subgrid_admin' || subgridRole === 'owner') {
+            return true;
+        }
+
+        return false;
+    }, [userQuery.data, myRoleQuery.data]);
 
     if (loading) {
         return <View style={[styles.container, { backgroundColor: colors.appBg }]} />;

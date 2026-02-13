@@ -74,8 +74,7 @@ export const loadMessageQueue = async (): Promise<void> => {
             draftsCache = JSON.parse(draftsData);
         }
         queueLoaded = true;
-    } catch (err) {
-        console.warn('[MessageQueue] Failed to load queue:', err);
+    } catch {
         queueLoaded = true;
     }
 };
@@ -87,8 +86,8 @@ const saveQueue = (): void => {
     saveTimeout = setTimeout(async () => {
         try {
             await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(messageQueue));
-        } catch (err) {
-            console.warn('[MessageQueue] Failed to save queue:', err);
+        } catch {
+            // Silently fail - queue persistence is best-effort
         }
     }, 500);
 };
@@ -229,8 +228,8 @@ export const saveDraft = (peerId: string, text: string): void => {
     saveTimeout = setTimeout(async () => {
         try {
             await AsyncStorage.setItem(DRAFTS_KEY, JSON.stringify(draftsCache));
-        } catch (err) {
-            console.warn('[MessageQueue] Failed to save drafts:', err);
+        } catch {
+            // Silently fail - draft persistence is best-effort
         }
     }, 1000);
 };

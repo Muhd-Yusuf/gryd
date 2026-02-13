@@ -14,9 +14,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageCircle, Trophy, User, Sun, Moon, X, BadgeCheck, Mail, Calendar, Building2, ArrowLeft, UserPlus, MoreHorizontal } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, StakeholderBadge } from '../../lib/api';
+import { getTenantId, getUserId, StakeholderBadge } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../../components/UserAvatar';
+import { useSubgrids, useMembers, usePosts, useSubgridMessages, useTenantId, useCurrentUser } from '../../hooks/queries';
 
 // Badge colors for stakeholders
 const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
@@ -146,95 +147,46 @@ const TopContributorsScreen = () => {
     const router = useRouter();
     const params = useLocalSearchParams();
     const initialSubgridId = normalizeParam(params.subgridId);
-    const [tenantId, setTenantId] = useState(getTenantId());
     const [subgridId, setSubgridId] = useState(initialSubgridId);
-    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
-    const [members, setMembers] = useState<Member[]>([]);
-    const [posts, setPosts] = useState<Post[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [contributors, setContributors] = useState<ContributorData[]>([]);
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [activeRail, setActiveRail] = useState('contributors');
     const [selectedContributor, setSelectedContributor] = useState<ContributorData | null>(null);
     const [mobileShowProfile, setMobileShowProfile] = useState(false);
 
+    // React Query hooks
+    const tenantIdQuery = useTenantId();
+    const tenantId = tenantIdQuery.data || '';
+    const subgridsQuery = useSubgrids(tenantId);
+    const membersQuery = useMembers(subgridId);
+    const postsQuery = usePosts(subgridId);
+    const messagesQuery = useSubgridMessages(subgridId);
+
+    // Derived data from React Query
+    const subgrids: Subgrid[] = subgridsQuery.data || [];
+    const members: Member[] = membersQuery.data || [];
+    const posts: Post[] = postsQuery.data || [];
+    const messages: Message[] = messagesQuery.data || [];
+    const loading = membersQuery.isLoading || postsQuery.isLoading || messagesQuery.isLoading;
+
+    // Set default subgrid when subgrids load
     useEffect(() => {
-        let isActive = true;
-        resolveTenantId()
-            .then((id) => {
-                if (isActive) {
-                    setTenantId(id || '');
-                }
-            })
-            .catch((err) => {
-                if (isActive) {
-                    setError(err.message || 'Failed to resolve tenant.');
-                }
+        if (subgrids.length > 0) {
+            setSubgridId((current) => {
+                if (!current) return subgrids[0]._id;
+                return current;
             });
-        return () => {
-            isActive = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        const loadSubgrids = async () => {
-            if (!tenantId) return;
-            try {
-                const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const list = response?.data || [];
-                setSubgrids(list);
-                if (!subgridId && list.length > 0) {
-                    setSubgridId(list[0]._id);
-                }
-            } catch (err: any) {
-                setError(err.message || 'Failed to load subgrids.');
-            }
-        };
-
-        loadSubgrids();
-    }, [tenantId]);
+        }
+    }, [subgrids]);
 
     const activeSubgrid = useMemo(
         () => subgrids.find((s) => s._id === subgridId) || null,
         [subgrids, subgridId]
     );
 
-    useEffect(() => {
-        const loadData = async () => {
-            if (!subgridId) return;
-            setLoading(true);
-            setError('');
-            try {
-                const [membersRes, postsRes, messagesRes] = await Promise.allSettled([
-                    communityGet(`/subgrids/${subgridId}/members`),
-                    communityGet(`/subgrids/${subgridId}/posts`),
-                    communityGet(`/subgrids/${subgridId}/messages`),
-                ]);
-
-                const loadedMembers = membersRes.status === 'fulfilled' ? (membersRes.value?.data || []) : [];
-                const loadedPosts = postsRes.status === 'fulfilled' ? (postsRes.value?.data || []) : [];
-                const loadedMessages = messagesRes.status === 'fulfilled' ? (messagesRes.value?.data || []) : [];
-
-                setMembers(loadedMembers);
-                setPosts(loadedPosts);
-                setMessages(loadedMessages);
-            } catch (err: any) {
-                setMembers([]);
-                setError(err.message || 'Failed to load data.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        loadData();
-    }, [subgridId]);
-
     // Calculate contributor stats from real data
-    useEffect(() => {
+    const contributors = useMemo(() => {
         if (members.length === 0) {
-            setContributors([]);
-            return;
+            return [];
         }
 
         const contributorList: ContributorData[] = members.map((member) => {
@@ -265,7 +217,7 @@ const TopContributorsScreen = () => {
 
         // Sort by message count descending
         contributorList.sort((a, b) => b.messageCount - a.messageCount);
-        setContributors(contributorList);
+        return contributorList;
     }, [members, posts, messages]);
 
     const handleBack = () => {
@@ -299,7 +251,13 @@ const TopContributorsScreen = () => {
                 <View style={[styles.grid, isMobile && styles.gridMobile]}>
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
                         <View style={styles.leftRail}>
-                            <TouchableOpacity style={styles.railLogo} onPress={handleBack}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.railLogo,
+                                    activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }
+                                ]}
+                                onPress={handleBack}
+                            >
                                 {activeSubgrid ? (
                                     activeSubgrid.logoUrl ? (
                                         <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />

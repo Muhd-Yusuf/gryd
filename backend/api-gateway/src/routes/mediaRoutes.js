@@ -31,6 +31,7 @@ const allowedTypes = [
     'video/mp4', 'video/webm', 'video/quicktime',
     // Audio
     'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/aac',
+    'audio/m4a', 'audio/x-m4a', 'audio/mp4a-latm', 'audio/x-caf', // iOS/Expo audio formats
     // Documents
     'application/pdf',
     'application/msword',

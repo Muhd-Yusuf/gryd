@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
     StyleSheet,
     Text,
@@ -27,12 +27,7 @@ import {
 import { useRouter } from 'expo-router';
 import ResponsiveLayout from '../../components/ResponsiveLayout';
 import { useTheme } from '../../lib/theme';
-import {
-    getNotificationInbox,
-    markNotificationsAsRead,
-    deleteNotifications,
-    getUnreadNotificationCount,
-} from '../../lib/api';
+import { useNotifications, useMarkNotificationsRead, useDeleteNotifications } from '../../hooks/queries';
 
 interface NotificationItem {
     _id: string;
@@ -60,13 +55,6 @@ const NotificationsScreen = () => {
     const { width } = useWindowDimensions();
     const isCompact = width < 768;
 
-    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-    const [unreadCount, setUnreadCount] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [hasMore, setHasMore] = useState(false);
-    const [offset, setOffset] = useState(0);
-
     const TABS = ['All', 'Messages', 'Mentions', 'Calls', 'System'];
 
     const getTypeFilter = (tab: string): string | undefined => {
@@ -79,57 +67,25 @@ const NotificationsScreen = () => {
         }
     };
 
-    const loadNotifications = useCallback(async (refresh = false) => {
-        try {
-            if (refresh) {
-                setRefreshing(true);
-                setOffset(0);
-            } else if (!refresh && !loading) {
-                setLoading(true);
-            }
+    // React Query hooks
+    const typeFilter = getTypeFilter(activeTab);
+    const notificationsQuery = useNotifications({ limit: 30, type: typeFilter });
+    const markReadMutation = useMarkNotificationsRead();
+    const deleteMutation = useDeleteNotifications();
 
-            const typeFilter = getTypeFilter(activeTab);
-            const currentOffset = refresh ? 0 : offset;
-
-            const res = await getNotificationInbox({
-                limit: 30,
-                offset: currentOffset,
-                type: typeFilter,
-            });
-
-            if (res.success && res.data) {
-                if (refresh || currentOffset === 0) {
-                    setNotifications(res.data.notifications);
-                } else {
-                    setNotifications(prev => [...prev, ...res.data.notifications]);
-                }
-                setUnreadCount(res.data.unreadCount);
-                setHasMore(res.data.hasMore);
-                setOffset(currentOffset + res.data.notifications.length);
-            }
-        } catch (err) {
-            console.error('Failed to load notifications:', err);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, [activeTab, offset]);
-
-    useEffect(() => {
-        setOffset(0);
-        setLoading(true);
-        loadNotifications(true);
-    }, [activeTab]);
+    // Derived state from React Query
+    const notifications: NotificationItem[] = notificationsQuery.data?.notifications || [];
+    const unreadCount = notificationsQuery.data?.unreadCount || 0;
+    const loading = notificationsQuery.isLoading;
+    const refreshing = notificationsQuery.isFetching && !notificationsQuery.isLoading;
 
     const handleRefresh = () => {
-        loadNotifications(true);
+        notificationsQuery.refetch();
     };
 
     const handleMarkAllRead = async () => {
         try {
-            await markNotificationsAsRead(undefined, true);
-            setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-            setUnreadCount(0);
+            await markReadMutation.mutateAsync({ markAll: true });
         } catch (err) {
             console.error('Failed to mark all as read:', err);
         }
@@ -137,11 +93,7 @@ const NotificationsScreen = () => {
 
     const handleMarkAsRead = async (notificationId: string) => {
         try {
-            await markNotificationsAsRead([notificationId]);
-            setNotifications(prev =>
-                prev.map(n => n._id === notificationId ? { ...n, read: true } : n)
-            );
-            setUnreadCount(prev => Math.max(0, prev - 1));
+            await markReadMutation.mutateAsync({ notificationIds: [notificationId] });
         } catch (err) {
             console.error('Failed to mark as read:', err);
         }
@@ -149,8 +101,7 @@ const NotificationsScreen = () => {
 
     const handleDeleteNotification = async (notificationId: string) => {
         try {
-            await deleteNotifications([notificationId]);
-            setNotifications(prev => prev.filter(n => n._id !== notificationId));
+            await deleteMutation.mutateAsync([notificationId]);
         } catch (err) {
             console.error('Failed to delete notification:', err);
         }
@@ -314,12 +265,12 @@ const NotificationsScreen = () => {
                         })
                     )}
 
-                    {hasMore && !loading && (
+                    {notificationsQuery.data?.hasMore && !loading && (
                         <TouchableOpacity
                             style={styles.loadMoreBtn}
-                            onPress={() => loadNotifications(false)}
+                            onPress={() => notificationsQuery.refetch()}
                         >
-                            <Text style={styles.loadMoreText}>Load more</Text>
+                            <Text style={styles.loadMoreText}>Refresh</Text>
                         </TouchableOpacity>
                     )}
                 </ScrollView>

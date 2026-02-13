@@ -9,6 +9,7 @@ import {
     Platform,
     useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
     AlertCircle,
@@ -30,11 +31,11 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import {
-    communityGet,
     getUserId,
     resolveTenantId,
     StakeholderBadge,
 } from '../lib/api';
+import { useSubgrids, useMembers, usePosts, useSubgridMessages } from '../hooks/queries';
 
 // Badge colors for stakeholders
 const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
@@ -101,43 +102,50 @@ export default function TopContributorsScreen() {
     const router = useRouter();
     const { width } = useWindowDimensions();
     const isMobile = width < 900;
+    const insets = useSafeAreaInsets();
+    // Calculate safe area values for mobile
+    const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
+    const topInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.top, 20) : 0;
     const [mobileShowContent, setMobileShowContent] = useState(false);
 
-    const [subgrids, setSubgrids] = useState<Subgrid[]>([]);
+    const [tenantId, setTenantId] = useState<string>('');
     const [activeSubgridId, setActiveSubgridId] = useState<string | null>(null);
-    const [members, setMembers] = useState<Member[]>([]);
-    const [posts, setPosts] = useState<Post[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [contributors, setContributors] = useState<ContributorStats[]>([]);
     const [selectedContributor, setSelectedContributor] = useState<ContributorStats | null>(null);
     const [currentUserId, setCurrentUserId] = useState<string>('');
     const [error, setError] = useState<string>('');
+
+    // React Query hooks
+    const subgridsQuery = useSubgrids(tenantId);
+    const membersQuery = useMembers(activeSubgridId || '');
+    const postsQuery = usePosts(activeSubgridId || '');
+    const messagesQuery = useSubgridMessages(activeSubgridId || '');
+
+    // Derived data from queries
+    const subgrids: Subgrid[] = subgridsQuery.data || [];
+    const members: Member[] = Array.isArray(membersQuery.data) ? membersQuery.data : [];
+    const posts: Post[] = Array.isArray(postsQuery.data) ? postsQuery.data : [];
+    const messages: Message[] = Array.isArray(messagesQuery.data) ? messagesQuery.data : [];
 
     const activeSubgrid = useMemo(
         () => subgrids.find((s) => s._id === activeSubgridId) || null,
         [subgrids, activeSubgridId]
     );
 
-    // Load initial data
+    // Load initial tenant/user data
     useEffect(() => {
         const loadData = async () => {
             setError('');
             try {
-                const tenantId = await resolveTenantId();
+                const resolvedTenantId = await resolveTenantId();
                 const userId = getUserId();
                 setCurrentUserId(userId);
 
-                if (!tenantId) {
+                if (!resolvedTenantId) {
                     setError('No community found. Please join a community first.');
                     return;
                 }
 
-                const subgridsRes = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const subgridsList = subgridsRes?.data || [];
-                setSubgrids(subgridsList);
-                if (subgridsList.length > 0) {
-                    setActiveSubgridId(subgridsList[0]._id);
-                }
+                setTenantId(resolvedTenantId);
             } catch (err: any) {
                 console.error('[TopContributors] Failed to load data:', err);
                 setError(err.message || 'Failed to load data');
@@ -146,33 +154,19 @@ export default function TopContributorsScreen() {
         loadData();
     }, []);
 
-    // Load members, posts, and messages
+    // Set active subgrid when subgrids load
     useEffect(() => {
-        if (!activeSubgridId) return;
+        if (subgrids.length > 0) {
+            setActiveSubgridId((current) => {
+                if (!current) return subgrids[0]._id;
+                return current;
+            });
+        }
+    }, [subgrids]);
 
-        Promise.allSettled([
-            communityGet(`/subgrids/${activeSubgridId}/members`),
-            communityGet(`/subgrids/${activeSubgridId}/posts`),
-            communityGet(`/subgrids/${activeSubgridId}/messages`),
-        ]).then(([membersRes, postsRes, messagesRes]) => {
-            if (membersRes.status === 'fulfilled') {
-                const rawMembers = membersRes.value?.data;
-                setMembers(Array.isArray(rawMembers) ? rawMembers : []);
-            }
-            if (postsRes.status === 'fulfilled') {
-                const rawPosts = postsRes.value?.data;
-                setPosts(Array.isArray(rawPosts) ? rawPosts : []);
-            }
-            if (messagesRes.status === 'fulfilled') {
-                const rawMessages = messagesRes.value?.data;
-                setMessages(Array.isArray(rawMessages) ? rawMessages : []);
-            }
-        });
-    }, [activeSubgridId]);
-
-    // Calculate contributor stats
-    useEffect(() => {
-        if (members.length === 0) return;
+    // Calculate contributor stats from React Query data
+    const contributors = useMemo(() => {
+        if (members.length === 0) return [];
 
         const stats: ContributorStats[] = members.map((member) => {
             const userId = member.user?._id || member.userId;
@@ -188,12 +182,18 @@ export default function TopContributorsScreen() {
 
         // Sort by message count
         stats.sort((a, b) => b.messageCount - a.messageCount);
-
-        setContributors(stats);
-        if (stats.length > 0 && !selectedContributor) {
-            setSelectedContributor(stats[0]);
-        }
+        return stats;
     }, [members, posts, messages]);
+
+    // Auto-select first contributor
+    useEffect(() => {
+        if (contributors.length > 0) {
+            setSelectedContributor((current) => {
+                if (!current) return contributors[0];
+                return current;
+            });
+        }
+    }, [contributors]);
 
     const getMemberName = (member: Member) => {
         const user = member.user;
@@ -567,7 +567,7 @@ export default function TopContributorsScreen() {
             gap: 8,
             paddingHorizontal: 8,
             paddingTop: 8,
-            paddingBottom: Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 24 : 8,
+            paddingBottom: bottomInset + 8,
             borderTopWidth: 1,
             borderTopColor: colors.border,
             backgroundColor: colors.surface,
@@ -655,7 +655,7 @@ export default function TopContributorsScreen() {
         mobileTopBar: {
             flexDirection: 'column',
             paddingHorizontal: 16,
-            paddingTop: Platform.OS === 'ios' ? 60 : Platform.OS === 'android' ? 50 : 20,
+            paddingTop: topInset + 12,
             paddingBottom: 12,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
@@ -781,7 +781,7 @@ export default function TopContributorsScreen() {
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 16,
-            paddingTop: Platform.OS === 'ios' ? 60 : Platform.OS === 'android' ? 50 : 20,
+            paddingTop: topInset + 12,
             paddingBottom: 12,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
@@ -893,7 +893,10 @@ export default function TopContributorsScreen() {
                                 {activeSubgrid?.logoUrl ? (
                                     <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
                                 ) : (
-                                    <View style={styles.mobileTopBarLogoPlaceholder}>
+                                    <View style={[
+                                        styles.mobileTopBarLogoPlaceholder,
+                                        activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }
+                                    ]}>
                                         <Text style={styles.mobileTopBarLogoText}>
                                             {(activeSubgrid?.name || 'SV').substring(0, 2).toUpperCase()}
                                         </Text>

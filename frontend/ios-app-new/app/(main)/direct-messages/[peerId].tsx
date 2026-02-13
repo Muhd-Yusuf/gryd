@@ -12,8 +12,10 @@ import {
     Platform,
     Animated,
     Alert,
+    KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { ArrowLeft, Phone, Video, Search, Trash2, File, Copy, Send, Smile, Paperclip, X, Mic, PhoneIncoming, PhoneOutgoing, PhoneMissed, ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
@@ -31,18 +33,27 @@ import {
 } from '../../../lib/api';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { useTheme } from '../../../lib/theme';
 import { Attachment, EMOJI_SET, STICKER_SET, formatDuration, twemojiUrl } from '../../../lib/chatMedia';
 import { getCachedUser, cacheUser, getCachedMessages, cacheMessages, addMessageToCache, removeMessageFromCache, getCachedSubgrids, cacheSubgrids, getCachedFriends, cacheFriends } from '../../../lib/userCache';
 import { createOptimisticMessage, markMessageSent, markMessageFailed, isTempId, saveDraft, getDraft, clearDraft } from '../../../lib/messageQueue';
-import { useAgoraCall } from '../../../hooks';
+import { useAgoraCall, useScrollToBottom } from '../../../hooks';
 import { useCallContext } from '../../../contexts/CallContext';
 import { CallModalDefault as CallModal } from '../../../components';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 import { MessageBubble, MessageComposer } from '../../../components/messaging';
 import { useWebSocketContext } from '../../../contexts/WebSocketContext';
+import {
+    useSubgrids,
+    useMembers,
+    useChannels,
+    useFriends,
+    useDirectMessages,
+    useCurrentUser,
+    useUserProfile,
+} from '../../../hooks/queries';
 
 type Subgrid = {
     _id: string;
@@ -251,23 +262,20 @@ const groupMessagesByDate = (messages: Message[]) => {
 
 const DirectMessageChatScreen = () => {
     const { colors } = useTheme();
-    const styles = useMemo(() => createStyles(colors), [colors]);
     const router = useRouter();
     const navigation = useNavigation();
+    const insets = useSafeAreaInsets();
+    // Calculate safe area values for mobile
+    const bottomInset = Platform.OS !== 'web' ? Math.max(insets.bottom, 12) : 0;
+    const styles = useMemo(() => createStyles(colors, bottomInset), [colors, bottomInset]);
 
     const params = useLocalSearchParams();
     const peerId = normalizeParam(params.peerId);
     const initialSubgridId = normalizeParam(params.subgridId);
-    const [currentUserId, setCurrentUserId] = useState(getUserId());
     const [tenantId, setTenantId] = useState(getTenantId());
-    const [subgrids, setSubgrids] = useState<Subgrid[]>(() => {
-        const tid = getTenantId();
-        return tid ? (getCachedSubgrids(tid) || []) : [];
-    });
     const [subgridId, setSubgridId] = useState(initialSubgridId);
-    const [members, setMembers] = useState<Member[]>([]);
-    const [channels, setChannels] = useState<Channel[]>([]);
-    const [messages, setMessages] = useState<Message[]>(() => {
+    // Local state for WebSocket real-time messages
+    const [localMessages, setLocalMessages] = useState<Message[]>(() => {
         return peerId ? (getCachedMessages(peerId) as Message[] || []) : [];
     });
     const [draft, setDraft] = useState(() => peerId ? getDraft(peerId) : '');
@@ -283,7 +291,6 @@ const DirectMessageChatScreen = () => {
     const [friendAvatar, setFriendAvatar] = useState<string | undefined>(undefined);
     const [friendStakeholderBadge, setFriendStakeholderBadge] = useState<StakeholderBadge | null>(null);
     const [friendCompany, setFriendCompany] = useState<string | null>(null);
-    const [currentUserAvatar, setCurrentUserAvatar] = useState<string | undefined>(undefined);
     const [isFriend, setIsFriend] = useState(true);
     const [isBlocked, setIsBlocked] = useState(false);
     const [showContributors, setShowContributors] = useState(false);
@@ -294,9 +301,70 @@ const DirectMessageChatScreen = () => {
     const recordingStartRef = useRef<number>(0);
     const activeStreamRef = useRef<any | null>(null);
     const recordingTimerRef = useRef<any>(null);
-    const expoRecordingRef = useRef<Audio.Recording | null>(null);
     const waveformAnim = useRef(new Animated.Value(0)).current;
-    const scrollViewRef = useRef<ScrollView>(null);
+
+    // Centralized scroll management
+    const {
+        scrollViewRef,
+        keyboardAwareRef,
+        scrollToBottom,
+        handleContentSizeChange,
+        handleScrollViewLayout,
+        resetScrollState,
+        markForInitialScroll,
+    } = useScrollToBottom();
+
+    // expo-audio recorder hook (for native platforms)
+    const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+
+    // React Query hooks
+    const currentUserQuery = useCurrentUser();
+    const userProfileQuery = useUserProfile(); // Fresh user data from server
+    const subgridsQuery = useSubgrids(tenantId);
+    const membersQuery = useMembers(subgridId);
+    const channelsQuery = useChannels(subgridId);
+    const friendsQuery = useFriends(subgridId);
+    const directMessagesQuery = useDirectMessages(subgridId, peerId);
+
+    // Get user ID from multiple sources, preferring fresh server data
+    const storedUserId = currentUserQuery.data?.userId || getUserId();
+    const serverUserId = userProfileQuery.data?._id || userProfileQuery.data?.id;
+    const currentUserAvatar = currentUserQuery.data?.avatarUrl || userProfileQuery.data?.avatarUrl || undefined;
+
+    // Derive actual current user ID from messages if other sources seem wrong
+    // In a DM, there are only 2 participants. If a message's senderId is not the peerId,
+    // then that senderId must be the current user
+    const derivedUserId = useMemo(() => {
+        const queryMessages = directMessagesQuery.data || [];
+        const allMessages = [...queryMessages, ...localMessages];
+        for (const msg of allMessages) {
+            if (msg.senderId && String(msg.senderId) !== String(peerId)) {
+                return String(msg.senderId);
+            }
+            if (msg.recipientId && String(msg.recipientId) !== String(peerId)) {
+                return String(msg.recipientId);
+            }
+        }
+        return null;
+    }, [directMessagesQuery.data, localMessages, peerId]);
+
+    // Priority: derived from messages > server profile > stored cache
+    const currentUserId = derivedUserId || serverUserId || storedUserId;
+    const subgrids: Subgrid[] = subgridsQuery.data || [];
+    const members: Member[] = membersQuery.data || [];
+    const channels: Channel[] = channelsQuery.data || [];
+
+    // Merge React Query messages with local WebSocket updates
+    const messages = useMemo(() => {
+        const queryMessages = directMessagesQuery.data || [];
+        const mergedMessages = [...queryMessages];
+        localMessages.forEach(localMsg => {
+            if (!mergedMessages.some(m => m._id === localMsg._id)) {
+                mergedMessages.push(localMsg);
+            }
+        });
+        return mergedMessages;
+    }, [directMessagesQuery.data, localMessages]);
 
     // Get call context for managing calls
     const { incomingCall, clearIncomingCall, startActiveCall, markCallConnected, endCall: contextEndCall } = useCallContext();
@@ -372,54 +440,33 @@ const DirectMessageChatScreen = () => {
         }
     }, [agoraCall.callState, agoraCall.currentCall?.callId, markCallConnected]);
 
-    // Initialize user data in parallel for faster startup
+    // Initialize tenant ID on mount
     useEffect(() => {
         let isActive = true;
-
-        // Run all initialization calls in parallel
-        Promise.all([
-            resolveTenantId(),
-            resolveUserId(),
-            getAuthUser(),
-        ]).then(([tid, uid, user]) => {
-            if (!isActive) return;
-            if (tid) setTenantId(tid);
-            if (uid) setCurrentUserId(uid);
-            if (user?.avatarUrl) setCurrentUserAvatar(user.avatarUrl);
-        }).catch(() => {});
-
+        resolveTenantId()
+            .then((tid) => {
+                if (isActive && tid) setTenantId(tid);
+            })
+            .catch(() => {});
         return () => { isActive = false; };
     }, []);
 
+    // Auto-select first subgrid if none selected
     useEffect(() => {
-        const loadSubgrids = async () => {
-            if (!tenantId) return;
+        if (subgrids.length > 0) {
+            setSubgridId((current) => {
+                if (!current) return subgrids[0]._id;
+                return current;
+            });
+        }
+    }, [subgrids]);
 
-            // Use cached subgrids first for instant display
-            const cached = getCachedSubgrids(tenantId);
-            if (cached && cached.length > 0 && !subgridId) {
-                setSubgrids(cached);
-                setSubgridId(cached[0]._id);
-            }
-
-            // Skip API call if we already have subgridId set
-            if (subgridId) return;
-
-            try {
-                const response = await communityGet(`/tenants/${tenantId}/subgrids`);
-                const list = response?.data || [];
-                setSubgrids(list);
-                cacheSubgrids(tenantId, list);
-                if (!subgridId && list.length > 0) setSubgridId(list[0]._id);
-            } catch (err: any) {
-                // Keep cached data on error
-                if (!cached || cached.length === 0) {
-                    setError(err.message || 'Failed to load subgrids.');
-                }
-            }
-        };
-        loadSubgrids();
-    }, [tenantId, subgridId]);
+    // Cache subgrids when loaded
+    useEffect(() => {
+        if (tenantId && subgridsQuery.data) {
+            cacheSubgrids(tenantId, subgridsQuery.data);
+        }
+    }, [tenantId, subgridsQuery.data]);
 
     const refreshRelationship = async (activeSubgridId: string) => {
         if (!peerId) return;
@@ -471,51 +518,48 @@ const DirectMessageChatScreen = () => {
 
     useEffect(() => { if (subgridId) refreshRelationship(subgridId); }, [subgridId, peerId]);
 
+    // Cache messages when React Query data changes and sync to local state
     useEffect(() => {
-        if (!subgridId) return;
-        Promise.allSettled([
-            communityGet(`/subgrids/${subgridId}/members`),
-            communityGet(`/subgrids/${subgridId}/channels`),
-        ]).then(([membersRes, channelsRes]) => {
-            if (membersRes.status === 'fulfilled') {
-                const rawMembers = membersRes.value?.data;
-                setMembers(Array.isArray(rawMembers) ? rawMembers : []);
-            }
-            if (channelsRes.status === 'fulfilled') {
-                const rawChannels = channelsRes.value?.data;
-                setChannels(Array.isArray(rawChannels) ? rawChannels : []);
-            }
-        });
-    }, [subgridId]);
-
-    useEffect(() => {
-        const loadMessages = async () => {
-            if (!subgridId || !peerId) return;
-            setError('');
-
-            // Load from cache first for instant display
-            const cached = getCachedMessages(peerId);
-            if (cached && cached.length > 0) {
-                setMessages(cached as Message[]);
-            }
-
-            // Then fetch fresh data in background
-            try {
-                const response = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${peerId}`);
-                const msgs = response?.data || [];
-                setMessages(msgs);
-                // Update cache with fresh data
-                cacheMessages(peerId, msgs);
-            } catch (err: any) {
-                // Keep cached messages on error, only clear if no cache
-                if (!cached || cached.length === 0) {
-                    setMessages([]);
+        if (peerId && directMessagesQuery.data && directMessagesQuery.data.length > 0) {
+            cacheMessages(peerId, directMessagesQuery.data);
+            // Also sync to localMessages to ensure all server messages are included
+            setLocalMessages(prev => {
+                const existingIds = new Set(prev.map(m => m._id));
+                const newMessages = directMessagesQuery.data.filter((m: Message) => !existingIds.has(m._id));
+                if (newMessages.length > 0) {
+                    return [...prev, ...newMessages];
                 }
-                setError(err.message || 'Failed to load direct messages.');
+                return prev;
+            });
+        }
+    }, [peerId, directMessagesQuery.data]);
+
+    // Also cache merged messages (includes WebSocket updates) when they change
+    useEffect(() => {
+        if (peerId && messages.length > 0) {
+            // Filter out temp messages before caching
+            const realMessages = messages.filter(m => !isTempId(m._id));
+            if (realMessages.length > 0) {
+                cacheMessages(peerId, realMessages);
             }
-        };
-        loadMessages();
-    }, [subgridId, peerId]);
+        }
+    }, [peerId, messages]);
+
+    // Scroll to bottom on initial load (once when messages are first loaded)
+    const lastPeerIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        // Reset scroll state when peer changes
+        if (peerId !== lastPeerIdRef.current) {
+            resetScrollState();
+            lastPeerIdRef.current = peerId;
+        }
+
+        // Mark for initial scroll when messages load
+        if (localMessages.length > 0) {
+            markForInitialScroll();
+        }
+    }, [localMessages.length, peerId, resetScrollState, markForInitialScroll]);
 
     // Use refs to avoid stale closures in WebSocket handlers
     const currentUserIdRef = useRef(currentUserId);
@@ -525,24 +569,37 @@ const DirectMessageChatScreen = () => {
 
     // WebSocket subscription for real-time DM updates
     useEffect(() => {
-        console.log('[DM Chat] WebSocket effect - isConnected:', isConnected, 'currentUserId:', currentUserId, 'peerId:', peerId);
+        console.log('[DM Chat] WebSocket effect - isConnected:', isConnected, 'currentUserId:', currentUserId, 'peerId:', peerId, 'derivedUserId:', derivedUserId, 'storedUserId:', storedUserId);
 
-        if (!isConnected || !currentUserId || !peerId) {
-            console.log('[DM Chat] Skipping WebSocket subscription - missing:', { isConnected, currentUserId: !!currentUserId, peerId: !!peerId });
+        if (!isConnected || !peerId) {
+            console.log('[DM Chat] Skipping WebSocket subscription - missing:', { isConnected, peerId: !!peerId });
             return;
         }
 
-        // Create consistent DM room ID (sorted user IDs)
-        const sortedIds = [String(currentUserId), String(peerId)].sort();
-        const dmRoomId = `${sortedIds[0]}_${sortedIds[1]}`;
+        // Wait for derivedUserId if storedUserId seems wrong (doesn't match any message sender/recipient)
+        // This ensures we join the correct room
+        const effectiveUserId = derivedUserId || serverUserId || storedUserId;
+        if (!effectiveUserId) {
+            console.log('[DM Chat] Skipping WebSocket subscription - no valid user ID yet');
+            return;
+        }
 
-        console.log('[DM Chat] Joining DM room:', dmRoomId);
+        // Create consistent DM room ID (sorted user IDs alphabetically for consistency with backend)
+        const userIdStr = String(effectiveUserId);
+        const peerIdStr = String(peerId);
+        const dmRoomId = userIdStr < peerIdStr
+            ? `${userIdStr}_${peerIdStr}`
+            : `${peerIdStr}_${userIdStr}`;
+
+        console.log('[DM Chat] Joining DM room:', dmRoomId, '(effectiveUserId:', userIdStr, 'peerId:', peerIdStr, ')');
         joinRoom('dm', dmRoomId);
 
         // Subscribe to new messages
         const unsubNewMessage = subscribe('new_message', (data: any) => {
-            console.log('[DM Chat] new_message event received:', data?.roomType, data?.roomId);
-            if (data.roomType === 'dm' && data.message) {
+            console.log('[DM Chat] new_message event received:', JSON.stringify(data, null, 2));
+
+            // Accept DM messages regardless of roomType (some servers might not send it)
+            if (data.message) {
                 const msgSenderId = String(data.message?.senderId || '');
                 const msgRecipientId = String(data.message?.recipientId || '');
                 const myUserId = String(currentUserIdRef.current || '');
@@ -553,22 +610,39 @@ const DirectMessageChatScreen = () => {
                 // Check if this message belongs to this conversation
                 const isForThisConversation =
                     (msgSenderId === myUserId && msgRecipientId === friendId) ||
-                    (msgSenderId === friendId && msgRecipientId === myUserId);
+                    (msgSenderId === friendId && msgRecipientId === myUserId) ||
+                    // Fallback: check if roomId matches our DM room
+                    (data.roomType === 'dm' && String(data.roomId) === dmRoomId);
+
+                console.log('[DM Chat] isForThisConversation:', isForThisConversation);
 
                 if (isForThisConversation) {
-                    setMessages((prev) => {
-                        // Avoid duplicates
+                    setLocalMessages((prev) => {
+                        // Check if this is replacing a temp message (optimistic update)
+                        // by checking if we have a temp message with same senderId and similar timestamp
+                        const hasTempMessage = prev.some((m) =>
+                            isTempId(m._id) &&
+                            m.senderId === data.message.senderId &&
+                            m.body === data.message.body
+                        );
+
+                        // If this is a WebSocket echo of our own sent message and we have the temp version, skip
+                        if (hasTempMessage && String(data.message.senderId) === String(currentUserIdRef.current)) {
+                            console.log('[DM Chat] WebSocket echo of our optimistic message, skipping');
+                            return prev;
+                        }
+
+                        // Avoid duplicates by real ID
                         if (prev.some((m) => m._id === data.message._id)) {
                             console.log('[DM Chat] Duplicate message, skipping');
                             return prev;
                         }
                         console.log('[DM Chat] Adding new message to state');
                         // Also update cache
-                        const newMessages = [...prev, data.message];
-                        cacheMessages(friendId, newMessages);
-                        return newMessages;
+                        addMessageToCache(friendId, data.message);
+                        return [...prev, data.message];
                     });
-                    // Scroll to bottom for new messages
+                    // Scroll to bottom when receiving new message
                     setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
                     }, 100);
@@ -579,7 +653,8 @@ const DirectMessageChatScreen = () => {
         // Subscribe to message deletions
         const unsubMessageDeleted = subscribe('message_deleted', (data: any) => {
             if (data.roomType === 'dm' && data.messageId) {
-                setMessages((prev) => prev.filter((m) => m._id !== data.messageId));
+                setLocalMessages((prev) => prev.filter((m) => m._id !== data.messageId));
+                removeMessageFromCache(peerId, data.messageId);
             }
         });
 
@@ -589,7 +664,7 @@ const DirectMessageChatScreen = () => {
             unsubNewMessage();
             unsubMessageDeleted();
         };
-    }, [isConnected, currentUserId, peerId, joinRoom, leaveRoom, subscribe]);
+    }, [isConnected, derivedUserId, serverUserId, storedUserId, peerId, joinRoom, leaveRoom, subscribe]);
 
     const handleSend = async () => {
         if ((!draft.trim() && pendingAttachments.length === 0) || !subgridId || !peerId || !currentUserId) return;
@@ -615,12 +690,10 @@ const DirectMessageChatScreen = () => {
         );
 
         // Add to UI immediately (optimistic update)
-        setMessages((prev) => [...prev, tempMessage as Message]);
+        setLocalMessages((prev) => [...prev, tempMessage as Message]);
 
-        // Scroll to bottom immediately
-        setTimeout(() => {
-            scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 50);
+        // Scroll to bottom after sending - use setTimeout to ensure state update is processed
+        setTimeout(() => scrollToBottom(true), 100);
 
         // Upload attachments in parallel (background)
         const uploadedAttachments: Attachment[] = [];
@@ -657,18 +730,28 @@ const DirectMessageChatScreen = () => {
             // Replace temp message with real message
             if (sendResult?.data) {
                 markMessageSent(tempMessage._id, sendResult.data);
-                setMessages((prev) => {
-                    // Remove temp message and add real one (avoid duplicates from WebSocket)
-                    const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
-                    const newMessages = [...filtered, sendResult.data];
-                    cacheMessages(peerId, newMessages.filter(m => !isTempId(m._id)));
-                    return newMessages;
+                setLocalMessages((prev) => {
+                    // Check if WebSocket already added this message (by real ID)
+                    const alreadyHasRealMessage = prev.some((m) => m._id === sendResult.data._id);
+
+                    if (alreadyHasRealMessage) {
+                        // Just remove the temp message, WebSocket already added the real one
+                        const filtered = prev.filter((m) => m._id !== tempMessage._id);
+                        cacheMessages(peerId, filtered.filter(m => !isTempId(m._id)));
+                        return filtered;
+                    } else {
+                        // Replace temp message with real one
+                        const filtered = prev.filter((m) => m._id !== tempMessage._id);
+                        const newMessages = [...filtered, sendResult.data];
+                        cacheMessages(peerId, newMessages.filter(m => !isTempId(m._id)));
+                        return newMessages;
+                    }
                 });
             }
         } catch (err: any) {
             // Mark message as failed but keep it visible with error state
             markMessageFailed(tempMessage._id, err.message);
-            setMessages((prev) =>
+            setLocalMessages((prev) =>
                 prev.map((m) =>
                     m._id === tempMessage._id
                         ? { ...m, _status: 'failed', _error: err.message } as any
@@ -752,10 +835,9 @@ const DirectMessageChatScreen = () => {
         );
 
         // Add to UI immediately
-        setMessages((prev) => [...prev, tempMessage as Message]);
-        setTimeout(() => {
-            scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 50);
+        setLocalMessages((prev) => [...prev, tempMessage as Message]);
+        // Scroll to bottom after sending
+        setTimeout(() => scrollToBottom(true), 100);
 
         try {
             const sendResult = await communityPost(`/subgrids/${subgridId}/direct-messages`, {
@@ -768,16 +850,27 @@ const DirectMessageChatScreen = () => {
             // Replace temp with real message
             if (sendResult?.data) {
                 markMessageSent(tempMessage._id, sendResult.data);
-                setMessages((prev) => {
-                    const filtered = prev.filter((m) => m._id !== tempMessage._id && m._id !== sendResult.data._id);
-                    const newMessages = [...filtered, sendResult.data];
-                    cacheMessages(peerId, newMessages.filter(m => !isTempId(m._id)));
-                    return newMessages;
+                setLocalMessages((prev) => {
+                    // Check if WebSocket already added this message (by real ID)
+                    const alreadyHasRealMessage = prev.some((m) => m._id === sendResult.data._id);
+
+                    if (alreadyHasRealMessage) {
+                        // Just remove the temp message, WebSocket already added the real one
+                        const filtered = prev.filter((m) => m._id !== tempMessage._id);
+                        cacheMessages(peerId, filtered.filter(m => !isTempId(m._id)));
+                        return filtered;
+                    } else {
+                        // Replace temp message with real one
+                        const filtered = prev.filter((m) => m._id !== tempMessage._id);
+                        const newMessages = [...filtered, sendResult.data];
+                        cacheMessages(peerId, newMessages.filter(m => !isTempId(m._id)));
+                        return newMessages;
+                    }
                 });
             }
         } catch (err: any) {
             markMessageFailed(tempMessage._id, err.message);
-            setMessages((prev) =>
+            setLocalMessages((prev) =>
                 prev.map((m) =>
                     m._id === tempMessage._id
                         ? { ...m, _status: 'failed', _error: err.message } as any
@@ -864,26 +957,24 @@ const DirectMessageChatScreen = () => {
             return;
         }
 
-        // Native recording using expo-av
+        // Native recording using expo-audio
         try {
             // Request permissions
-            const permission = await Audio.requestPermissionsAsync();
+            const permission = await AudioModule.requestRecordingPermissionsAsync();
             if (!permission.granted) {
                 setRecordingError('Microphone permission denied');
                 return;
             }
 
             // Configure audio mode
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+            await setAudioModeAsync({
+                allowsRecording: true,
+                playsInSilentMode: true,
             });
 
             // Start recording
-            const { recording: newRecording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            expoRecordingRef.current = newRecording;
+            await audioRecorder.prepareToRecordAsync();
+            audioRecorder.record();
             setRecording(true);
             recordingTimerRef.current = setInterval(() => {
                 setRecordingTime((prev) => prev + 1);
@@ -904,11 +995,11 @@ const DirectMessageChatScreen = () => {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
-                const uri = expoRecordingRef.current.getURI();
+                await audioRecorder.stop();
+                const uri = audioRecorder.uri;
                 const durationMs = Date.now() - recordingStartRef.current;
 
                 if (uri && subgridId) {
@@ -931,8 +1022,7 @@ const DirectMessageChatScreen = () => {
             } catch (err: any) {
                 setRecordingError(err.message || 'Failed to save recording.');
             } finally {
-                expoRecordingRef.current = null;
-                await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+                await setAudioModeAsync({ allowsRecording: false });
             }
         }
     };
@@ -958,15 +1048,14 @@ const DirectMessageChatScreen = () => {
             return;
         }
 
-        // Native recording
-        if (expoRecordingRef.current) {
+        // Native recording using expo-audio
+        if (audioRecorder.isRecording) {
             try {
-                await expoRecordingRef.current.stopAndUnloadAsync();
+                await audioRecorder.stop();
             } catch (err) {
                 // Ignore errors during cancel
             }
-            expoRecordingRef.current = null;
-            await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+            await setAudioModeAsync({ allowsRecording: false });
         }
     };
 
@@ -980,17 +1069,17 @@ const DirectMessageChatScreen = () => {
 
         if (Platform.OS === 'web') {
             // Use browser's native Audio API for web
-            // Access via globalThis to avoid conflict with expo-av's Audio import
+            // Access via globalThis to avoid conflict with expo-audio imports
             const BrowserAudio = (globalThis as any).Audio;
             if (BrowserAudio) {
                 const audio = new BrowserAudio(source);
                 audio.play().catch((err: any) => console.error('Failed to play audio:', err));
             }
         } else {
-            // Use expo-av for native platforms
+            // Use expo-audio for native platforms
             try {
-                const { sound } = await Audio.Sound.createAsync({ uri: source });
-                await sound.playAsync();
+                const player = createAudioPlayer(source);
+                player.play();
             } catch (err) {
                 console.error('Failed to play audio:', err);
             }
@@ -1058,7 +1147,7 @@ const DirectMessageChatScreen = () => {
 
         // For temp messages (pending), just remove from queue
         if (isTempId(messageId)) {
-            setMessages((prev) => prev.filter((m) => m._id !== messageId));
+            setLocalMessages((prev) => prev.filter((m) => m._id !== messageId));
             return;
         }
 
@@ -1080,7 +1169,7 @@ const DirectMessageChatScreen = () => {
         const deletedMessage = messages.find((m) => m._id === messageId);
 
         // Remove immediately (optimistic delete)
-        setMessages((prev) => prev.filter((m) => m._id !== messageId));
+        setLocalMessages((prev) => prev.filter((m) => m._id !== messageId));
         if (peerId) removeMessageFromCache(peerId, messageId);
 
         try {
@@ -1090,7 +1179,7 @@ const DirectMessageChatScreen = () => {
             console.error('Failed to delete message:', error);
             // Rollback - restore the message
             if (deletedMessage) {
-                setMessages((prev) => {
+                setLocalMessages((prev) => {
                     // Insert back in correct position based on createdAt
                     const newMessages = [...prev, deletedMessage].sort((a, b) => {
                         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1161,7 +1250,11 @@ const DirectMessageChatScreen = () => {
 
     return (
         <SafeAreaView style={styles.safe} edges={['top']}>
-            <View style={styles.mainContainer}>
+            <KeyboardAvoidingView
+                style={styles.mainContainer}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            >
                 {/* Main Chat Area */}
                 <View style={styles.chatContainer}>
                     {/* Header */}
@@ -1209,15 +1302,17 @@ const DirectMessageChatScreen = () => {
                     <View style={styles.headerDivider} />
 
                     {/* Content */}
-                    <ScrollView
-                        ref={scrollViewRef}
+                    <KeyboardAwareScrollView
+                        ref={keyboardAwareRef}
+                        innerRef={(ref) => { scrollViewRef.current = ref as ScrollView; }}
                         style={styles.content}
                         contentContainerStyle={styles.contentContainer}
                         showsVerticalScrollIndicator={false}
-                        onContentSizeChange={() => {
-                            // Auto-scroll to bottom when content changes (new messages)
-                            scrollViewRef.current?.scrollToEnd({ animated: false });
-                        }}
+                        keyboardShouldPersistTaps="handled"
+                        enableOnAndroid={true}
+                        extraScrollHeight={Platform.OS === 'ios' ? 20 : 0}
+                        onContentSizeChange={handleContentSizeChange}
+                        onLayout={handleScrollViewLayout}
                     >
                         {/* Profile Card */}
                         <View style={styles.profileSection}>
@@ -1261,13 +1356,18 @@ const DirectMessageChatScreen = () => {
                                 </View>
 
                                 {group.messages.map((message) => {
-                                    const isSelf = message.senderId === currentUserId;
+                                    // Compare as strings to handle ObjectId vs number differences
+                                    const msgSenderIdStr = String(message.senderId || '');
+                                    const peerIdStr = String(peerId || '');
+                                    // A message is "self" if it was NOT sent by the peer
+                                    // This works even if currentUserId is stale/incorrect
+                                    const isSelf = msgSenderIdStr !== peerIdStr;
                                     const attachmentList = normalizeAttachments(message);
                                     const senderName = isSelf ? 'You' : friendName;
 
                                     // Render call history entry (like WhatsApp)
                                     if (message.callType || message.kind === 'call') {
-                                        const isOutgoing = message.isOutgoing || message.senderId === currentUserId;
+                                        const isOutgoing = message.isOutgoing || String(message.senderId) !== String(peerId);
                                         const isMissed = message.isMissed || message.callStatus === 'missed';
                                         const isDeclined = message.isDeclined || message.callStatus === 'declined';
                                         const isVideoCall = message.callType === 'video';
@@ -1396,11 +1496,11 @@ const DirectMessageChatScreen = () => {
                                 })}
                             </View>
                         ))}
-                    </ScrollView>
+                    </KeyboardAwareScrollView>
 
                     {/* Recording UI */}
                     {recording ? (
-                        <View style={styles.recordingContainer}>
+                        <View style={[styles.recordingContainer, { paddingBottom: Math.max(insets.bottom, 12) + 4 }]}>
                             <View style={styles.recordingRow}>
                                 <TouchableOpacity style={styles.recordingCopy}>
                                     <Copy size={18} color={colors.textMuted} />
@@ -1433,11 +1533,14 @@ const DirectMessageChatScreen = () => {
                             </View>
                         </View>
                     ) : (
-                        <View style={styles.composerContainer}>
+                        <View style={[styles.composerContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                             <View style={styles.composer}>
-                                <TouchableOpacity style={styles.composerIconLeft} onPress={() => setEmojiOpen(true)}>
-                                    <Smile size={22} color={colors.textMuted} />
-                                </TouchableOpacity>
+                                {/* Only show emoji button on web - mobile users can use native keyboard emoji */}
+                                {Platform.OS === 'web' && (
+                                    <TouchableOpacity style={styles.composerIconLeft} onPress={() => setEmojiOpen(true)}>
+                                        <Smile size={22} color={colors.textMuted} />
+                                    </TouchableOpacity>
+                                )}
                                 <TextInput
                                     value={draft}
                                     onChangeText={(text) => {
@@ -1447,8 +1550,9 @@ const DirectMessageChatScreen = () => {
                                     placeholder="Type message"
                                     placeholderTextColor={colors.textMuted}
                                     style={styles.composerInput}
-                                    onSubmitEditing={handleSend}
+                                    multiline
                                 />
+                                {/* Attach button for images/files */}
                                 <TouchableOpacity style={styles.composerIconRight} onPress={handleAttachPress}>
                                     <Paperclip size={22} color={colors.textMuted} />
                                 </TouchableOpacity>
@@ -1474,12 +1578,17 @@ const DirectMessageChatScreen = () => {
                                         ))}
                                     </View>
                                 )}
-                            </View>
-                            {showSendButton ? (
-                                <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-                                    <Send size={22} color="#FFFFFF" />
+                                {/* Send button - always visible on mobile */}
+                                <TouchableOpacity
+                                    style={[styles.sendButton, !showSendButton && styles.sendButtonDisabled]}
+                                    onPress={handleSend}
+                                    disabled={!showSendButton}
+                                >
+                                    <Send size={20} color={showSendButton ? '#FFFFFF' : colors.textMuted} />
                                 </TouchableOpacity>
-                            ) : (
+                            </View>
+                            {/* Voice mic - only on mobile when no content */}
+                            {Platform.OS !== 'web' && !showSendButton && (
                                 <TouchableOpacity style={styles.micButton} onPress={handleToggleRecording}>
                                     <Mic size={22} color={colors.textMuted} />
                                 </TouchableOpacity>
@@ -1507,7 +1616,7 @@ const DirectMessageChatScreen = () => {
                         </ScrollView>
                     </View>
                 )}
-            </View>
+            </KeyboardAvoidingView>
 
             {/* Emoji Picker Modal */}
             <Modal visible={emojiOpen} transparent animationType="fade" onRequestClose={() => setEmojiOpen(false)}>
@@ -1572,7 +1681,7 @@ const DirectMessageChatScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').useTheme>['colors']) =>
+const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').useTheme>['colors'], bottomInset: number = 0) =>
     StyleSheet.create({
         safe: { flex: 1, backgroundColor: colors.appBg },
         mainContainer: { flex: 1, flexDirection: 'row' },
@@ -1643,7 +1752,7 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         audioText: { fontSize: 13, color: colors.text },
         errorText: { fontSize: 13, color: '#EF4444', marginBottom: 12 },
         loadingText: { fontSize: 13, color: colors.textMuted, marginBottom: 12 },
-        recordingContainer: { padding: 16, backgroundColor: colors.appBg },
+        recordingContainer: { padding: 16, paddingBottom: bottomInset + 16, backgroundColor: colors.appBg },
         recordingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
         recordingCopy: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
         recordingCancel: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
@@ -1652,13 +1761,14 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         waveformBars: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', height: 24 },
         waveformBar: { width: 3, backgroundColor: colors.textMuted, borderRadius: 2 },
         recordingSend: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22C55E', alignItems: 'center', justifyContent: 'center' },
-        composerContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12, backgroundColor: colors.appBg },
+        composerContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, paddingBottom: bottomInset + 12, gap: 12, backgroundColor: colors.appBg },
         composer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 24, paddingHorizontal: 4, height: 52 },
         composerIconLeft: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
         composerInput: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 8 },
         composerIconRight: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
         micButton: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-        sendButton: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+        sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+        sendButtonDisabled: { backgroundColor: colors.surfaceMuted },
         recordingError: { fontSize: 12, color: '#EF4444', paddingHorizontal: 16, paddingBottom: 8 },
         sidebar: { width: 280, backgroundColor: colors.surface, borderLeftWidth: 1, borderLeftColor: colors.border },
         sidebarHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: colors.border },

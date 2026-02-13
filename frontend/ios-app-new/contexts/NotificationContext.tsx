@@ -34,6 +34,7 @@ export interface NotificationData {
     channelId?: string;
     messageId?: string;
     senderId?: string;
+    peerId?: string;
     callId?: string;
     callType?: 'audio' | 'video';
 }
@@ -70,7 +71,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     const getExpoPushToken = async (): Promise<string | null> => {
         // Push notifications require a physical device (not simulator)
         if (!Device.isDevice) {
-            console.log('[Notifications] Push notifications require a physical device (not a simulator)');
             return null;
         }
 
@@ -83,43 +83,37 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
             // Check if projectId is a placeholder
             if (!projectId || projectId === 'your-project-id-here') {
-                console.warn('[Notifications] Invalid or missing Expo project ID. To enable push notifications:');
-                console.warn('1. Run: npx eas-cli init (or eas init)');
-                console.warn('2. Copy the projectId from eas.json or Expo dashboard');
-                console.warn('3. Update app.json extra.eas.projectId with your actual project ID');
-
-                // In Expo Go, we can try without projectId (uses the Expo Go project)
+                // In Expo Go, try without projectId (uses the Expo Go's project)
                 if (__DEV__) {
-                    console.log('[Notifications] Attempting to get token without projectId (Expo Go fallback)');
                     try {
                         const tokenData = await Notifications.getExpoPushTokenAsync();
-                        console.log('[Notifications] Got push token (Expo Go):', tokenData.data);
                         return tokenData.data;
-                    } catch (fallbackError: any) {
-                        console.error('[Notifications] Expo Go fallback failed:', fallbackError.message);
+                    } catch {
                         return null;
                     }
                 }
                 return null;
             }
 
-            console.log('[Notifications] Using projectId:', projectId);
-            const tokenData = await Notifications.getExpoPushTokenAsync({
-                projectId,
-            });
-
-            console.log('[Notifications] Got push token:', tokenData.data);
-            return tokenData.data;
-        } catch (error: any) {
-            console.error('[Notifications] Error getting push token:', error.message);
-
-            // Common errors and their meanings
-            if (error.message?.includes('experienceId')) {
-                console.error('[Notifications] This error usually means the projectId is incorrect or missing.');
-            } else if (error.message?.includes('NOTIFICATIONS_PERMISSION_DENIED')) {
-                console.error('[Notifications] User denied notification permissions.');
+            // Try with projectId first
+            try {
+                const tokenData = await Notifications.getExpoPushTokenAsync({
+                    projectId,
+                });
+                return tokenData.data;
+            } catch (projectIdError: any) {
+                // In development, try without projectId as a fallback
+                if (__DEV__) {
+                    try {
+                        const tokenData = await Notifications.getExpoPushTokenAsync();
+                        return tokenData.data;
+                    } catch {
+                        // Silently fail in dev mode
+                    }
+                }
+                throw projectIdError;
             }
-
+        } catch {
             return null;
         }
     };
@@ -141,7 +135,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         setPermissionStatus(finalStatus);
 
         if (finalStatus !== 'granted') {
-            console.log('[Notifications] Permission not granted');
             return false;
         }
 
@@ -187,7 +180,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     const registerToken = useCallback(async (): Promise<void> => {
         const userId = getUserId();
         if (!userId) {
-            console.log('[Notifications] No user ID, skipping token registration');
             return;
         }
 
@@ -212,9 +204,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
             await registerPushToken(token, platform, deviceId);
             setIsRegistered(true);
-            console.log('[Notifications] Token registered with backend');
-        } catch (error) {
-            console.error('[Notifications] Failed to register token:', error);
+        } catch {
+            // Silently fail - token registration is best-effort
         }
     }, [requestPermissions]);
 
@@ -230,9 +221,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             await unregisterPushToken(expoPushToken);
             setIsRegistered(false);
             setExpoPushToken(null);
-            console.log('[Notifications] Token unregistered');
-        } catch (error) {
-            console.error('[Notifications] Failed to unregister token:', error);
+        } catch {
+            // Silently fail - token unregistration is best-effort
         }
     }, [expoPushToken]);
 
@@ -241,7 +231,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      */
     const handleNotificationResponse = useCallback((response: Notifications.NotificationResponse) => {
         const data = response.notification.request.content.data as NotificationData;
-        console.log('[Notifications] User tapped notification:', data);
 
         if (!data?.type) return;
 
@@ -250,14 +239,19 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             case 'mention':
                 // Navigate to channel
                 if (data.subgridId && data.channelId) {
-                    router.push(`/(main)?subgridId=${data.subgridId}&channelId=${data.channelId}`);
+                    router.push(`/(main)/sub-channel?subgridId=${data.subgridId}&channelId=${data.channelId}`);
                 }
                 break;
 
             case 'dm':
                 // Navigate to DM
-                if (data.senderId) {
-                    router.push(`/(main)/dm?friendId=${data.senderId}`);
+                {
+                    const peerId = data.senderId ?? data.peerId;
+                    if (!peerId) break;
+                    router.push({
+                        pathname: '/(main)/direct-messages/[peerId]',
+                        params: data.subgridId ? { peerId, subgridId: data.subgridId } : { peerId },
+                    });
                 }
                 break;
 
@@ -276,7 +270,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     useEffect(() => {
         // Listen for notifications received while app is foregrounded
         notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-            console.log('[Notifications] Received:', notification.request.content);
             setNotification(notification);
         });
 
@@ -299,13 +292,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             try {
                 const user = await getAuthUser();
                 if (user?.userId) {
-                    console.log('[Notifications] User logged in, attempting to register token');
                     await registerToken();
-                } else {
-                    console.log('[Notifications] No user logged in, skipping token registration');
                 }
-            } catch (err) {
-                console.error('[Notifications] Error checking auth user:', err);
+            } catch {
+                // Silently fail - notification registration is best-effort
             }
         };
 

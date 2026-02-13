@@ -52,11 +52,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         }
 
         if (!userId) {
-            console.warn('[WebSocket] No user ID available, cannot connect');
             return;
         }
 
-        console.log('[WebSocket] Connecting with userId:', userId, 'tenantId:', tenantId);
         setStatus('connecting');
 
         // Dynamically resolve WebSocket URL, especially important for mobile
@@ -64,29 +62,22 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         if (Platform.OS !== 'web') {
             // For native apps, get the dev machine's IP from Expo
             const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
-            console.log('[WebSocket] Native platform, hostUri:', hostUri);
             if (hostUri) {
                 const host = String(hostUri).split(':')[0];
                 if (host && host !== 'localhost') {
                     wsUrl = `http://${host}:4000`;
-                    console.log('[WebSocket] Using hostUri-based URL:', wsUrl);
                 } else {
                     const baseUrl = getApiBaseUrl();
                     wsUrl = baseUrl.replace(/\/api$/, '');
-                    console.log('[WebSocket] Using API base URL:', wsUrl);
                 }
             } else {
                 const baseUrl = getApiBaseUrl();
                 wsUrl = baseUrl.replace(/\/api$/, '');
-                console.log('[WebSocket] No hostUri, using API base URL:', wsUrl);
             }
         } else {
             const baseUrl = getApiBaseUrl();
             wsUrl = baseUrl.replace(/\/api$/, '');
-            console.log('[WebSocket] Web platform, using:', wsUrl);
         }
-
-        console.log('[WebSocket] Connecting to:', wsUrl);
 
         socketRef.current = io(wsUrl, {
             reconnection: true,
@@ -100,53 +91,46 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         const socket = socketRef.current;
 
         socket.on('connect', () => {
-            console.log('[WebSocket] Socket connected:', socket.id, '- sending authentication...');
             // Don't set connected yet - wait for authentication
             socket.emit('authenticate', { userId, tenantId });
         });
 
-        socket.on('authenticated', (data) => {
-            console.log('[WebSocket] Authenticated successfully:', data);
+        socket.on('authenticated', () => {
             // NOW we're fully connected and authenticated
             setStatus('connected');
 
             // Rejoin rooms after authentication is complete
             joinedRoomsRef.current.forEach((room) => {
                 const [roomType, roomId] = room.split(':');
-                console.log(`[WebSocket] Rejoining room after auth: ${room}`);
                 socket.emit('join_room', { roomType, roomId });
             });
         });
 
-        socket.on('auth_error', (data) => {
-            console.error('[WebSocket] Authentication failed:', data);
+        socket.on('auth_error', () => {
             setStatus('error');
         });
 
-        socket.on('disconnect', (reason) => {
-            console.log('[WebSocket] Disconnected:', reason);
+        socket.on('disconnect', () => {
             setStatus('disconnected');
         });
 
-        socket.on('connect_error', (error) => {
-            console.error('[WebSocket] Connection error:', error.message, 'URL was:', wsUrl);
+        socket.on('connect_error', () => {
             setStatus('error');
         });
 
-        socket.on('reconnect', (attemptNumber) => {
-            console.log('[WebSocket] Reconnected after', attemptNumber, 'attempts');
+        socket.on('reconnect', () => {
             // Re-authenticate after reconnection - the 'connect' handler will also fire
             // but we emit authenticate here as well to ensure it happens
             socket.emit('authenticate', { userId, tenantId });
         });
 
-        socket.on('reconnect_attempt', (attemptNumber) => {
-            console.log('[WebSocket] Reconnection attempt:', attemptNumber);
+        socket.on('reconnect_attempt', () => {
+            // Reconnection attempt in progress
         });
 
         // Listen for room_joined confirmation from server
-        socket.on('room_joined', (data) => {
-            console.log('[WebSocket] Room joined confirmed by server:', data?.roomType, data?.roomId);
+        socket.on('room_joined', () => {
+            // Room joined
         });
 
         // Forward all events to registered listeners
@@ -162,13 +146,35 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
         eventTypes.forEach((eventType) => {
             socket.on(eventType, (data: any) => {
-                console.log(`[WebSocket] Event received: ${eventType}`, data?.roomType, data?.roomId);
+                console.log(`[WebSocket] Event received: ${eventType}`, JSON.stringify(data, null, 2));
                 const handlers = listenersRef.current.get(eventType);
-                console.log(`[WebSocket] Handlers for ${eventType}:`, handlers?.size || 0);
                 if (handlers) {
+                    console.log(`[WebSocket] Dispatching to ${handlers.size} handlers`);
                     handlers.forEach((handler) => handler(data));
+                } else {
+                    console.log(`[WebSocket] No handlers registered for ${eventType}`);
                 }
             });
+        });
+
+        // Also listen for 'direct_message' event (alternative event name some servers use)
+        socket.on('direct_message', (data: any) => {
+            console.log('[WebSocket] direct_message event received:', JSON.stringify(data, null, 2));
+            // Forward to new_message handlers
+            const handlers = listenersRef.current.get('new_message');
+            if (handlers) {
+                handlers.forEach((handler) => handler({ ...data, roomType: 'dm' }));
+            }
+        });
+
+        // Listen for 'dm' event (another alternative)
+        socket.on('dm', (data: any) => {
+            console.log('[WebSocket] dm event received:', JSON.stringify(data, null, 2));
+            // Forward to new_message handlers
+            const handlers = listenersRef.current.get('new_message');
+            if (handlers) {
+                handlers.forEach((handler) => handler({ ...data, roomType: 'dm' }));
+            }
         });
     }, []);
 
@@ -183,6 +189,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
     const joinRoom = useCallback((roomType: string, roomId: string) => {
         const fullRoomId = `${roomType}:${roomId}`;
+        console.log('[WebSocket] joinRoom called:', roomType, roomId, 'connected:', !!socketRef.current?.connected);
 
         // Always track the room we want to join
         if (!joinedRoomsRef.current.has(fullRoomId)) {
@@ -191,10 +198,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
         // If socket is connected, emit join_room immediately
         if (socketRef.current?.connected) {
-            console.log(`[WebSocket] Joining room: ${fullRoomId}`);
+            console.log('[WebSocket] Emitting join_room:', { roomType, roomId });
             socketRef.current.emit('join_room', { roomType, roomId });
         } else {
-            console.log(`[WebSocket] Socket not connected, room ${fullRoomId} will be joined on connect`);
+            console.log('[WebSocket] Socket not connected, room will be joined after connection');
         }
     }, []);
 
