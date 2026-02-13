@@ -16,10 +16,6 @@ import {
     IRtcEngine,
     ChannelProfileType,
     ClientRoleType,
-    RtcConnection,
-    IRtcEngineEventHandler,
-    VideoSourceType,
-    RenderModeType,
 } from 'react-native-agora';
 import {
     initiateDMCall,
@@ -75,7 +71,7 @@ const requestAndroidPermissions = async (): Promise<boolean> => {
     if (Platform.OS !== 'android') return true;
 
     try {
-        const permissions = [
+        const permissions: string[] = [
             PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
             PermissionsAndroid.PERMISSIONS.CAMERA,
         ];
@@ -85,7 +81,9 @@ const requestAndroidPermissions = async (): Promise<boolean> => {
             permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
         }
 
-        const results = await PermissionsAndroid.requestMultiple(permissions);
+        const results = await PermissionsAndroid.requestMultiple(
+            permissions as Array<(typeof PermissionsAndroid.PERMISSIONS)[keyof typeof PermissionsAndroid.PERMISSIONS]>
+        );
 
         const audioGranted = results[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === PermissionsAndroid.RESULTS.GRANTED;
         const cameraGranted = results[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED;
@@ -118,10 +116,11 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const [callDuration, setCallDuration] = useState(0);
 
     const engineRef = useRef<IRtcEngine | null>(null);
-    const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const callStateRef = useRef<CallState>('idle');
     const currentCallRef = useRef<CallSession | null>(null);
     const isInitializedRef = useRef(false);
+    const eventHandlerRef = useRef<any>(null);
 
     // Keep refs in sync with state
     useEffect(() => {
@@ -148,6 +147,19 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         }
     }, []);
 
+    // Handle token refresh
+    const handleTokenRefresh = useCallback(async () => {
+        if (!currentCallRef.current || !engineRef.current) return;
+        try {
+            const response = await refreshCallToken(currentCallRef.current.channelName);
+            if (response.success) {
+                engineRef.current.renewToken(response.data.token);
+            }
+        } catch (err) {
+            console.error('[Agora Native] Token refresh failed:', err);
+        }
+    }, []);
+
     // Initialize Agora engine
     const initEngine = useCallback(async (appId: string): Promise<IRtcEngine> => {
         if (engineRef.current && isInitializedRef.current) {
@@ -157,12 +169,18 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         try {
             const engine = createAgoraRtcEngine();
 
-            // Set up event handlers before initialization
-            const eventHandler: IRtcEngineEventHandler = {
-                onJoinChannelSuccess: (connection: RtcConnection, elapsed: number) => {
+            // Initialize with app ID first
+            engine.initialize({
+                appId,
+                channelProfile: ChannelProfileType.ChannelProfileCommunication,
+            });
+
+            // Create event handler object
+            eventHandlerRef.current = {
+                onJoinChannelSuccess: (connection: any, elapsed: number) => {
                     console.log('[Agora Native] Joined channel:', connection.channelId, 'uid:', connection.localUid);
                 },
-                onUserJoined: (connection: RtcConnection, remoteUid: number, elapsed: number) => {
+                onUserJoined: (connection: any, remoteUid: number, elapsed: number) => {
                     console.log('[Agora Native] Remote user joined:', remoteUid);
                     setRemoteUsers(prev => {
                         if (prev.includes(remoteUid)) return prev;
@@ -174,7 +192,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                         startDurationTimer();
                     }
                 },
-                onUserOffline: (connection: RtcConnection, remoteUid: number, reason: number) => {
+                onUserOffline: (connection: any, remoteUid: number, reason: number) => {
                     console.log('[Agora Native] Remote user left:', remoteUid, 'reason:', reason);
                     setRemoteUsers(prev => {
                         const newUsers = prev.filter(uid => uid !== remoteUid);
@@ -190,22 +208,17 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                     setError(`Agora error: ${msg}`);
                     options.onError?.(new Error(msg));
                 },
-                onTokenPrivilegeWillExpire: (connection: RtcConnection, token: string) => {
+                onTokenPrivilegeWillExpire: (connection: any, token: string) => {
                     console.log('[Agora Native] Token will expire, refreshing...');
                     handleTokenRefresh();
                 },
-                onConnectionStateChanged: (connection: RtcConnection, state: number, reason: number) => {
+                onConnectionStateChanged: (connection: any, state: number, reason: number) => {
                     console.log('[Agora Native] Connection state changed:', state, 'reason:', reason);
                 },
             };
 
-            engine.registerEventHandler(eventHandler);
-
-            // Initialize with app ID
-            engine.initialize({
-                appId,
-                channelProfile: ChannelProfileType.ChannelProfileCommunication,
-            });
+            // Register event handler
+            engine.registerEventHandler(eventHandlerRef.current);
 
             // Enable audio
             engine.enableAudio();
@@ -221,20 +234,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             setError(err.message);
             throw err;
         }
-    }, [options, startDurationTimer]);
-
-    // Handle token refresh
-    const handleTokenRefresh = useCallback(async () => {
-        if (!currentCallRef.current || !engineRef.current) return;
-        try {
-            const response = await refreshCallToken(currentCallRef.current.channelName);
-            if (response.success) {
-                engineRef.current.renewToken(response.data.token);
-            }
-        } catch (err) {
-            console.error('[Agora Native] Token refresh failed:', err);
-        }
-    }, []);
+    }, [options, startDurationTimer, handleTokenRefresh]);
 
     // Enable video for video calls
     const enableVideo = useCallback(async (engine: IRtcEngine) => {
@@ -252,12 +252,16 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const cleanupEngine = useCallback(async () => {
         if (engineRef.current) {
             try {
+                if (eventHandlerRef.current) {
+                    engineRef.current.unregisterEventHandler(eventHandlerRef.current);
+                }
                 engineRef.current.leaveChannel();
                 engineRef.current.release();
             } catch (err) {
                 console.error('[Agora Native] Cleanup error:', err);
             }
             engineRef.current = null;
+            eventHandlerRef.current = null;
             isInitializedRef.current = false;
         }
     }, []);

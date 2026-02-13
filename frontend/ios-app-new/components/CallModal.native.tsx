@@ -20,9 +20,7 @@ import {
 } from 'react-native';
 import {
     RtcSurfaceView,
-    VideoSourceType,
     RenderModeType,
-    ChannelProfileType,
 } from 'react-native-agora';
 import { Phone, Video, VideoOff, Mic, MicOff, PhoneOff, Volume2, VolumeX, SwitchCamera } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
@@ -174,7 +172,6 @@ export const CallModal: React.FC<CallModalProps> = ({
                                     canvas={{
                                         uid: 0, // 0 means local user
                                         renderMode: RenderModeType.RenderModeHidden,
-                                        sourceType: VideoSourceType.VideoSourceCamera,
                                     }}
                                 />
                                 <TouchableOpacity style={styles.switchCameraButton} onPress={onSwitchCamera}>
