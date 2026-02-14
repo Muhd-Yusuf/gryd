@@ -1,13 +1,14 @@
 /**
- * Call Modal Component - Entry Point
- * Full-screen modal for voice/video calls
+ * Call Modal Component - Native Implementation
+ * Full-screen modal for voice/video calls with real video rendering
  *
- * This file detects whether react-native-agora is available and loads
- * the appropriate implementation:
- * - Native builds (APK/IPA): Uses CallModal.native.tsx with RtcSurfaceView
- * - Expo Go: Uses stub implementation with placeholder UI
- * - Web: Uses CallModal.web.tsx (loaded by Metro's platform resolution)
+ * This file is used for NATIVE builds (APK/IPA) where react-native-agora is available.
+ * For web platform, Metro automatically loads CallModal.web.tsx instead.
+ *
+ * Uses react-native-agora's RtcSurfaceView for video display.
  */
+
+console.log('[CallModal] Loading NATIVE implementation (CallModal.tsx)');
 
 import React, { useMemo } from 'react';
 import {
@@ -19,27 +20,14 @@ import {
     Dimensions,
     Platform,
 } from 'react-native';
-
+import {
+    RtcSurfaceView,
+    RenderModeType,
+} from 'react-native-agora';
 import { Phone, Video, VideoOff, Mic, MicOff, PhoneOff, Volume2, VolumeX, SwitchCamera } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import { CallState, CallType, IncomingCall, CallSession } from '../hooks';
 import UserAvatar from './UserAvatar';
-
-// Check if react-native-agora is available (native build vs Expo Go)
-let nativeAgoraAvailable = false;
-let NativeCallModal: any = null;
-
-try {
-    const agora = require('react-native-agora');
-    if (agora && agora.RtcSurfaceView) {
-        nativeAgoraAvailable = true;
-        NativeCallModal = require('./CallModal.native').CallModal;
-        console.log('[CallModal] Native Agora SDK available - using native CallModal');
-    }
-} catch (e) {
-    console.log('[CallModal] Native Agora SDK not available - using Expo Go stub');
-    nativeAgoraAvailable = false;
-}
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -58,7 +46,7 @@ interface CallModalProps {
     peerName: string;
     peerAvatar?: string;
     selfAvatar?: string;
-    engine: any;
+    engine: any; // IRtcEngine from react-native-agora
     onAnswer: () => void;
     onDecline: () => void;
     onHangup: () => void;
@@ -157,27 +145,46 @@ export const CallModal: React.FC<CallModalProps> = ({
                 {/* Video Call Layout */}
                 {isVideoCall ? (
                     <View style={styles.videoContainer}>
-                        {/* Video placeholder - Expo Go doesn't support native Agora video */}
-                        <View style={styles.videoPlaceholder}>
-                            <UserAvatar
-                                uri={peerAvatar}
-                                name={peerName}
-                                style={styles.videoPlaceholderAvatar}
+                        {/* Remote Video */}
+                        {remoteUsers.length > 0 && engine ? (
+                            <RtcSurfaceView
+                                style={styles.remoteVideo}
+                                canvas={{
+                                    uid: remoteUsers[0],
+                                    renderMode: RenderModeType.RenderModeFit,
+                                }}
                             />
-                            <Text style={styles.videoPlaceholderName}>{peerName}</Text>
-                            {isConnecting && <Text style={styles.connectingText}>{getStatusText()}</Text>}
-                            {isConnected && (
-                                <Text style={styles.connectingText}>Video requires a native build</Text>
-                            )}
-                            <Text style={[styles.connectingText, { marginTop: 8, fontSize: 12 }]}>
-                                Use web version for video calls in Expo Go
-                            </Text>
-                        </View>
+                        ) : (
+                            <View style={styles.videoPlaceholder}>
+                                <UserAvatar
+                                    uri={peerAvatar}
+                                    name={peerName}
+                                    style={styles.videoPlaceholderAvatar}
+                                />
+                                <Text style={styles.videoPlaceholderName}>{peerName}</Text>
+                                {isConnecting && <Text style={styles.connectingText}>{getStatusText()}</Text>}
+                            </View>
+                        )}
 
-                        {/* Local video placeholder */}
-                        <View style={[styles.localVideoContainer, styles.localVideoDisabled]}>
-                            <VideoOff size={32} color="#FFFFFF" />
-                        </View>
+                        {/* Local Video Preview */}
+                        {engine && isVideoEnabled ? (
+                            <View style={styles.localVideoContainer}>
+                                <RtcSurfaceView
+                                    style={styles.localVideo}
+                                    canvas={{
+                                        uid: 0, // 0 means local user
+                                        renderMode: RenderModeType.RenderModeHidden,
+                                    }}
+                                />
+                                <TouchableOpacity style={styles.switchCameraButton} onPress={onSwitchCamera}>
+                                    <SwitchCamera size={18} color="#FFFFFF" />
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <View style={[styles.localVideoContainer, styles.localVideoDisabled]}>
+                                <VideoOff size={32} color="#FFFFFF" />
+                            </View>
+                        )}
 
                         {/* Duration overlay */}
                         {isConnected && (
@@ -485,7 +492,4 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
         },
     });
 
-// Export native implementation if available, otherwise use stub
-const ExportedCallModal = nativeAgoraAvailable && NativeCallModal ? NativeCallModal : CallModal;
-export { ExportedCallModal as CallModal };
-export default ExportedCallModal;
+export default CallModal;
