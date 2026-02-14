@@ -78,8 +78,7 @@
           }
         }
       ],
-      "expo-asset",
-      "react-native-agora"
+      "expo-asset"
     ],
     "extra": {
       "eas": {
