@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearAllCaches } from './userCache';
+import { queryClient } from './queryClient';
 
 // Auth storage keys
 const AUTH_TOKEN_KEY = '@auth_token';
@@ -204,15 +206,33 @@ export const isAuthenticated = async (): Promise<boolean> => {
     return !!token;
 };
 
-// Logout - clear auth data
+// Logout - clear auth data and all cached state
 export const logout = async (): Promise<void> => {
     try {
         await Promise.all([
             AsyncStorage.removeItem(AUTH_TOKEN_KEY),
             AsyncStorage.removeItem(AUTH_USER_KEY),
+            // Clear persisted React Query cache so old user data doesn't reload
+            AsyncStorage.removeItem('GRYD_REACT_QUERY_CACHE'),
         ]);
+        // Reset all in-memory auth state
         authToken = null;
         resolvedUserId = USER_ID; // Reset to env user or empty
+        resolvedTenantId = TENANT_ID; // Reset tenant to env or empty
+        resolvedUserRole = USER_ROLE; // Reset role to env default
+
+        // Reset bootstrap so next login re-fetches tenant
+        bootstrapComplete = false;
+        bootstrapPromise = null;
+
+        // Clear cached subgrid roles
+        clearSubgridRoleCache();
+
+        // Clear all custom caches (user profiles, messages, admin data, etc.)
+        await clearAllCaches();
+
+        // Clear in-memory React Query cache
+        queryClient.clear();
     } catch (err) {
         console.error('[Auth] Failed to logout:', err);
     }

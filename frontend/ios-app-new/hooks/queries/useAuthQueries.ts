@@ -94,10 +94,11 @@ export const useLogout = () => {
 
     return useMutation({
         mutationFn: async () => {
+            // Clear auth state, persisted React Query cache, bootstrap state, and all custom caches
             await apiLogout();
         },
         onSuccess: () => {
-            // Clear all queries on logout
+            // Clear all in-memory React Query cache
             queryClient.clear();
         },
     });

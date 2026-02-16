@@ -553,14 +553,19 @@ const saveCUAdminMembersCache = (): void => {
 export const clearAllCaches = async (): Promise<void> => {
     userCache = {};
     messagesCache = {};
+    channelMessagesCache = {};
+    channelPostsCache = {};
     subgridsCache = null;
     friendsCache = null;
     superAdminCache = null;
     cuAdminMembersCache = {};
+    cacheLoaded = false; // Allow re-initialization on next login
     try {
         await Promise.all([
             AsyncStorage.removeItem(USER_CACHE_KEY),
             AsyncStorage.removeItem(MESSAGES_CACHE_KEY),
+            AsyncStorage.removeItem(CHANNEL_MESSAGES_CACHE_KEY),
+            AsyncStorage.removeItem(CHANNEL_POSTS_CACHE_KEY),
             AsyncStorage.removeItem(SUBGRIDS_CACHE_KEY),
             AsyncStorage.removeItem(FRIENDS_CACHE_KEY),
             AsyncStorage.removeItem(SUPER_ADMIN_CACHE_KEY),
