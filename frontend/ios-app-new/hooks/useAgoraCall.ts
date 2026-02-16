@@ -10,12 +10,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
-import {
-    createAgoraRtcEngine,
-    IRtcEngine,
-    ChannelProfileType,
-    ClientRoleType,
-} from 'react-native-agora';
+import type { IRtcEngine } from 'react-native-agora';
 import {
     initiateDMCall,
     answerCall as apiAnswerCall,
@@ -64,6 +59,34 @@ interface UseAgoraCallOptions {
     onCallEnded?: (callId: string, reason: string) => void;
     onError?: (error: Error) => void;
 }
+
+type AgoraModule = typeof import('react-native-agora');
+
+let cachedAgoraModule: AgoraModule | null | undefined;
+
+const getAgoraModule = (): AgoraModule | null => {
+    if (cachedAgoraModule !== undefined) {
+        return cachedAgoraModule;
+    }
+
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const mod: AgoraModule = require('react-native-agora');
+
+        // Touch an export to eagerly surface the common "not linked" Proxy error.
+        // If this throws, we'll treat Agora as unavailable (e.g., Expo Go).
+        void mod.createAgoraRtcEngine;
+
+        cachedAgoraModule = mod;
+        return cachedAgoraModule;
+    } catch {
+        cachedAgoraModule = null;
+        return null;
+    }
+};
+
+const getAgoraUnavailableMessage = () =>
+    "Calls aren't available in Expo Go. Use a development build / standalone build (or reinstall + rebuild native dependencies).";
 
 // Request permissions for Android
 const requestAndroidPermissions = async (): Promise<boolean> => {
@@ -161,17 +184,24 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
     // Initialize Agora engine
     const initEngine = useCallback(async (appId: string): Promise<IRtcEngine> => {
+        const agora = getAgoraModule();
+        if (!agora) {
+            const message = getAgoraUnavailableMessage();
+            setError(message);
+            throw new Error(message);
+        }
+
         if (engineRef.current && isInitializedRef.current) {
             return engineRef.current;
         }
 
         try {
-            const engine = createAgoraRtcEngine();
+            const engine = agora.createAgoraRtcEngine();
 
             // Initialize with app ID first
             engine.initialize({
                 appId,
-                channelProfile: ChannelProfileType.ChannelProfileCommunication,
+                channelProfile: agora.ChannelProfileType.ChannelProfileCommunication,
             });
 
             // Create event handler object
@@ -268,6 +298,14 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     // Start a call
     const startCall = useCallback(async (calleeId: string, type: CallType = 'audio', subgridId?: string) => {
         try {
+            const agora = getAgoraModule();
+            if (!agora) {
+                const message = getAgoraUnavailableMessage();
+                setError(message);
+                Alert.alert('Calls Unavailable', message);
+                return null;
+            }
+
             // Request permissions first
             const hasPermission = await requestAndroidPermissions();
             if (!hasPermission) {
@@ -302,12 +340,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             }
 
             // Set client role
-            engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+            engine.setClientRole(agora.ClientRoleType.ClientRoleBroadcaster);
 
             // Join channel
             console.log('[Agora Native] Joining channel:', channelName, 'uid:', uid);
             engine.joinChannel(token, channelName, uid, {
-                clientRoleType: ClientRoleType.ClientRoleBroadcaster,
+                clientRoleType: agora.ClientRoleType.ClientRoleBroadcaster,
                 publishMicrophoneTrack: true,
                 publishCameraTrack: type === 'video',
                 autoSubscribeAudio: true,
@@ -340,6 +378,14 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     // Answer incoming call
     const answer = useCallback(async (callId: string, callTypeArg?: CallType) => {
         try {
+            const agora = getAgoraModule();
+            if (!agora) {
+                const message = getAgoraUnavailableMessage();
+                setError(message);
+                Alert.alert('Calls Unavailable', message);
+                return null;
+            }
+
             // Request permissions first
             const hasPermission = await requestAndroidPermissions();
             if (!hasPermission) {
@@ -371,12 +417,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             }
 
             // Set client role
-            engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+            engine.setClientRole(agora.ClientRoleType.ClientRoleBroadcaster);
 
             // Join channel
             console.log('[Agora Native] Answering - joining channel:', channelName, 'uid:', uid);
             engine.joinChannel(token, channelName, uid, {
-                clientRoleType: ClientRoleType.ClientRoleBroadcaster,
+                clientRoleType: agora.ClientRoleType.ClientRoleBroadcaster,
                 publishMicrophoneTrack: true,
                 publishCameraTrack: type === 'video',
                 autoSubscribeAudio: true,

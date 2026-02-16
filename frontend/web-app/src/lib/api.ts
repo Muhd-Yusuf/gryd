@@ -93,6 +93,12 @@ export const apiFetch = async (path: string, options: RequestInit = {}) => {
     return data;
 };
 
+export const apiPost = (path: string, body?: unknown) =>
+    apiFetch(path, {
+        method: 'POST',
+        body: JSON.stringify(body || {}),
+    });
+
 export const communityGet = (path: string) => apiFetch(`/community${path}`);
 export const communityPost = (path: string, body?: unknown) =>
     apiFetch(`/community${path}`, {

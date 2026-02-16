@@ -597,7 +597,7 @@ export default function DirectMessagesScreen() {
                 setMutualFriends([]);
                 setMutualFriendUsers({});
             });
-    }, [activeSubgridId, selectedFriendId, friends]);
+    }, [activeSubgridId, selectedFriendId]);
 
     // Subscribe to call events via SSE
     useEffect(() => {
@@ -2141,30 +2141,32 @@ export default function DirectMessagesScreen() {
             )}
 
             {/* Call Modal - Agora-based inline calling (matching member dashboard behavior) */}
-            <CallModal
-                visible={isCallModalVisible}
-                callState={agoraCall.callState}
-                callType={agoraCall.callType}
-                currentCall={agoraCall.currentCall}
-                incomingCall={null}
-                isMuted={agoraCall.isMuted}
-                isVideoEnabled={agoraCall.isVideoEnabled}
-                isSpeakerOn={agoraCall.isSpeakerOn}
-                remoteUsers={agoraCall.remoteUsers}
-                callDuration={agoraCall.callDuration}
-                error={agoraCall.error}
-                peerName={selectedFriendName}
-                peerAvatar={friendUsers[selectedFriendId || '']?.avatarUrl}
-                selfAvatar={currentUserQuery.data?.avatarUrl || currentUserInfo?.avatarUrl}
-                engine={agoraCall.engine}
-                onAnswer={() => {}}
-                onDecline={() => {}}
-                onHangup={handleHangup}
-                onToggleMute={agoraCall.toggleMute}
-                onToggleVideo={agoraCall.toggleVideo}
-                onToggleSpeaker={agoraCall.toggleSpeaker}
-                onSwitchCamera={agoraCall.switchCamera}
-            />
+            {isCallModalVisible && (
+                <CallModal
+                    visible={isCallModalVisible}
+                    callState={agoraCall.callState}
+                    callType={agoraCall.callType}
+                    currentCall={agoraCall.currentCall}
+                    incomingCall={null}
+                    isMuted={agoraCall.isMuted}
+                    isVideoEnabled={agoraCall.isVideoEnabled}
+                    isSpeakerOn={agoraCall.isSpeakerOn}
+                    remoteUsers={agoraCall.remoteUsers}
+                    callDuration={agoraCall.callDuration}
+                    error={agoraCall.error}
+                    peerName={selectedFriendName}
+                    peerAvatar={friendUsers[selectedFriendId || '']?.avatarUrl}
+                    selfAvatar={currentUserQuery.data?.avatarUrl || currentUserInfo?.avatarUrl}
+                    engine={agoraCall.engine}
+                    onAnswer={() => {}}
+                    onDecline={() => {}}
+                    onHangup={handleHangup}
+                    onToggleMute={agoraCall.toggleMute}
+                    onToggleVideo={agoraCall.toggleVideo}
+                    onToggleSpeaker={agoraCall.toggleSpeaker}
+                    onSwitchCamera={agoraCall.switchCamera}
+                />
+            )}
         </View>
     );
 }

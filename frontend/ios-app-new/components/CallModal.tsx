@@ -20,16 +20,37 @@ import {
     Dimensions,
     Platform,
 } from 'react-native';
-import {
-    RtcSurfaceView,
-    RenderModeType,
-} from 'react-native-agora';
 import { Phone, Video, VideoOff, Mic, MicOff, PhoneOff, Volume2, VolumeX, SwitchCamera } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import { CallState, CallType, IncomingCall, CallSession } from '../hooks';
 import UserAvatar from './UserAvatar';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+type AgoraUiModule = typeof import('react-native-agora');
+
+let cachedAgoraUiModule: AgoraUiModule | null | undefined;
+
+const getAgoraUiModule = (): AgoraUiModule | null => {
+    if (cachedAgoraUiModule !== undefined) {
+        return cachedAgoraUiModule;
+    }
+
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const mod: AgoraUiModule = require('react-native-agora');
+
+        // Touch exports to eagerly surface the common "not linked" Proxy error.
+        void mod.RtcSurfaceView;
+        void mod.RenderModeType;
+
+        cachedAgoraUiModule = mod;
+        return cachedAgoraUiModule;
+    } catch {
+        cachedAgoraUiModule = null;
+        return null;
+    }
+};
 
 interface CallModalProps {
     visible: boolean;
@@ -88,6 +109,9 @@ export const CallModal: React.FC<CallModalProps> = ({
 }) => {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
+    const agoraUi = useMemo(() => getAgoraUiModule(), []);
+    const RtcSurfaceView = agoraUi?.RtcSurfaceView as any;
+    const RenderModeType = agoraUi?.RenderModeType as any;
 
     const isIncoming = !!incomingCall && callState === 'idle';
     const isConnecting = callState === 'initiating' || callState === 'ringing' || callState === 'connecting';
@@ -146,7 +170,7 @@ export const CallModal: React.FC<CallModalProps> = ({
                 {isVideoCall ? (
                     <View style={styles.videoContainer}>
                         {/* Remote Video */}
-                        {remoteUsers.length > 0 && engine ? (
+                        {RtcSurfaceView && RenderModeType && remoteUsers.length > 0 && engine ? (
                             <RtcSurfaceView
                                 style={styles.remoteVideo}
                                 canvas={{
@@ -167,7 +191,7 @@ export const CallModal: React.FC<CallModalProps> = ({
                         )}
 
                         {/* Local Video Preview */}
-                        {engine && isVideoEnabled ? (
+                        {RtcSurfaceView && RenderModeType && engine && isVideoEnabled ? (
                             <View style={styles.localVideoContainer}>
                                 <RtcSurfaceView
                                     style={styles.localVideo}
