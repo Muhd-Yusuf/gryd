@@ -2326,10 +2326,13 @@ const CreditUnionAdminScreen = () => {
                     if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
                 };
                 recorder.onstop = async () => {
-                    const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+                    // Chrome may report video/webm for audio-only recordings; normalize to audio/webm
+                    const rawMime = recorder.mimeType || 'audio/webm';
+                    const voiceMime = rawMime.replace(/^video\/webm/, 'audio/webm');
+                    const blob = new Blob(audioChunksRef.current, { type: voiceMime });
                     const durationMs = Date.now() - recordingStartRef.current;
                     const dataUrl = await blobToDataUrl(blob);
-                    await sendVoiceNote(dataUrl, blob.type, durationMs);
+                    await sendVoiceNote(dataUrl, voiceMime, durationMs);
                     stream.getTracks().forEach((track) => track.stop());
                     activeStreamRef.current = null;
                 };
@@ -3482,20 +3485,7 @@ const CreditUnionAdminScreen = () => {
                                                             );
                                                         }
 
-                                                        // Handle video attachments (NOT .webm for voice notes - only mp4/mov/avi)
-                                                        const isVideo = attType === 'video' ||
-                                                            mimeType?.startsWith('video/') ||
-                                                            /\.(mp4|mov|avi|mkv)(\?|$)/i.test(url);
-                                                        if (isVideo) {
-                                                            return (
-                                                                <View key={`${item._id}-att-${idx}`} style={styles.videoPlaceholder}>
-                                                                    <PlayCircle size={48} color="#FFFFFF" />
-                                                                    <Text style={styles.videoLabel}>Video</Text>
-                                                                </View>
-                                                            );
-                                                        }
-
-                                                        // Handle audio/voice attachments (including .webm voice notes)
+                                                        // Handle audio/voice attachments BEFORE video (Chrome may report video/webm mimeType for audio-only recordings)
                                                         const isAudio = attType === 'audio' || attType === 'voice' ||
                                                             mimeType?.startsWith('audio/') ||
                                                             /\.(mp3|wav|webm|ogg|m4a|aac)(\?|$)/i.test(url);
@@ -3507,6 +3497,19 @@ const CreditUnionAdminScreen = () => {
                                                                     durationMs={att?.durationMs}
                                                                     colors={colors}
                                                                 />
+                                                            );
+                                                        }
+
+                                                        // Handle video attachments (after audio check to avoid misclassifying voice notes)
+                                                        const isVideo = attType === 'video' ||
+                                                            mimeType?.startsWith('video/') ||
+                                                            /\.(mp4|mov|avi|mkv)(\?|$)/i.test(url);
+                                                        if (isVideo) {
+                                                            return (
+                                                                <View key={`${item._id}-att-${idx}`} style={styles.videoPlaceholder}>
+                                                                    <PlayCircle size={48} color="#FFFFFF" />
+                                                                    <Text style={styles.videoLabel}>Video</Text>
+                                                                </View>
                                                             );
                                                         }
 

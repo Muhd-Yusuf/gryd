@@ -916,14 +916,17 @@ const DirectMessageChatScreen = () => {
                     if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
                 };
                 recorder.onstop = async () => {
-                    const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+                    // Chrome may report video/webm for audio-only recordings; normalize to audio/webm
+                    const rawMime = recorder.mimeType || 'audio/webm';
+                    const voiceMime = rawMime.replace(/^video\/webm/, 'audio/webm');
+                    const blob = new Blob(audioChunksRef.current, { type: voiceMime });
                     const durationMs = Date.now() - recordingStartRef.current;
 
                     // Upload to Cloudinary first (like native does)
                     try {
                         const blobUrl = URL.createObjectURL(blob);
                         const result = await uploadFile(
-                            { uri: blobUrl, name: `voice_${Date.now()}.webm`, type: blob.type || 'audio/webm' },
+                            { uri: blobUrl, name: `voice_${Date.now()}.webm`, type: voiceMime },
                             { type: 'voice-note', subgridId: subgridId || '' }
                         );
                         URL.revokeObjectURL(blobUrl);
@@ -933,7 +936,7 @@ const DirectMessageChatScreen = () => {
                                 type: 'audio',
                                 value: result.data.url || result.data.secure_url,
                                 label: 'Voice note',
-                                mimeType: blob.type || 'audio/webm',
+                                mimeType: voiceMime,
                                 durationMs,
                             });
                         }
