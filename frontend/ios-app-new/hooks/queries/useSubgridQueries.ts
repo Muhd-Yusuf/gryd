@@ -885,7 +885,7 @@ export const useAddChannelMember = (subgridId: string) => {
 
     return useMutation({
         mutationFn: async ({ channelId, userId }: { channelId: string; userId: string }) => {
-            const response = await communityPost(`/subgrids/${subgridId}/channels/${channelId}/members`, { userId });
+            const response = await communityPost(`/subgrids/${subgridId}/channels/${channelId}/members`, { userIds: [userId] });
             return response?.data;
         },
         onSuccess: (_, { channelId }) => {
