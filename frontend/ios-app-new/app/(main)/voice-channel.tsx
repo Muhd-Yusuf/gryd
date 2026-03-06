@@ -170,6 +170,12 @@ const VoiceChannelScreen = () => {
     });
 
     const nativeHook = useAgoraCall({
+        channelName: agoraChannelName,
+        token,
+        uid,
+        appId,
+        callId,
+        autoJoin: !isWeb && !!token && !!appId && !!agoraChannelName,
         onCallEnded: () => router.back(),
         onError: (err) => console.error('[VoiceChannel] Native Error:', err),
     });

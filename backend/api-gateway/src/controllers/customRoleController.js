@@ -31,7 +31,7 @@ const getRoles = async (req, res) => {
         });
     } catch (error) {
         console.error('Get roles error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -102,7 +102,7 @@ const createRole = async (req, res) => {
         if (error.code === 11000) {
             return res.status(400).json({ success: false, error: 'A role with this name already exists' });
         }
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -165,7 +165,7 @@ const updateRole = async (req, res) => {
         });
     } catch (error) {
         console.error('Update role error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -212,7 +212,7 @@ const deleteRole = async (req, res) => {
         });
     } catch (error) {
         console.error('Delete role error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -278,7 +278,7 @@ const assignRole = async (req, res) => {
         });
     } catch (error) {
         console.error('Assign role error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -323,7 +323,7 @@ const removeRole = async (req, res) => {
         });
     } catch (error) {
         console.error('Remove role error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -353,7 +353,7 @@ const getRoleMembers = async (req, res) => {
         });
     } catch (error) {
         console.error('Get role members error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 

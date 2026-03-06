@@ -671,7 +671,7 @@ const SubChannelScreen = () => {
 
         // Remove immediately (optimistic)
         if (isPost) {
-            setPosts((prev) => prev.filter((p) => p._id !== itemId));
+            setLocalPosts((prev) => prev.filter((p) => p._id !== itemId));
         } else {
             setLocalMessages((prev) => prev.filter((m) => m._id !== itemId));
             removeChannelMessageFromCache(channelId, itemId);
@@ -688,7 +688,7 @@ const SubChannelScreen = () => {
         } catch (err: any) {
             // Rollback on failure
             if (isPost) {
-                setPosts((prev) => [...prev, deletedItem].sort((a, b) => {
+                setLocalPosts((prev) => [...prev, deletedItem].sort((a, b) => {
                     const aTime = new Date(a.createdAt || 0).getTime();
                     const bTime = new Date(b.createdAt || 0).getTime();
                     return aTime - bTime;
@@ -1185,7 +1185,7 @@ const SubChannelScreen = () => {
             console.log('[SubChannel Like] API call successful');
             // Update local state optimistically
             if (isPost) {
-                setPosts((prev) =>
+                setLocalPosts((prev) =>
                     prev.map((p) =>
                         p._id === itemId
                             ? { ...p, userLiked: !isLiked, likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1) }
@@ -1233,7 +1233,7 @@ const SubChannelScreen = () => {
             console.log('[SubChannel Reshare] API call successful');
             // Update local state optimistically
             if (isPost) {
-                setPosts((prev) =>
+                setLocalPosts((prev) =>
                     prev.map((p) =>
                         p._id === itemId
                             ? { ...p, userReshared: !isReshared, reshareCount: (p.reshareCount || 0) + (isReshared ? -1 : 1) }
@@ -1303,7 +1303,7 @@ const SubChannelScreen = () => {
 
             // Update local state for comment count
             if (commentTarget.isPost) {
-                setPosts(prev => prev.map(p =>
+                setLocalPosts(prev => prev.map(p =>
                     p._id === commentTarget.id
                         ? { ...p, commentCount: (p.commentCount || 0) + 1 }
                         : p

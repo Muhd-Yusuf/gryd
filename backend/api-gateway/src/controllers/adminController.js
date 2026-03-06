@@ -279,7 +279,7 @@ exports.getDashboard = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load admin dashboard', error: error.message });
+        return res.status(500).json({ message: 'Failed to load admin dashboard' });
     }
 };
 
@@ -325,7 +325,7 @@ exports.listUsers = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load users', error: error.message });
+        return res.status(500).json({ message: 'Failed to load users' });
     }
 };
 
@@ -399,6 +399,6 @@ exports.getUserDetails = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load user details', error: error.message });
+        return res.status(500).json({ message: 'Failed to load user details' });
     }
 };

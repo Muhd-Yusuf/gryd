@@ -123,7 +123,7 @@ const uploadFile = async (req, res) => {
         });
     } catch (error) {
         console.error('File upload error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -178,7 +178,7 @@ const uploadAvatar = async (req, res) => {
         });
     } catch (error) {
         console.error('Avatar upload error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -233,7 +233,7 @@ const uploadBanner = async (req, res) => {
         });
     } catch (error) {
         console.error('Banner upload error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -297,7 +297,7 @@ const uploadVoiceNote = async (req, res) => {
         });
     } catch (error) {
         console.error('Voice note upload error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -327,7 +327,7 @@ const getUploadSignature = async (req, res) => {
         });
     } catch (error) {
         console.error('Signature generation error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -365,7 +365,7 @@ const getPresignedUrl = async (req, res) => {
         });
     } catch (error) {
         console.error('Presigned URL error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -431,7 +431,7 @@ const deleteFile = async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('File delete error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -473,7 +473,7 @@ const initiateDMCall = async (req, res) => {
         });
     } catch (error) {
         console.error('DM call initiation error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -505,7 +505,7 @@ const initiateChannelCall = async (req, res) => {
         });
     } catch (error) {
         console.error('Channel call initiation error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -537,7 +537,7 @@ const initiateGroupCall = async (req, res) => {
         });
     } catch (error) {
         console.error('Group call initiation error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -569,7 +569,7 @@ const getCallToken = async (req, res) => {
         });
     } catch (error) {
         console.error('Token refresh error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -615,7 +615,7 @@ const answerCall = async (req, res) => {
         });
     } catch (error) {
         console.error('Answer call error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -640,7 +640,7 @@ const declineCall = async (req, res) => {
         });
     } catch (error) {
         console.error('Decline call error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -665,7 +665,7 @@ const endCall = async (req, res) => {
         });
     } catch (error) {
         console.error('End call error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -689,7 +689,7 @@ const getCall = async (req, res) => {
         });
     } catch (error) {
         console.error('Get call error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -721,7 +721,7 @@ const getCallHistory = async (req, res) => {
         });
     } catch (error) {
         console.error('Get call history error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -735,7 +735,7 @@ const subscribeToCallEvents = async (req, res) => {
         callSignaling.registerConnection(userId, res);
     } catch (error) {
         console.error('Call events subscription error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -894,7 +894,7 @@ const joinVoiceChannel = async (req, res) => {
         });
     } catch (error) {
         console.error('Join voice channel error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -959,7 +959,7 @@ const leaveVoiceChannel = async (req, res) => {
         });
     } catch (error) {
         console.error('Leave voice channel error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -1063,7 +1063,7 @@ const getVoiceChannelParticipants = async (req, res) => {
         });
     } catch (error) {
         console.error('Get voice channel participants error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -1104,7 +1104,7 @@ const waveToSpeak = async (req, res) => {
         });
     } catch (error) {
         console.error('Wave to speak error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -1134,7 +1134,7 @@ const cancelWave = async (req, res) => {
         });
     } catch (error) {
         console.error('Cancel wave error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -1185,7 +1185,7 @@ const grantSpeaker = async (req, res) => {
         });
     } catch (error) {
         console.error('Grant speaker error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -1240,7 +1240,7 @@ const revokeSpeaker = async (req, res) => {
         });
     } catch (error) {
         console.error('Revoke speaker error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -1286,7 +1286,7 @@ const muteParticipant = async (req, res) => {
         });
     } catch (error) {
         console.error('Mute participant error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -1319,7 +1319,7 @@ const updateMuteState = async (req, res) => {
         });
     } catch (error) {
         console.error('Update mute state error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 

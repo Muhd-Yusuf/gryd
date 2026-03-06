@@ -32,6 +32,7 @@ const RootStack = () => {
                 <Stack.Screen name="stakeholder-signup" />
                 <Stack.Screen name="(main)" />
                 <Stack.Screen name="join" />
+                <Stack.Screen name="privacy-policy" />
             </Stack>
             <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         </>

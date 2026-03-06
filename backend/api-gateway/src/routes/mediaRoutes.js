@@ -109,10 +109,10 @@ const handleMulterError = (err, req, res, next) => {
                 error: 'File size exceeds limit'
             });
         }
-        return res.status(400).json({ success: false, error: err.message });
+        return res.status(400).json({ success: false, error: 'Invalid file upload' });
     }
     if (err) {
-        return res.status(400).json({ success: false, error: err.message });
+        return res.status(400).json({ success: false, error: 'Invalid file upload' });
     }
     next();
 };
@@ -333,8 +333,11 @@ router.post('/calls/voice-channel/update-mute',
 // DEV/DEBUG ROUTES
 // ===================
 
-// Reset rate limits (development only)
-router.post('/dev/reset-rate-limits', (req, res) => {
+// Reset rate limits (development only - requires authentication)
+router.post('/dev/reset-rate-limits', attachUserContext, requireUser, (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ message: 'Not available in production' });
+    }
     const { prefix } = req.body;
     clearRateLimitStore(prefix);
     res.json({ success: true, message: `Rate limits cleared${prefix ? ` for prefix: ${prefix}` : ''}` });

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Subgrid = require('../models/Subgrid');
 const SubgridMembership = require('../models/SubgridMembership');
@@ -61,8 +62,8 @@ exports.signup = async (req, res) => {
             role: 'member',
         });
 
-        // Generate simple token (in production, use JWT)
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        // Generate JWT token
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(201).json({
             success: true,
@@ -78,7 +79,7 @@ exports.signup = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/signup] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -110,8 +111,8 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid email or password' });
         }
 
-        // Generate token
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        // Generate JWT token
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(200).json({
             success: true,
@@ -128,7 +129,7 @@ exports.login = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/login] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -152,7 +153,7 @@ exports.getMe = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/me] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -167,7 +168,7 @@ exports.setPassword = async (req, res) => {
             return res.status(400).json({ message: 'Password must be at least 6 characters' });
         }
 
-        const user = await User.findById(req.user?.id || req.body.userId);
+        const user = await User.findById(req.user?.id);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -191,7 +192,7 @@ exports.setPassword = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/password] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -244,7 +245,7 @@ exports.validateInviteCode = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/validate-code] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -324,7 +325,7 @@ exports.signupWithCode = async (req, res) => {
         });
 
         // Generate token
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(201).json({
             success: true,
@@ -346,7 +347,7 @@ exports.signupWithCode = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/signup-with-code] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -420,7 +421,7 @@ exports.loginWithRole = async (req, res) => {
         }
 
         // Generate token
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(200).json({
             success: true,
@@ -444,7 +445,7 @@ exports.loginWithRole = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/login-with-role] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -456,7 +457,10 @@ exports.signupSuperAdmin = async (req, res) => {
         const { firstName, lastName, email, password, secretKey } = req.body;
 
         // Verify secret key for super admin creation
-        const SUPER_ADMIN_SECRET = process.env.SUPER_ADMIN_SECRET || 'GRYD_SUPER_ADMIN_2024';
+        const SUPER_ADMIN_SECRET = process.env.SUPER_ADMIN_SECRET;
+        if (!SUPER_ADMIN_SECRET) {
+            return res.status(500).json({ message: 'Super admin registration is not configured' });
+        }
         if (secretKey !== SUPER_ADMIN_SECRET) {
             return res.status(403).json({ message: 'Invalid secret key' });
         }
@@ -489,7 +493,7 @@ exports.signupSuperAdmin = async (req, res) => {
         });
 
         // Generate token
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(201).json({
             success: true,
@@ -506,7 +510,7 @@ exports.signupSuperAdmin = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/signup-super-admin] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -555,7 +559,7 @@ exports.sendOtp = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/send-otp] Error:', error);
-        res.status(500).json({ message: 'Failed to send verification code', error: error.message });
+        res.status(500).json({ message: 'Failed to send verification code' });
     }
 };
 
@@ -606,7 +610,7 @@ exports.verifyOtp = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/verify-otp] Error:', error);
-        res.status(500).json({ message: 'Failed to verify code', error: error.message });
+        res.status(500).json({ message: 'Failed to verify code' });
     }
 };
 
@@ -680,7 +684,7 @@ exports.signupMember = async (req, res) => {
         });
 
         // Generate token
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(201).json({
             success: true,
@@ -704,7 +708,7 @@ exports.signupMember = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/signup-member] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -759,7 +763,7 @@ exports.loginOtpRequest = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/login-otp-request] Error:', error);
-        res.status(500).json({ message: 'Failed to send verification code', error: error.message });
+        res.status(500).json({ message: 'Failed to send verification code' });
     }
 };
 
@@ -835,7 +839,7 @@ exports.loginOtpVerify = async (req, res) => {
         }
 
         // Generate token
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(200).json({
             success: true,
@@ -859,7 +863,7 @@ exports.loginOtpVerify = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/login-otp-verify] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -982,7 +986,7 @@ exports.inviteStakeholder = async (req, res) => {
         console.error('[inviteStakeholder] CATCH Error:', error.message, error.stack);
         clearTimeout(responseTimeout);
         if (!res.headersSent) {
-            res.status(500).json({ message: 'Failed to send invitation', error: error.message });
+            res.status(500).json({ message: 'Failed to send invitation' });
         }
     }
 };
@@ -1028,7 +1032,7 @@ exports.validateStakeholderInvite = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/validate-stakeholder-invite] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -1123,7 +1127,7 @@ exports.signupStakeholder = async (req, res) => {
         stakeholderInviteStore.delete(inviteToken);
 
         // Generate token
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(201).json({
             success: true,
@@ -1149,7 +1153,7 @@ exports.signupStakeholder = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/signup-stakeholder] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -1201,7 +1205,7 @@ exports.validateSetupToken = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/validate-setup] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -1281,7 +1285,7 @@ exports.completeSetup = async (req, res) => {
         }
 
         // Generate auth token
-        const token = Buffer.from(`${user._id}:${Date.now()}`).toString('base64');
+        const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         return res.status(200).json({
             success: true,
@@ -1312,7 +1316,7 @@ exports.completeSetup = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/complete-setup] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -1362,6 +1366,6 @@ exports.getMySubgrids = async (req, res) => {
         });
     } catch (error) {
         console.error('[auth/my-subgrids] Error:', error);
-        res.status(500).json({ message: 'Server Error', error: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };

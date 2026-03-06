@@ -14,7 +14,7 @@ const loadTenant = async (req, res, next) => {
         req.tenant = tenant;
         return next();
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load tenant', error: error.message });
+        return res.status(500).json({ message: 'Failed to load tenant' });
     }
 };
 

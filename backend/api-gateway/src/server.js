@@ -53,7 +53,11 @@ const corsOptions = {
         if (!origin) {
             return callback(null, true);
         }
-        if (corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+        // Always allow localhost for development
+        if (origin.match(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+            return callback(null, true);
+        }
+        if (corsOrigins.length > 0 && corsOrigins.includes(origin)) {
             return callback(null, true);
         }
         return callback(new Error(`CORS blocked origin: ${origin}`));
@@ -65,6 +69,15 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
+
+// Debug: log all incoming requests
+app.use((req, res, next) => {
+    if (req.method !== 'OPTIONS') {
+        console.log(`[REQ] ${req.method} ${req.path} | user: ${req.headers['x-user-id'] || 'none'} | auth: ${req.headers.authorization ? 'yes' : 'no'}`);
+    }
+    next();
+});
+
 app.use(metricsMiddleware);
 
 // Database Connection
