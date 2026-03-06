@@ -1,7 +1,10 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
-const EMBED_SECRET = process.env.EMBED_JWT_SECRET || 'embed-secret-placeholder';
+const EMBED_SECRET = process.env.EMBED_JWT_SECRET;
+if (!EMBED_SECRET) {
+    console.warn('[tokenUtils] EMBED_JWT_SECRET not set - embed token signing will fail');
+}
 
 const generateInviteToken = () => crypto.randomBytes(24).toString('hex');
 

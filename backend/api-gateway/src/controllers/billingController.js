@@ -16,7 +16,7 @@ exports.getBillingAccount = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: account });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load billing account', error: error.message });
+        return res.status(500).json({ message: 'Failed to load billing account' });
     }
 };
 
@@ -30,7 +30,7 @@ exports.updateBillingAccount = async (req, res) => {
         );
         return res.status(200).json({ success: true, data: account });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update billing account', error: error.message });
+        return res.status(500).json({ message: 'Failed to update billing account' });
     }
 };
 
@@ -47,7 +47,7 @@ exports.getSubscription = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: subscription });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load subscription', error: error.message });
+        return res.status(500).json({ message: 'Failed to load subscription' });
     }
 };
 
@@ -61,7 +61,7 @@ exports.updateSubscription = async (req, res) => {
         );
         return res.status(200).json({ success: true, data: subscription });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update subscription', error: error.message });
+        return res.status(500).json({ message: 'Failed to update subscription' });
     }
 };
 
@@ -71,7 +71,7 @@ exports.listUsageEvents = async (req, res) => {
         const events = await UsageEvent.find({ tenantId }).sort({ createdAt: -1 });
         return res.status(200).json({ success: true, data: events });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list usage events', error: error.message });
+        return res.status(500).json({ message: 'Failed to list usage events' });
     }
 };
 
@@ -87,7 +87,7 @@ exports.createUsageEvent = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: event });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create usage event', error: error.message });
+        return res.status(500).json({ message: 'Failed to create usage event' });
     }
 };
 
@@ -97,7 +97,7 @@ exports.listInvoices = async (req, res) => {
         const invoices = await Invoice.find({ tenantId }).sort({ issuedAt: -1 });
         return res.status(200).json({ success: true, data: invoices });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list invoices', error: error.message });
+        return res.status(500).json({ message: 'Failed to list invoices' });
     }
 };
 
@@ -115,7 +115,7 @@ exports.createInvoice = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: invoice });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create invoice', error: error.message });
+        return res.status(500).json({ message: 'Failed to create invoice' });
     }
 };
 
@@ -125,7 +125,7 @@ exports.listPaymentMethods = async (req, res) => {
         const methods = await PaymentMethod.find({ tenantId }).sort({ createdAt: -1 });
         return res.status(200).json({ success: true, data: methods });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list payment methods', error: error.message });
+        return res.status(500).json({ message: 'Failed to list payment methods' });
     }
 };
 
@@ -141,6 +141,6 @@ exports.addPaymentMethod = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: method });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to add payment method', error: error.message });
+        return res.status(500).json({ message: 'Failed to add payment method' });
     }
 };

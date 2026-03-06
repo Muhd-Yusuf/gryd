@@ -58,6 +58,13 @@ export interface CallSession {
 interface UseAgoraCallOptions {
     onCallEnded?: (callId: string, reason: string) => void;
     onError?: (error: Error) => void;
+    // Auto-join params for voice channels (pre-existing credentials)
+    channelName?: string;
+    token?: string;
+    uid?: number;
+    appId?: string;
+    callId?: string;
+    autoJoin?: boolean;
 }
 
 type AgoraModule = typeof import('react-native-agora');
@@ -544,6 +551,66 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             }, 1500);
         }
     }, [callState, stopDurationTimer, options]);
+
+    // Auto-join for voice channels (pre-existing credentials)
+    useEffect(() => {
+        if (!options.autoJoin || !options.channelName || !options.token || !options.appId) return;
+        if (callStateRef.current !== 'idle') return;
+
+        const joinAsync = async () => {
+            const agora = getAgoraModule();
+            if (!agora) {
+                const message = getAgoraUnavailableMessage();
+                setError(message);
+                return;
+            }
+
+            const hasPermission = await requestAndroidPermissions();
+            if (!hasPermission) {
+                setError('Microphone permission required');
+                return;
+            }
+
+            try {
+                setCallState('connecting');
+                setError(null);
+                setCallDuration(0);
+
+                const engine = await initEngine(options.appId!);
+                engine.setClientRole(agora.ClientRoleType.ClientRoleBroadcaster);
+
+                console.log('[Agora Native] Auto-joining voice channel:', options.channelName, 'uid:', options.uid);
+                engine.joinChannel(options.token!, options.channelName!, options.uid || 0, {
+                    clientRoleType: agora.ClientRoleType.ClientRoleBroadcaster,
+                    publishMicrophoneTrack: true,
+                    publishCameraTrack: false,
+                    autoSubscribeAudio: true,
+                    autoSubscribeVideo: false,
+                });
+
+                setCurrentCall({
+                    callId: options.callId || '',
+                    channelName: options.channelName!,
+                    callType: 'audio',
+                    token: options.token!,
+                    uid: options.uid || 0,
+                    appId: options.appId!,
+                    participants: [],
+                    duration: 0,
+                });
+
+                setCallState('connected');
+                startDurationTimer();
+            } catch (err: any) {
+                console.error('[Agora Native] Auto-join failed:', err);
+                setError(err.message);
+                setCallState('idle');
+                options.onError?.(err);
+            }
+        };
+
+        joinAsync();
+    }, [options.autoJoin, options.channelName, options.token, options.appId, options.uid, options.callId, initEngine, startDurationTimer]);
 
     // Cleanup on unmount
     useEffect(() => {

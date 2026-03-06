@@ -7,6 +7,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { subscribeToCallEventsAsync } from '../lib/api';
+import { useWebSocketContext } from './WebSocketContext';
 
 export interface IncomingCall {
     callId: string;
@@ -69,6 +70,7 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
     const activeCallRef = useRef<ActiveCall | null>(null);
     const routerRef = useRef(router);
     const sseSetupRef = useRef(false);
+    const { subscribe } = useWebSocketContext();
     // Track handled call IDs to prevent showing the same incoming call multiple times
     // (can happen due to multiple SSE connections from hot-reload)
     const handledCallIdsRef = useRef<Set<string>>(new Set());
@@ -280,6 +282,38 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
             sseSetupRef.current = false;
         };
     }, [handleCallEvent]);
+
+    // On native platforms, subscribe to call events via WebSocket (SSE/EventSource is web-only)
+    useEffect(() => {
+        if (Platform.OS === 'web') return;
+
+        const unsubs: (() => void)[] = [];
+
+        unsubs.push(subscribe('incoming_call', (data: any) => {
+            handleCallEvent('incoming_call', data);
+        }));
+
+        unsubs.push(subscribe('call_answered', (data: any) => {
+            handleCallEvent('call_answered', data);
+        }));
+
+        unsubs.push(subscribe('call_ended', (data: any) => {
+            handleCallEvent('call_ended', data);
+        }));
+
+        // call_declined and call_missed use the same handler as call_ended in handleCallEvent
+        unsubs.push(subscribe('call_declined' as any, (data: any) => {
+            handleCallEvent('call_declined', data);
+        }));
+
+        unsubs.push(subscribe('call_missed' as any, (data: any) => {
+            handleCallEvent('call_missed', data);
+        }));
+
+        return () => {
+            unsubs.forEach(unsub => unsub());
+        };
+    }, [subscribe, handleCallEvent]);
 
     return (
         <CallContext.Provider value={{ incomingCall, activeCall, setActiveCall, startActiveCall, markCallConnected, answerCall, declineCall, clearIncomingCall, endCall }}>

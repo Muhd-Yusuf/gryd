@@ -42,7 +42,7 @@ const registerPushToken = async (req, res) => {
         });
     } catch (error) {
         console.error('Register push token error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -74,7 +74,7 @@ const unregisterPushToken = async (req, res) => {
         });
     } catch (error) {
         console.error('Unregister push token error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -109,7 +109,7 @@ const sendTestNotification = async (req, res) => {
         });
     } catch (error) {
         console.error('Send test notification error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -128,7 +128,7 @@ const getPushTokens = async (req, res) => {
         });
     } catch (error) {
         console.error('Get push tokens error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -165,7 +165,7 @@ const updatePreferences = async (req, res) => {
         });
     } catch (error) {
         console.error('Update preferences error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -195,7 +195,7 @@ const getPreferences = async (req, res) => {
         });
     } catch (error) {
         console.error('Get preferences error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -233,7 +233,7 @@ const getInboxNotifications = async (req, res) => {
         });
     } catch (error) {
         console.error('Get inbox notifications error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -269,7 +269,7 @@ const markAsRead = async (req, res) => {
         });
     } catch (error) {
         console.error('Mark as read error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -302,7 +302,7 @@ const deleteNotifications = async (req, res) => {
         });
     } catch (error) {
         console.error('Delete notifications error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -363,7 +363,7 @@ const getUnreadCount = async (req, res) => {
         });
     } catch (error) {
         console.error('Get unread count error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false });
     }
 };
 

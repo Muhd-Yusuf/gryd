@@ -16,7 +16,7 @@ const loadSubgrid = async (req, res, next) => {
         req.subgrid = subgrid;
         return next();
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load subgrid', error: error.message });
+        return res.status(500).json({ message: 'Failed to load subgrid' });
     }
 };
 
@@ -57,7 +57,7 @@ const requireSubgridRead = async (req, res, next) => {
         return next();
     } catch (error) {
         console.error('[requireSubgridRead] error:', error);
-        return res.status(500).json({ message: 'Failed to check subgrid access', error: error.message });
+        return res.status(500).json({ message: 'Failed to check subgrid access' });
     }
 };
 

@@ -51,6 +51,7 @@ const {
     resharePost,
     unresharePost,
     getPostEngagement,
+    listDMConversations,
     listDirectMessages,
     createDirectMessage,
     flagDirectMessage,
@@ -188,7 +189,7 @@ router.delete('/subgrids/:subgridId/events/:eventId', requireUser, loadSubgrid, 
 router.get('/subgrids/:subgridId/messages', loadSubgrid, requireSubgridRead, listMessages);
 router.post('/subgrids/:subgridId/messages', loadSubgrid, requireSubgridWrite, createMessage);
 router.delete('/subgrids/:subgridId/messages/:messageId', requireUser, loadSubgrid, requireSubgridRead, deleteMessage);
-router.post('/subgrids/:subgridId/messages/:messageId/flag', loadSubgrid, requireSubgridRead, flagMessage);
+router.post('/subgrids/:subgridId/messages/:messageId/flag', requireUser, loadSubgrid, requireSubgridRead, flagMessage);
 
 // Message likes, reshares, and comments
 router.post('/subgrids/:subgridId/messages/:messageId/like', requireUser, loadSubgrid, requireSubgridWrite, likeMessage);
@@ -217,6 +218,7 @@ router.get('/subgrids/:subgridId/posts/:postId/engagement', loadSubgrid, require
 router.post('/subgrids/:subgridId/reactions', requireUser, loadSubgrid, requireSubgridWrite, addReaction);
 router.delete('/subgrids/:subgridId/reactions', requireUser, loadSubgrid, requireSubgridWrite, removeReaction);
 
+router.get('/subgrids/:subgridId/direct-messages/conversations', requireUser, loadSubgrid, requireSubgridRead, listDMConversations);
 router.get('/subgrids/:subgridId/direct-messages', requireUser, loadSubgrid, requireSubgridRead, listDirectMessages);
 router.post('/subgrids/:subgridId/direct-messages', requireUser, loadSubgrid, requireSubgridWrite, createDirectMessage);
 router.post('/subgrids/:subgridId/direct-messages/:directMessageId/flag', requireUser, loadSubgrid, requireSubgridRead, flagDirectMessage);

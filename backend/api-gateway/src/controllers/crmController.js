@@ -53,7 +53,7 @@ exports.listLeads = async (req, res) => {
         const leads = await Lead.find({ tenantId }).sort({ createdAt: -1 });
         return res.status(200).json({ success: true, data: leads });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list leads', error: error.message });
+        return res.status(500).json({ message: 'Failed to list leads' });
     }
 };
 
@@ -74,7 +74,7 @@ exports.createLead = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: lead });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create lead', error: error.message });
+        return res.status(500).json({ message: 'Failed to create lead' });
     }
 };
 
@@ -87,16 +87,24 @@ exports.getLead = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: lead });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load lead', error: error.message });
+        return res.status(500).json({ message: 'Failed to load lead' });
     }
 };
 
 exports.updateLead = async (req, res) => {
     try {
         const { tenantId, leadId } = req.params;
+        // Whitelist allowed fields to prevent NoSQL injection and mass assignment
+        const allowedFields = ['name', 'email', 'phone', 'company', 'status', 'source', 'notes', 'tags', 'assignedTo', 'value', 'customFields'];
+        const updateData = {};
+        for (const key of allowedFields) {
+            if (req.body[key] !== undefined) {
+                updateData[key] = req.body[key];
+            }
+        }
         const lead = await Lead.findOneAndUpdate(
             { tenantId, _id: leadId },
-            { $set: req.body || {} },
+            { $set: updateData },
             { new: true }
         );
         if (!lead) {
@@ -104,7 +112,7 @@ exports.updateLead = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: lead });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update lead', error: error.message });
+        return res.status(500).json({ message: 'Failed to update lead' });
     }
 };
 
@@ -116,7 +124,7 @@ exports.deleteLead = async (req, res) => {
         await LeadActivity.deleteMany({ tenantId, leadId });
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete lead', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete lead' });
     }
 };
 
@@ -127,7 +135,7 @@ exports.listPipelineStages = async (req, res) => {
         const stages = await PipelineStage.find({ tenantId }).sort({ order: 1 });
         return res.status(200).json({ success: true, data: stages });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list pipeline stages', error: error.message });
+        return res.status(500).json({ message: 'Failed to list pipeline stages' });
     }
 };
 
@@ -146,7 +154,7 @@ exports.createPipelineStage = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: stage });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create pipeline stage', error: error.message });
+        return res.status(500).json({ message: 'Failed to create pipeline stage' });
     }
 };
 
@@ -163,7 +171,7 @@ exports.updatePipelineStage = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: stage });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update pipeline stage', error: error.message });
+        return res.status(500).json({ message: 'Failed to update pipeline stage' });
     }
 };
 
@@ -176,7 +184,7 @@ exports.deletePipelineStage = async (req, res) => {
         }
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete pipeline stage', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete pipeline stage' });
     }
 };
 
@@ -186,7 +194,7 @@ exports.listTasks = async (req, res) => {
         const tasks = await Task.find({ tenantId }).sort({ createdAt: -1 });
         return res.status(200).json({ success: true, data: tasks });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list tasks', error: error.message });
+        return res.status(500).json({ message: 'Failed to list tasks' });
     }
 };
 
@@ -210,7 +218,7 @@ exports.createTask = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: task });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create task', error: error.message });
+        return res.status(500).json({ message: 'Failed to create task' });
     }
 };
 
@@ -227,7 +235,7 @@ exports.updateTask = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: task });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update task', error: error.message });
+        return res.status(500).json({ message: 'Failed to update task' });
     }
 };
 
@@ -237,7 +245,7 @@ exports.deleteTask = async (req, res) => {
         await Task.findOneAndDelete({ tenantId, _id: taskId });
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete task', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete task' });
     }
 };
 
@@ -247,7 +255,7 @@ exports.listActivities = async (req, res) => {
         const activities = await LeadActivity.find({ tenantId, leadId }).sort({ createdAt: -1 });
         return res.status(200).json({ success: true, data: activities });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list activities', error: error.message });
+        return res.status(500).json({ message: 'Failed to list activities' });
     }
 };
 
@@ -264,7 +272,7 @@ exports.createActivity = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: activity });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create activity', error: error.message });
+        return res.status(500).json({ message: 'Failed to create activity' });
     }
 };
 
@@ -321,7 +329,7 @@ exports.listCampaigns = async (req, res) => {
             meta: buildMeta(total, pagination.page, pagination.limit, pagination.enabled),
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list campaigns', error: error.message });
+        return res.status(500).json({ message: 'Failed to list campaigns' });
     }
 };
 
@@ -342,7 +350,7 @@ exports.createCampaign = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: campaign });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create campaign', error: error.message });
+        return res.status(500).json({ message: 'Failed to create campaign' });
     }
 };
 
@@ -359,7 +367,7 @@ exports.updateCampaign = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: campaign });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update campaign', error: error.message });
+        return res.status(500).json({ message: 'Failed to update campaign' });
     }
 };
 
@@ -369,7 +377,7 @@ exports.deleteCampaign = async (req, res) => {
         await Campaign.findOneAndDelete({ tenantId, _id: campaignId });
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete campaign', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete campaign' });
     }
 };
 
@@ -423,7 +431,7 @@ exports.listReports = async (req, res) => {
             meta: buildMeta(total, pagination.page, pagination.limit, pagination.enabled),
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list reports', error: error.message });
+        return res.status(500).json({ message: 'Failed to list reports' });
     }
 };
 
@@ -443,7 +451,7 @@ exports.createReport = async (req, res) => {
         });
         return res.status(201).json({ success: true, data: report });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create report', error: error.message });
+        return res.status(500).json({ message: 'Failed to create report' });
     }
 };
 
@@ -460,7 +468,7 @@ exports.updateReport = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: report });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update report', error: error.message });
+        return res.status(500).json({ message: 'Failed to update report' });
     }
 };
 
@@ -473,6 +481,6 @@ exports.deleteReport = async (req, res) => {
         }
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete report', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete report' });
     }
 };

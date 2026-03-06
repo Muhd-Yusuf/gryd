@@ -59,23 +59,27 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
         // Dynamically resolve WebSocket URL, especially important for mobile
         let wsUrl: string;
+        const baseUrl = getApiBaseUrl();
+
         if (Platform.OS !== 'web') {
-            // For native apps, get the dev machine's IP from Expo
-            const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
-            if (hostUri) {
-                const host = String(hostUri).split(':')[0];
-                if (host && host !== 'localhost') {
-                    wsUrl = `http://${host}:4000`;
+            // If API points to a remote server, use the same host for WebSocket
+            if (!baseUrl.includes('localhost') && !baseUrl.includes('127.0.0.1')) {
+                wsUrl = baseUrl.replace(/\/api$/, '');
+            } else {
+                // For local development, use Expo's hostUri to get dev machine IP
+                const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
+                if (hostUri) {
+                    const host = String(hostUri).split(':')[0];
+                    if (host && host !== 'localhost') {
+                        wsUrl = `http://${host}:4000`;
+                    } else {
+                        wsUrl = baseUrl.replace(/\/api$/, '');
+                    }
                 } else {
-                    const baseUrl = getApiBaseUrl();
                     wsUrl = baseUrl.replace(/\/api$/, '');
                 }
-            } else {
-                const baseUrl = getApiBaseUrl();
-                wsUrl = baseUrl.replace(/\/api$/, '');
             }
         } else {
-            const baseUrl = getApiBaseUrl();
             wsUrl = baseUrl.replace(/\/api$/, '');
         }
 
@@ -84,19 +88,17 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             reconnectionAttempts: 10,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
-            transports: ['websocket', 'polling'],
+            transports: ['polling', 'websocket'],
             autoConnect: true,
         });
 
         const socket = socketRef.current;
 
         socket.on('connect', () => {
-            // Don't set connected yet - wait for authentication
             socket.emit('authenticate', { userId, tenantId });
         });
 
         socket.on('authenticated', () => {
-            // NOW we're fully connected and authenticated
             setStatus('connected');
 
             // Rejoin rooms after authentication is complete
@@ -142,6 +144,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             'presence_changed', 'user_typing',
             'incoming_call', 'call_answered', 'call_ended',
             'notification', 'dashboard_update', 'user_status_changed',
+            // Untyped but needed for native call handling:
+            'call_declined' as any, 'call_missed' as any,
         ];
 
         eventTypes.forEach((eventType) => {
@@ -176,6 +180,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
                 handlers.forEach((handler) => handler({ ...data, roomType: 'dm' }));
             }
         });
+
     }, []);
 
     const disconnect = useCallback(() => {

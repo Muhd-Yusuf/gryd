@@ -130,6 +130,6 @@ exports.bootstrap = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to bootstrap', error: error.message });
+        return res.status(500).json({ message: 'Failed to bootstrap' });
     }
 };

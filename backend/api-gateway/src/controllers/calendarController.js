@@ -145,7 +145,7 @@ exports.listEvents = async (req, res) => {
         const events = await CalendarEvent.find(filter).sort({ startAt: 1 });
         return res.status(200).json({ success: true, data: events });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list events', error: error.message });
+        return res.status(500).json({ message: 'Failed to list events' });
     }
 };
 
@@ -196,7 +196,7 @@ exports.createEvent = async (req, res) => {
         const event = await CalendarEvent.create(baseEvent);
         return res.status(201).json({ success: true, data: event });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create event', error: error.message });
+        return res.status(500).json({ message: 'Failed to create event' });
     }
 };
 
@@ -254,7 +254,7 @@ exports.updateEvent = async (req, res) => {
         );
         return res.status(200).json({ success: true, data: updated });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update event', error: error.message });
+        return res.status(500).json({ message: 'Failed to update event' });
     }
 };
 
@@ -285,7 +285,7 @@ exports.deleteEvent = async (req, res) => {
         await CalendarEvent.findOneAndDelete({ tenantId, _id: eventId });
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete event', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete event' });
     }
 };
 
@@ -303,7 +303,7 @@ exports.listConnections = async (req, res) => {
         }));
         return res.status(200).json({ success: true, data: safeConnections });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list connections', error: error.message });
+        return res.status(500).json({ message: 'Failed to list connections' });
     }
 };
 
@@ -331,7 +331,7 @@ exports.connectGoogle = async (req, res) => {
 
         return res.status(200).json({ success: true, data: { authUrl } });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create Google auth url', error: error.message });
+        return res.status(500).json({ message: 'Failed to create Google auth url' });
     }
 };
 
@@ -441,7 +441,7 @@ exports.syncGoogleCalendar = async (req, res) => {
 
         return res.status(200).json({ success: true, data: { synced } });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to sync Google calendar', error: error.message });
+        return res.status(500).json({ message: 'Failed to sync Google calendar' });
     }
 };
 
@@ -452,6 +452,6 @@ exports.disconnectGoogle = async (req, res) => {
         await CalendarConnection.findOneAndDelete({ tenantId, userId, provider: 'google' });
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to disconnect Google calendar', error: error.message });
+        return res.status(500).json({ message: 'Failed to disconnect Google calendar' });
     }
 };

@@ -198,7 +198,7 @@ exports.getOverview = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.getOverview] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to load overview', error: error.message });
+        return res.status(500).json({ message: 'Failed to load overview' });
     }
 };
 
@@ -272,7 +272,7 @@ exports.getCustomers = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.getCustomers] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to load customers', error: error.message });
+        return res.status(500).json({ message: 'Failed to load customers' });
     }
 };
 
@@ -361,7 +361,7 @@ exports.getCustomerDetails = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.getCustomerDetails] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to load customer details', error: error.message });
+        return res.status(500).json({ message: 'Failed to load customer details' });
     }
 };
 
@@ -397,7 +397,7 @@ exports.updateCustomer = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.updateCustomer] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to update customer', error: error.message });
+        return res.status(500).json({ message: 'Failed to update customer' });
     }
 };
 
@@ -449,7 +449,7 @@ exports.getModerationQueue = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.getModerationQueue] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to load moderation queue', error: error.message });
+        return res.status(500).json({ message: 'Failed to load moderation queue' });
     }
 };
 
@@ -485,7 +485,7 @@ exports.getConfiguration = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.getConfiguration] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to load configuration', error: error.message });
+        return res.status(500).json({ message: 'Failed to load configuration' });
     }
 };
 
@@ -512,7 +512,7 @@ exports.updateConfiguration = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.updateConfiguration] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to update configuration', error: error.message });
+        return res.status(500).json({ message: 'Failed to update configuration' });
     }
 };
 
@@ -642,7 +642,7 @@ exports.createCustomer = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.createCustomer] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to create customer', error: error.message });
+        return res.status(500).json({ message: 'Failed to create customer' });
     }
 };
 
@@ -699,7 +699,7 @@ exports.deleteCustomer = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.deleteCustomer] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to delete customer', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete customer' });
     }
 };
 
@@ -801,7 +801,7 @@ exports.upgradeCustomerPlan = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.upgradeCustomerPlan] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to upgrade customer plan', error: error.message });
+        return res.status(500).json({ message: 'Failed to upgrade customer plan' });
     }
 };
 
@@ -845,7 +845,7 @@ exports.getUsers = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.getUsers] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to load users', error: error.message });
+        return res.status(500).json({ message: 'Failed to load users' });
     }
 };
 
@@ -894,7 +894,7 @@ exports.getTeamMembers = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.getTeamMembers] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to load team members', error: error.message });
+        return res.status(500).json({ message: 'Failed to load team members' });
     }
 };
 
@@ -972,7 +972,7 @@ exports.inviteTeamMember = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.inviteTeamMember] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to invite team member', error: error.message });
+        return res.status(500).json({ message: 'Failed to invite team member' });
     }
 };
 
@@ -1022,7 +1022,7 @@ exports.inviteUser = async (req, res) => {
             message: 'User created successfully',
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to invite user', error: error.message });
+        return res.status(500).json({ message: 'Failed to invite user' });
     }
 };
 
@@ -1069,7 +1069,7 @@ exports.deleteTeamMember = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.deleteTeamMember] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to delete team member', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete team member' });
     }
 };
 
@@ -1113,6 +1113,6 @@ exports.suspendTeamMember = async (req, res) => {
         });
     } catch (error) {
         console.error('[superAdmin.suspendTeamMember] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to update team member status', error: error.message });
+        return res.status(500).json({ message: 'Failed to update team member status' });
     }
 };

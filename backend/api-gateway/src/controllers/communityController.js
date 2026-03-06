@@ -411,7 +411,7 @@ exports.getUserProfile = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to get user profile', error: error.message });
+        return res.status(500).json({ message: 'Failed to get user profile' });
     }
 };
 
@@ -489,7 +489,7 @@ exports.updateUserProfile = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update user profile', error: error.message });
+        return res.status(500).json({ message: 'Failed to update user profile' });
     }
 };
 
@@ -517,7 +517,7 @@ exports.listTenants = async (req, res) => {
 
         return res.status(200).json({ success: true, data: tenantsWithRole });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list tenants', error: error.message });
+        return res.status(500).json({ message: 'Failed to list tenants' });
     }
 };
 
@@ -556,7 +556,7 @@ exports.createTenant = async (req, res) => {
 
         return res.status(201).json({ success: true, data: tenant });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create tenant', error: error.message });
+        return res.status(500).json({ message: 'Failed to create tenant' });
     }
 };
 
@@ -582,7 +582,7 @@ exports.addTenantMember = async (req, res) => {
 
         return res.status(200).json({ success: true, data: newMembership });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to add tenant member', error: error.message });
+        return res.status(500).json({ message: 'Failed to add tenant member' });
     }
 };
 
@@ -669,7 +669,7 @@ exports.createSubgrid = async (req, res) => {
 
         return res.status(201).json({ success: true, data: subgrid });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create subgrid', error: error.message });
+        return res.status(500).json({ message: 'Failed to create subgrid' });
     }
 };
 
@@ -705,7 +705,7 @@ exports.listTenantSubgrids = async (req, res) => {
 
         return res.status(200).json({ success: true, data: subgrids });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load subgrids', error: error.message });
+        return res.status(500).json({ message: 'Failed to load subgrids' });
     }
 };
 
@@ -718,7 +718,7 @@ exports.getSubgridDetails = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: subgrid });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load subgrid', error: error.message });
+        return res.status(500).json({ message: 'Failed to load subgrid' });
     }
 };
 
@@ -836,7 +836,7 @@ exports.updateSubgrid = async (req, res) => {
         const updated = await Subgrid.findByIdAndUpdate(subgridId, updates, { new: true });
         return res.status(200).json({ success: true, data: updated });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update subgrid', error: error.message });
+        return res.status(500).json({ message: 'Failed to update subgrid' });
     }
 };
 
@@ -863,7 +863,7 @@ exports.addSubgridMember = async (req, res) => {
 
         return res.status(200).json({ success: true, data: newMembership });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to add subgrid member', error: error.message });
+        return res.status(500).json({ message: 'Failed to add subgrid member' });
     }
 };
 
@@ -894,7 +894,7 @@ exports.getMySubgridRole = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to get role', error: error.message });
+        return res.status(500).json({ message: 'Failed to get role' });
     }
 };
 
@@ -973,7 +973,7 @@ exports.listSubgridMembers = async (req, res) => {
 
         return res.status(200).json({ success: true, data: enrichedMembers });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load members', error: error.message });
+        return res.status(500).json({ message: 'Failed to load members' });
     }
 };
 
@@ -1021,7 +1021,7 @@ exports.updateSubgridMember = async (req, res) => {
 
         return res.status(200).json({ success: true, data: updated });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update member', error: error.message });
+        return res.status(500).json({ message: 'Failed to update member' });
     }
 };
 
@@ -1047,7 +1047,7 @@ exports.removeSubgridMember = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to remove member', error: error.message });
+        return res.status(500).json({ message: 'Failed to remove member' });
     }
 };
 
@@ -1099,7 +1099,7 @@ exports.createInviteLink = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create invite link', error: error.message });
+        return res.status(500).json({ message: 'Failed to create invite link' });
     }
 };
 
@@ -1227,7 +1227,7 @@ exports.inviteByEmail = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to send invite', error: error.message });
+        return res.status(500).json({ message: 'Failed to send invite' });
     }
 };
 
@@ -1302,7 +1302,7 @@ exports.resendInviteEmail = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to resend invite', error: error.message });
+        return res.status(500).json({ message: 'Failed to resend invite' });
     }
 };
 
@@ -1350,7 +1350,7 @@ exports.validateInviteToken = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to validate invite', error: error.message });
+        return res.status(500).json({ message: 'Failed to validate invite' });
     }
 };
 
@@ -1391,7 +1391,7 @@ exports.listPendingInvites = async (req, res) => {
             })),
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list pending invites', error: error.message });
+        return res.status(500).json({ message: 'Failed to list pending invites' });
     }
 };
 
@@ -1406,7 +1406,7 @@ exports.listInviteLinks = async (req, res) => {
         const invites = await InviteLink.find({ subgridId }).sort({ createdAt: -1 });
         return res.status(200).json({ success: true, data: invites });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list invites', error: error.message });
+        return res.status(500).json({ message: 'Failed to list invites' });
     }
 };
 
@@ -1428,7 +1428,7 @@ exports.revokeInviteLink = async (req, res) => {
         }
         return res.status(200).json({ success: true, data: updated });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to revoke invite', error: error.message });
+        return res.status(500).json({ message: 'Failed to revoke invite' });
     }
 };
 
@@ -1501,7 +1501,7 @@ exports.acceptInviteLink = async (req, res) => {
 
         return res.status(200).json({ success: true, data: membership });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to accept invite', error: error.message });
+        return res.status(500).json({ message: 'Failed to accept invite' });
     }
 };
 
@@ -1583,7 +1583,7 @@ exports.issueEmbedToken = async (req, res) => {
 
         return res.status(200).json({ success: true, token });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to issue embed token', error: error.message });
+        return res.status(500).json({ message: 'Failed to issue embed token' });
     }
 };
 
@@ -1637,7 +1637,7 @@ exports.listChannels = async (req, res) => {
 
         return res.status(200).json({ success: true, data: channels });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list channels', error: error.message });
+        return res.status(500).json({ message: 'Failed to list channels' });
     }
 };
 
@@ -1677,7 +1677,7 @@ exports.createChannel = async (req, res) => {
 
         return res.status(201).json({ success: true, data: channel });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create channel', error: error.message });
+        return res.status(500).json({ message: 'Failed to create channel' });
     }
 };
 
@@ -1739,7 +1739,7 @@ exports.updateChannel = async (req, res) => {
 
         return res.status(200).json({ success: true, data: channel });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update channel', error: error.message });
+        return res.status(500).json({ message: 'Failed to update channel' });
     }
 };
 
@@ -1786,7 +1786,7 @@ exports.deleteChannel = async (req, res) => {
         return res.status(200).json({ success: true, message: 'Channel deleted' });
     } catch (error) {
         console.error('[deleteChannel] Error:', error.message);
-        return res.status(500).json({ message: 'Failed to delete channel', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete channel' });
     }
 };
 
@@ -1839,7 +1839,7 @@ exports.listChannelMembers = async (req, res) => {
 
         return res.status(200).json({ success: true, data: enriched });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list channel members', error: error.message });
+        return res.status(500).json({ message: 'Failed to list channel members' });
     }
 };
 
@@ -1958,7 +1958,7 @@ exports.addChannelMembers = async (req, res) => {
 
         return res.status(200).json({ success: true, data: updatedChannel });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to add channel members', error: error.message });
+        return res.status(500).json({ message: 'Failed to add channel members' });
     }
 };
 
@@ -1989,7 +1989,7 @@ exports.removeChannelMember = async (req, res) => {
 
         return res.status(200).json({ success: true, data: updatedChannel });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to remove channel member', error: error.message });
+        return res.status(500).json({ message: 'Failed to remove channel member' });
     }
 };
 
@@ -2009,7 +2009,7 @@ exports.listCategories = async (req, res) => {
         const categories = await Category.find({ subgridId: String(subgridId) }).sort({ order: 1, createdAt: 1 });
         return res.status(200).json({ success: true, data: categories });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list categories', error: error.message });
+        return res.status(500).json({ message: 'Failed to list categories' });
     }
 };
 
@@ -2042,7 +2042,7 @@ exports.createCategory = async (req, res) => {
 
         return res.status(201).json({ success: true, data: category });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create category', error: error.message });
+        return res.status(500).json({ message: 'Failed to create category' });
     }
 };
 
@@ -2074,7 +2074,7 @@ exports.updateCategory = async (req, res) => {
 
         return res.status(200).json({ success: true, data: category });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update category', error: error.message });
+        return res.status(500).json({ message: 'Failed to update category' });
     }
 };
 
@@ -2102,7 +2102,7 @@ exports.deleteCategory = async (req, res) => {
 
         return res.status(200).json({ success: true, message: 'Category deleted' });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete category', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete category' });
     }
 };
 
@@ -2132,7 +2132,7 @@ exports.listEvents = async (req, res) => {
         const events = await Event.find(filter).sort({ startDate: 1 });
         return res.status(200).json({ success: true, data: events });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list events', error: error.message });
+        return res.status(500).json({ message: 'Failed to list events' });
     }
 };
 
@@ -2168,7 +2168,7 @@ exports.createEvent = async (req, res) => {
 
         return res.status(201).json({ success: true, data: event });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create event', error: error.message });
+        return res.status(500).json({ message: 'Failed to create event' });
     }
 };
 
@@ -2203,7 +2203,7 @@ exports.updateEvent = async (req, res) => {
 
         return res.status(200).json({ success: true, data: event });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update event', error: error.message });
+        return res.status(500).json({ message: 'Failed to update event' });
     }
 };
 
@@ -2225,7 +2225,7 @@ exports.deleteEvent = async (req, res) => {
 
         return res.status(200).json({ success: true, message: 'Event deleted' });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete event', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete event' });
     }
 };
 
@@ -2297,7 +2297,7 @@ exports.listMessages = async (req, res) => {
 
         return res.status(200).json({ success: true, data: messagesWithUserFlags });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list messages', error: error.message });
+        return res.status(500).json({ message: 'Failed to list messages' });
     }
 };
 
@@ -2429,7 +2429,7 @@ exports.createMessage = async (req, res) => {
 
         return res.status(201).json({ success: true, data: message });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create message', error: error.message });
+        return res.status(500).json({ message: 'Failed to create message' });
     }
 };
 
@@ -2496,7 +2496,7 @@ exports.flagMessage = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to flag message', error: error.message });
+        return res.status(500).json({ message: 'Failed to flag message' });
     }
 };
 
@@ -2553,7 +2553,7 @@ exports.listPosts = async (req, res) => {
 
         return res.status(200).json({ success: true, data: postsWithFlags });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list posts', error: error.message });
+        return res.status(500).json({ message: 'Failed to list posts' });
     }
 };
 
@@ -2646,7 +2646,7 @@ exports.createPost = async (req, res) => {
 
         return res.status(201).json({ success: true, data: post });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create post', error: error.message });
+        return res.status(500).json({ message: 'Failed to create post' });
     }
 };
 
@@ -2670,7 +2670,7 @@ exports.listComments = async (req, res) => {
 
         return res.status(200).json({ success: true, data: comments });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list comments', error: error.message });
+        return res.status(500).json({ message: 'Failed to list comments' });
     }
 };
 
@@ -2758,7 +2758,7 @@ exports.createComment = async (req, res) => {
 
         return res.status(201).json({ success: true, data: comment });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create comment', error: error.message });
+        return res.status(500).json({ message: 'Failed to create comment' });
     }
 };
 
@@ -2824,7 +2824,7 @@ exports.flagPost = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to flag post', error: error.message });
+        return res.status(500).json({ message: 'Failed to flag post' });
     }
 };
 
@@ -2873,7 +2873,7 @@ exports.flagComment = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to flag comment', error: error.message });
+        return res.status(500).json({ message: 'Failed to flag comment' });
     }
 };
 
@@ -2920,7 +2920,7 @@ exports.addReaction = async (req, res) => {
 
         return res.status(201).json({ success: true, data: reaction });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to add reaction', error: error.message });
+        return res.status(500).json({ message: 'Failed to add reaction' });
     }
 };
 
@@ -2949,7 +2949,7 @@ exports.removeReaction = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to remove reaction', error: error.message });
+        return res.status(500).json({ message: 'Failed to remove reaction' });
     }
 };
 
@@ -3033,7 +3033,7 @@ exports.likePost = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to like post', error: error.message });
+        return res.status(500).json({ message: 'Failed to like post' });
     }
 };
 
@@ -3096,7 +3096,7 @@ exports.unlikePost = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to unlike post', error: error.message });
+        return res.status(500).json({ message: 'Failed to unlike post' });
     }
 };
 
@@ -3190,7 +3190,7 @@ exports.resharePost = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to reshare post', error: error.message });
+        return res.status(500).json({ message: 'Failed to reshare post' });
     }
 };
 
@@ -3252,7 +3252,7 @@ exports.unresharePost = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to unreshare post', error: error.message });
+        return res.status(500).json({ message: 'Failed to unreshare post' });
     }
 };
 
@@ -3311,7 +3311,88 @@ exports.getPostEngagement = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to get post engagement', error: error.message });
+        return res.status(500).json({ message: 'Failed to get post engagement' });
+    }
+};
+
+exports.listDMConversations = async (req, res) => {
+    try {
+        const { subgridId } = req.params;
+        const subgrid = await getSubgrid(req, subgridId);
+        if (!subgrid) {
+            return res.status(404).json({ message: 'Subgrid not found' });
+        }
+
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const { DirectMessage } = await getTenantModels(subgrid);
+
+        // Aggregate to find unique conversation partners and last message
+        const conversations = await DirectMessage.aggregate([
+            {
+                $match: {
+                    subgridId: String(subgridId),
+                    status: 'active',
+                    $or: [
+                        { senderId: String(userId) },
+                        { recipientId: String(userId) },
+                    ],
+                },
+            },
+            {
+                $addFields: {
+                    peerId: {
+                        $cond: {
+                            if: { $eq: ['$senderId', String(userId)] },
+                            then: '$recipientId',
+                            else: '$senderId',
+                        },
+                    },
+                },
+            },
+            { $sort: { createdAt: -1 } },
+            {
+                $group: {
+                    _id: '$peerId',
+                    lastMessage: { $first: '$$ROOT' },
+                    lastMessageAt: { $first: '$createdAt' },
+                },
+            },
+            { $sort: { lastMessageAt: -1 } },
+        ]);
+
+        // Enrich with user info
+        const User = require('../models/User');
+        const peerIds = conversations.map(c => c._id);
+        const users = await User.find({ _id: { $in: peerIds } }).select('firstName lastName avatarUrl email');
+        const userMap = {};
+        users.forEach(u => { userMap[String(u._id)] = u; });
+
+        const result = conversations.map(c => ({
+            peerId: c._id,
+            peer: userMap[c._id] ? {
+                _id: c._id,
+                firstName: userMap[c._id].firstName,
+                lastName: userMap[c._id].lastName,
+                avatarUrl: userMap[c._id].avatarUrl,
+            } : { _id: c._id, firstName: 'Unknown', lastName: 'User' },
+            lastMessage: {
+                _id: c.lastMessage._id,
+                body: c.lastMessage.body,
+                senderId: c.lastMessage.senderId,
+                createdAt: c.lastMessage.createdAt,
+                attachments: c.lastMessage.attachments || [],
+            },
+            lastMessageAt: c.lastMessageAt,
+        }));
+
+        return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        console.error('[listDMConversations] Error:', error);
+        return res.status(500).json({ message: 'Failed to list conversations' });
     }
 };
 
@@ -3396,7 +3477,7 @@ exports.listDirectMessages = async (req, res) => {
 
         return res.status(200).json({ success: true, data: limitedItems });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list direct messages', error: error.message });
+        return res.status(500).json({ message: 'Failed to list direct messages' });
     }
 };
 
@@ -3526,7 +3607,7 @@ exports.createDirectMessage = async (req, res) => {
 
         return res.status(201).json({ success: true, data: message });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create direct message', error: error.message });
+        return res.status(500).json({ message: 'Failed to create direct message' });
     }
 };
 
@@ -3565,7 +3646,7 @@ exports.flagDirectMessage = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to flag direct message', error: error.message });
+        return res.status(500).json({ message: 'Failed to flag direct message' });
     }
 };
 
@@ -3612,7 +3693,7 @@ exports.deleteDirectMessage = async (req, res) => {
 
         return res.status(200).json({ success: true, message: 'Direct message deleted' });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete direct message', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete direct message' });
     }
 };
 
@@ -3653,7 +3734,7 @@ exports.listFriends = async (req, res) => {
 
         return res.status(200).json({ success: true, data: { friends: friendIds, users } });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list friends', error: error.message });
+        return res.status(500).json({ message: 'Failed to list friends' });
     }
 };
 
@@ -3688,7 +3769,7 @@ exports.listMutualFriends = async (req, res) => {
 
         return res.status(200).json({ success: true, data: { friends: uniqueMutualIds, users } });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list mutual friends', error: error.message });
+        return res.status(500).json({ message: 'Failed to list mutual friends' });
     }
 };
 
@@ -3706,7 +3787,7 @@ exports.listBlockedFriends = async (req, res) => {
 
         return res.status(200).json({ success: true, data: { blocked: blockedIds, users } });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list blocked users', error: error.message });
+        return res.status(500).json({ message: 'Failed to list blocked users' });
     }
 };
 
@@ -3749,7 +3830,7 @@ exports.listFriendRequests = async (req, res) => {
             })),
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list friend requests', error: error.message });
+        return res.status(500).json({ message: 'Failed to list friend requests' });
     }
 };
 
@@ -3796,7 +3877,7 @@ exports.createFriendRequest = async (req, res) => {
 
         return res.status(201).json({ success: true, message: 'Friend added' });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to add friend', error: error.message });
+        return res.status(500).json({ message: 'Failed to add friend' });
     }
 };
 
@@ -3839,7 +3920,7 @@ exports.acceptFriendRequest = async (req, res) => {
         return res.status(200).json({ success: true });
     } catch (error) {
         logger.error('acceptFriendRequest', 'Failed to accept friend request', { error: error.message });
-        return res.status(500).json({ message: 'Failed to accept friend request', error: error.message });
+        return res.status(500).json({ message: 'Failed to accept friend request' });
     }
 };
 
@@ -3864,7 +3945,7 @@ exports.declineFriendRequest = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to decline friend request', error: error.message });
+        return res.status(500).json({ message: 'Failed to decline friend request' });
     }
 };
 
@@ -3886,7 +3967,7 @@ exports.removeFriend = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to remove friend', error: error.message });
+        return res.status(500).json({ message: 'Failed to remove friend' });
     }
 };
 
@@ -3921,7 +4002,7 @@ exports.blockFriend = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to block friend', error: error.message });
+        return res.status(500).json({ message: 'Failed to block friend' });
     }
 };
 
@@ -3936,7 +4017,7 @@ exports.unblockFriend = async (req, res) => {
         await FriendBlock.deleteMany({ subgridId, blockerId: userId, blockedId: friendId });
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to unblock friend', error: error.message });
+        return res.status(500).json({ message: 'Failed to unblock friend' });
     }
 };
 
@@ -4000,7 +4081,7 @@ exports.listModerationQueue = async (req, res) => {
         return res.status(200).json({ success: true, data: enriched });
     } catch (error) {
         console.error('[listModerationQueue] Error:', error);
-        return res.status(500).json({ message: 'Failed to load moderation queue', error: error.message });
+        return res.status(500).json({ message: 'Failed to load moderation queue' });
     }
 };
 
@@ -4076,7 +4157,7 @@ exports.moderateFlag = async (req, res) => {
 
         return res.status(200).json({ success: true });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to moderate content', error: error.message });
+        return res.status(500).json({ message: 'Failed to moderate content' });
     }
 };
 
@@ -4097,7 +4178,7 @@ exports.listAuditLog = async (req, res) => {
 
         return res.status(200).json({ success: true, data: logs });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load audit log', error: error.message });
+        return res.status(500).json({ message: 'Failed to load audit log' });
     }
 };
 
@@ -4181,7 +4262,7 @@ exports.getSubgridAnalytics = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load analytics', error: error.message });
+        return res.status(500).json({ message: 'Failed to load analytics' });
     }
 };
 
@@ -4207,7 +4288,7 @@ exports.listNotifications = async (req, res) => {
 
         return res.status(200).json({ success: true, data: notifications });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to load notifications', error: error.message });
+        return res.status(500).json({ message: 'Failed to load notifications' });
     }
 };
 
@@ -4236,7 +4317,7 @@ exports.markNotificationRead = async (req, res) => {
 
         return res.status(200).json({ success: true, data: updated });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update notification', error: error.message });
+        return res.status(500).json({ message: 'Failed to update notification' });
     }
 };
 
@@ -4282,7 +4363,7 @@ exports.updatePresence = async (req, res) => {
 
         return res.status(200).json({ success: true, data: presence });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update presence', error: error.message });
+        return res.status(500).json({ message: 'Failed to update presence' });
     }
 };
 
@@ -4331,7 +4412,7 @@ exports.getPresence = async (req, res) => {
 
         return res.status(200).json({ success: true, data: result });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to get presence', error: error.message });
+        return res.status(500).json({ message: 'Failed to get presence' });
     }
 };
 
@@ -4376,7 +4457,7 @@ exports.getUserPresence = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to get user presence', error: error.message });
+        return res.status(500).json({ message: 'Failed to get user presence' });
     }
 };
 
@@ -4411,7 +4492,7 @@ exports.setOffline = async (req, res) => {
 
         return res.status(200).json({ success: true, message: 'User set offline' });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to set offline', error: error.message });
+        return res.status(500).json({ message: 'Failed to set offline' });
     }
 };
 
@@ -4465,7 +4546,7 @@ exports.deletePost = async (req, res) => {
 
         return res.status(200).json({ success: true, message: 'Post deleted' });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete post', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete post' });
     }
 };
 
@@ -4526,7 +4607,7 @@ exports.deleteMessage = async (req, res) => {
 
         return res.status(200).json({ success: true, message: 'Message deleted' });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete message', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete message' });
     }
 };
 
@@ -4567,7 +4648,7 @@ exports.deleteComment = async (req, res) => {
 
         return res.status(200).json({ success: true, message: 'Comment deleted' });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to delete comment', error: error.message });
+        return res.status(500).json({ message: 'Failed to delete comment' });
     }
 };
 
@@ -4594,7 +4675,7 @@ exports.getContentModerationSettings = async (req, res) => {
             data: settings,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to get moderation settings', error: error.message });
+        return res.status(500).json({ message: 'Failed to get moderation settings' });
     }
 };
 
@@ -4619,7 +4700,7 @@ exports.updateContentModerationSettings = async (req, res) => {
             message: 'Content moderation settings updated',
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to update moderation settings', error: error.message });
+        return res.status(500).json({ message: 'Failed to update moderation settings' });
     }
 };
 
@@ -4649,7 +4730,7 @@ exports.addProhibitedWords = async (req, res) => {
         });
     } catch (error) {
         console.error('[addProhibitedWords] Error:', error);
-        return res.status(500).json({ message: 'Failed to add prohibited words', error: error.message });
+        return res.status(500).json({ message: 'Failed to add prohibited words' });
     }
 };
 
@@ -4673,7 +4754,7 @@ exports.removeProhibitedWords = async (req, res) => {
             message: `Removed ${words.length} word(s) from prohibited list`,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to remove prohibited words', error: error.message });
+        return res.status(500).json({ message: 'Failed to remove prohibited words' });
     }
 };
 
@@ -4705,7 +4786,7 @@ exports.testContentFilter = async (req, res) => {
             data: transformedResult,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to test content filter', error: error.message });
+        return res.status(500).json({ message: 'Failed to test content filter' });
     }
 };
 
@@ -4782,7 +4863,7 @@ exports.likeMessage = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to like message', error: error.message });
+        return res.status(500).json({ message: 'Failed to like message' });
     }
 };
 
@@ -4844,7 +4925,7 @@ exports.unlikeMessage = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to unlike message', error: error.message });
+        return res.status(500).json({ message: 'Failed to unlike message' });
     }
 };
 
@@ -4941,7 +5022,7 @@ exports.reshareMessage = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to reshare message', error: error.message });
+        return res.status(500).json({ message: 'Failed to reshare message' });
     }
 };
 
@@ -5002,7 +5083,7 @@ exports.unreshareMessage = async (req, res) => {
             },
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to unreshare message', error: error.message });
+        return res.status(500).json({ message: 'Failed to unreshare message' });
     }
 };
 
@@ -5039,7 +5120,7 @@ exports.listMessageComments = async (req, res) => {
             data: comments,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to fetch comments', error: error.message });
+        return res.status(500).json({ message: 'Failed to fetch comments' });
     }
 };
 
@@ -5112,7 +5193,7 @@ exports.createMessageComment = async (req, res) => {
             data: comment,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to create comment', error: error.message });
+        return res.status(500).json({ message: 'Failed to create comment' });
     }
 };
 
@@ -5159,7 +5240,7 @@ exports.listBannedUsers = async (req, res) => {
             data: formattedBans,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to list banned users', error: error.message });
+        return res.status(500).json({ message: 'Failed to list banned users' });
     }
 };
 
@@ -5207,7 +5288,7 @@ exports.banUser = async (req, res) => {
             data: ban,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to ban user', error: error.message });
+        return res.status(500).json({ message: 'Failed to ban user' });
     }
 };
 
@@ -5241,6 +5322,6 @@ exports.unbanUser = async (req, res) => {
             message: 'User unbanned successfully',
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Failed to unban user', error: error.message });
+        return res.status(500).json({ message: 'Failed to unban user' });
     }
 };
