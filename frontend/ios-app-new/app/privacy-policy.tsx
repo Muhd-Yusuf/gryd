@@ -78,7 +78,7 @@ Each service has its own privacy policy governing their use of data.`,
     },
     {
         title: '11. Contact Us',
-        body: 'If you have questions about this Privacy Policy, contact us at:\nEmail: support@thegryd.com',
+        body: 'If you have questions about this Privacy Policy, contact us at:\nEmail: support@thegryd.io',
     },
 ];
 
