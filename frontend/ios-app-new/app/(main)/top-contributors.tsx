@@ -5,12 +5,12 @@ import {
     View,
     ScrollView,
     TouchableOpacity,
-    Image,
     useWindowDimensions,
     Modal,
     Pressable,
     Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageCircle, Trophy, User, Sun, Moon, X, BadgeCheck, Mail, Calendar, Building2, ArrowLeft, UserPlus, MoreHorizontal } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -260,7 +260,7 @@ const TopContributorsScreen = () => {
                             >
                                 {activeSubgrid ? (
                                     activeSubgrid.logoUrl ? (
-                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
                                     ) : (
                                         <Text style={styles.railLogoText}>
                                             {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
@@ -361,6 +361,7 @@ const TopContributorsScreen = () => {
                                         source={{ uri: getMemberBannerUrl(selectedContributor.member)! }}
                                         style={styles.bannerImage}
                                         resizeMode="cover"
+                                        cachePolicy="memory-disk"
                                     />
                                 ) : null}
                                 <View style={styles.profileHeaderActions}>
@@ -381,6 +382,7 @@ const TopContributorsScreen = () => {
                                             source={{ uri: getMemberAvatarUrl(selectedContributor.member)! }}
                                             style={styles.profileAvatarImage}
                                             resizeMode="cover"
+                                            cachePolicy="memory-disk"
                                         />
                                     ) : (
                                         <Text style={styles.profileAvatarText}>
@@ -479,6 +481,7 @@ const TopContributorsScreen = () => {
                                             source={{ uri: getMemberBannerUrl(selectedContributor.member)! }}
                                             style={styles.bannerImage}
                                             resizeMode="cover"
+                                            cachePolicy="memory-disk"
                                         />
                                     ) : null}
                                 </View>
@@ -491,6 +494,7 @@ const TopContributorsScreen = () => {
                                                 source={{ uri: getMemberAvatarUrl(selectedContributor.member)! }}
                                                 style={styles.profileAvatarImage}
                                                 resizeMode="cover"
+                                                cachePolicy="memory-disk"
                                             />
                                         ) : (
                                             <Text style={styles.profileAvatarText}>

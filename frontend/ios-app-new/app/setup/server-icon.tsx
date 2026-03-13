@@ -5,9 +5,9 @@ import {
     View,
     TouchableOpacity,
     ScrollView,
-    Image,
     Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -164,7 +164,7 @@ export default function ServerIconScreen() {
                                 <View style={[styles.previewBanner, { backgroundColor: selectedBanner }]} />
                                 <View style={styles.previewAvatarContainer}>
                                     {iconUri ? (
-                                        <Image source={{ uri: iconUri }} style={styles.previewAvatarImage} />
+                                        <Image source={{ uri: iconUri }} style={styles.previewAvatarImage} cachePolicy="memory-disk" />
                                     ) : (
                                         <View style={styles.previewAvatar}>
                                             <Text style={styles.previewAvatarText}>

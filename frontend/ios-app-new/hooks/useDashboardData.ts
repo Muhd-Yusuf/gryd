@@ -4,7 +4,6 @@
  * Can be gradually adopted in existing components
  */
 
-import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     useSubgrids,
@@ -24,7 +23,6 @@ import {
     removeMessageFromCache,
 } from './queries/useMessageQueries';
 import { queryKeys } from '../lib/queryClient';
-import { cacheUsers, cacheFriends } from '../lib/userCache';
 
 /**
  * Hook for Member Dashboard data
@@ -38,35 +36,6 @@ export const useMemberDashboard = (tenantId: string, activeSubgridId: string) =>
 
     // All subgrid data in parallel
     const dashboardData = useSubgridDashboardData(activeSubgridId);
-
-    // Cache members for DM loading (backward compatibility)
-    useEffect(() => {
-        if (dashboardData.members.data) {
-            const memberProfiles: Record<string, any> = {};
-            dashboardData.members.data.forEach((m: any) => {
-                if (m.userId) {
-                    memberProfiles[m.userId] = {
-                        id: m.userId,
-                        firstName: m.firstName,
-                        lastName: m.lastName,
-                        email: m.email,
-                        avatarUrl: m.avatarUrl,
-                        role: m.role || m.userRole,
-                    };
-                }
-            });
-            cacheUsers(memberProfiles);
-        }
-    }, [dashboardData.members.data]);
-
-    // Cache friends (backward compatibility)
-    useEffect(() => {
-        if (dashboardData.friends.data && activeSubgridId) {
-            const friendsList = dashboardData.friends.data?.friends || [];
-            const users = dashboardData.friends.data?.users || {};
-            cacheFriends(activeSubgridId, friendsList, users);
-        }
-    }, [dashboardData.friends.data, activeSubgridId]);
 
     return {
         // Subgrids

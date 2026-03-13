@@ -8,10 +8,10 @@ import {
     View,
     Text,
     StyleSheet,
-    Image,
     TouchableOpacity,
     Platform,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Phone, Video, PhoneIncoming, PhoneOutgoing, ChevronRight, File, Trash2, Clock, AlertCircle, RotateCcw } from 'lucide-react-native';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../UserAvatar';
@@ -187,6 +187,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                                 source={{ uri: attachment.url }}
                                 style={isSticker ? styles.stickerImage : styles.attachmentImage}
                                 resizeMode="cover"
+                                cachePolicy="memory-disk"
                             />
                         );
                     }

@@ -4,12 +4,12 @@ import {
     Text,
     View,
     TouchableOpacity,
-    Image,
     ActivityIndicator,
     Platform,
     ScrollView,
     useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Sun, Moon, ArrowLeft } from 'lucide-react-native';
@@ -76,6 +76,7 @@ export default function ServerDetailsScreen() {
                     <Image
                         source={{ uri: params.coverImageUrl }}
                         style={styles.coverImage}
+                        cachePolicy="memory-disk"
                     />
                 ) : null}
             </View>
@@ -86,6 +87,7 @@ export default function ServerDetailsScreen() {
                     <Image
                         source={{ uri: params.logoUrl }}
                         style={styles.avatarImage}
+                        cachePolicy="memory-disk"
                     />
                 ) : (
                     <View style={styles.avatar}>

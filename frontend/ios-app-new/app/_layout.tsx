@@ -4,7 +4,8 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import { View, ActivityIndicator, useColorScheme } from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemeProvider, useTheme } from '../lib/theme';
-import { initAuth } from '../lib/api';
+import { initAuth, getUserSubgrids, getAuthUser } from '../lib/api';
+import { queryClient, queryKeys } from '../lib/queryClient';
 import { WebSocketProvider } from '../contexts/WebSocketContext';
 import { CallProvider } from '../contexts/CallContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
@@ -49,11 +50,32 @@ export default function RootLayout() {
     const [authInitialized, setAuthInitialized] = useState(false);
     const scheme = useColorScheme();
 
-    // Initialize auth on app start
+    // Initialize auth on app start and prefetch key data
     useEffect(() => {
         const init = async () => {
             try {
-                await initAuth();
+                const user = await initAuth();
+                if (user) {
+                    // Seed the auth user into React Query cache
+                    queryClient.setQueryData(queryKeys.auth.user, user);
+                    // Prefetch user subgrids and profile in background
+                    queryClient.prefetchQuery({
+                        queryKey: queryKeys.auth.subgrids,
+                        queryFn: async () => {
+                            const response = await getUserSubgrids();
+                            return response?.subgrids || [];
+                        },
+                        staleTime: Infinity,
+                    });
+                    queryClient.prefetchQuery({
+                        queryKey: queryKeys.auth.user,
+                        queryFn: async () => {
+                            const authUser = await getAuthUser();
+                            return authUser;
+                        },
+                        staleTime: Infinity,
+                    });
+                }
             } catch (err) {
                 console.error('[App] Auth init error:', err);
             } finally {

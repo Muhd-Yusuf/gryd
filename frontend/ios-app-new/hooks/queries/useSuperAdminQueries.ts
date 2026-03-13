@@ -34,6 +34,7 @@ export const useSuperAdminOverview = (growthDays?: number) => {
         staleTime: 5 * 60 * 1000, // Data fresh for 5 minutes
         gcTime: 24 * 60 * 60 * 1000,
         refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 minutes
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -57,6 +58,7 @@ export const useSuperAdminCustomers = (params?: CustomerQueryParams) => {
         },
         staleTime: 5 * 60 * 1000, // Data fresh for 5 minutes
         gcTime: 24 * 60 * 60 * 1000,
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -70,6 +72,7 @@ export const useSuperAdminCustomerDetail = (customerId: string) => {
         enabled: !!customerId,
         staleTime: 5 * 60 * 1000, // Data fresh for 5 minutes
         gcTime: 24 * 60 * 60 * 1000,
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -108,6 +111,7 @@ export const useSuperAdminModeration = (params?: ModerationQueryParams) => {
         },
         staleTime: 5 * 60 * 1000, // Data fresh for 5 minutes
         gcTime: 24 * 60 * 60 * 1000,
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -124,6 +128,7 @@ export const useSuperAdminConfig = () => {
         },
         staleTime: 5 * 60 * 1000, // Data fresh for 5 minutes
         gcTime: 24 * 60 * 60 * 1000,
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -161,6 +166,7 @@ export const useSuperAdminUsers = (params?: UserQueryParams) => {
         },
         staleTime: 5 * 60 * 1000, // Data fresh for 5 minutes
         gcTime: 24 * 60 * 60 * 1000,
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -183,6 +189,7 @@ export const useSuperAdminTeam = (params?: TeamQueryParams) => {
         },
         staleTime: 5 * 60 * 1000, // Data fresh for 5 minutes
         gcTime: 24 * 60 * 60 * 1000,
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 

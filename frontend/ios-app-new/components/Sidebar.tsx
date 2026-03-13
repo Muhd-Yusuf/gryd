@@ -5,8 +5,8 @@ import {
     StyleSheet,
     TouchableOpacity,
     ScrollView,
-    Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter, usePathname } from 'expo-router';
 import {
     LayoutDashboard,

@@ -4,10 +4,10 @@ import {
     Text,
     View,
     TouchableOpacity,
-    Image,
     ActivityIndicator,
     ScrollView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Sun, Moon } from 'lucide-react-native';
@@ -141,6 +141,7 @@ export default function StakeholderProfileIconScreen() {
                                 <Image
                                     source={{ uri: profileImage }}
                                     style={styles.avatarImage}
+                                    cachePolicy="memory-disk"
                                 />
                             ) : (
                                 <View style={styles.avatarPlaceholder}>
@@ -204,6 +205,7 @@ export default function StakeholderProfileIconScreen() {
                                     <Image
                                         source={{ uri: profileImage }}
                                         style={styles.previewAvatar}
+                                        cachePolicy="memory-disk"
                                     />
                                 ) : (
                                     <View style={styles.previewAvatarPlaceholder}>

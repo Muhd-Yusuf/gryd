@@ -6,13 +6,13 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Image,
     useWindowDimensions,
     Modal,
     Pressable,
     Alert,
     KeyboardAvoidingView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sun, Moon, X, Search, UserPlus, ChevronDown, Check, Phone, Video, MoreHorizontal, Trash2, File, Send, Paperclip, Smile, Mic, MessageSquare, Bell, AtSign, Eye, PhoneOff, PhoneIncoming, PhoneOutgoing, PhoneMissed, ArrowUpRight, ArrowDownLeft, MessageCircle, Trophy, User, LucideIcon } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -1155,7 +1155,7 @@ const DirectMessagesScreen = () => {
                             >
                                 {activeSubgrid ? (
                                     activeSubgrid.logoUrl ? (
-                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
                                     ) : (
                                         <Text style={styles.railLogoText}>
                                             {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
@@ -1502,6 +1502,7 @@ const DirectMessagesScreen = () => {
                                                                         source={{ uri: attachment.value }}
                                                                         style={styles.msgAttachmentImage}
                                                                         resizeMode="cover"
+                                                                        cachePolicy="memory-disk"
                                                                     />
                                                                 );
                                                             }
@@ -1511,6 +1512,7 @@ const DirectMessagesScreen = () => {
                                                                         key={`${message._id}-sticker-${idx}`}
                                                                         source={{ uri: attachment.uri }}
                                                                         style={styles.msgStickerImage}
+                                                                        cachePolicy="memory-disk"
                                                                     />
                                                                 );
                                                             }
@@ -1540,7 +1542,7 @@ const DirectMessagesScreen = () => {
                                                 {attachments.map((attachment, index) => (
                                                     <View key={index} style={styles.attachmentItem}>
                                                         {attachment.type.startsWith('image/') ? (
-                                                            <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} />
+                                                            <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} cachePolicy="memory-disk" />
                                                         ) : (
                                                             <View style={styles.attachmentFileBox}>
                                                                 <File size={20} color={colors.textMuted} />

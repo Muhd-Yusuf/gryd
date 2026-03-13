@@ -1,14 +1,13 @@
 import React, { useMemo } from 'react';
 import {
-    Image,
     StyleProp,
     StyleSheet,
     Text,
     TextStyle,
     View,
     ViewStyle,
-    ImageStyle,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useTheme } from '../lib/theme';
 
 type UserAvatarProps = {
@@ -16,7 +15,7 @@ type UserAvatarProps = {
     name?: string | null;
     size?: number;
     style?: StyleProp<ViewStyle>;
-    imageStyle?: StyleProp<ImageStyle>;
+    imageStyle?: StyleProp<any>;
     textStyle?: StyleProp<TextStyle>;
     accessibilityLabel?: string;
 };
@@ -69,6 +68,7 @@ const UserAvatar = ({
                 <Image
                     source={{ uri }}
                     style={[StyleSheet.absoluteFillObject, { borderRadius: radius }, imageStyle]}
+                    cachePolicy="memory-disk"
                 />
             ) : (
                 <Text style={[styles.initials, { color: colors.textMuted, fontSize }, textStyle]}>

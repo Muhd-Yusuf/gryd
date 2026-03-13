@@ -100,7 +100,6 @@ import VoiceMessagePlayer from './VoiceMessagePlayer';
 import { ErrorRetry } from './ErrorRetry';
 import { MessageSkeleton, ChannelSkeleton } from './SkeletonLoader';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
-import { getCachedSubgrids, cacheSubgrids, getCachedChannelMessages, cacheChannelMessages, getCachedChannelPosts, cacheChannelPosts, getCachedCUAdminMembers, cacheCUAdminMembers, addChannelMessageToCache } from '../lib/userCache';
 import { generateTempId, isTempId } from '../lib/messageQueue';
 import { useQueryClient } from '@tanstack/react-query';
 import { useScrollToBottom } from '../hooks';
@@ -2189,10 +2188,6 @@ const CreditUnionAdminScreen = () => {
                 msg._id === tempId ? { ...realMessage, _isPending: false } : msg
             ));
 
-            // Cache the new message
-            if (realMessage?._id) {
-                addChannelMessageToCache(activeChannelId, realMessage);
-            }
         } catch (err: any) {
             console.error('Failed to send message:', err.message);
             // Mark message as failed but keep it visible for retry

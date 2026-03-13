@@ -5,10 +5,10 @@ import {
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    Image,
     Platform,
     useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -843,7 +843,7 @@ export default function TopContributorsScreen() {
                         <TouchableOpacity style={[styles.serverIcon, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]} onPress={() => router.push('/admin')}>
                             {activeSubgrid ? (
                                 activeSubgrid.logoUrl ? (
-                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} cachePolicy="memory-disk" />
                                 ) : (
                                     <Text style={styles.serverIconText}>
                                         {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
@@ -891,7 +891,7 @@ export default function TopContributorsScreen() {
                             {/* Server Info Row */}
                             <View style={styles.mobileServerInfoRow}>
                                 {activeSubgrid?.logoUrl ? (
-                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} cachePolicy="memory-disk" />
                                 ) : (
                                     <View style={[
                                         styles.mobileTopBarLogoPlaceholder,
@@ -945,6 +945,7 @@ export default function TopContributorsScreen() {
                                                 source={{ uri: avatarUrl }}
                                                 style={styles.contributorAvatarImage}
                                                 resizeMode="cover"
+                                                cachePolicy="memory-disk"
                                             />
                                         ) : (
                                             <Text style={styles.contributorAvatarText}>{getInitials(name)}</Text>
@@ -1023,6 +1024,7 @@ export default function TopContributorsScreen() {
                                         source={{ uri: getMemberBannerUrl(selectedContributor.member)! }}
                                         style={styles.bannerImage}
                                         resizeMode="cover"
+                                        cachePolicy="memory-disk"
                                     />
                                 ) : null}
 
@@ -1045,6 +1047,7 @@ export default function TopContributorsScreen() {
                                             source={{ uri: getMemberAvatarUrl(selectedContributor.member)! }}
                                             style={styles.profileAvatarImage}
                                             resizeMode="cover"
+                                            cachePolicy="memory-disk"
                                         />
                                     ) : (
                                         <Text style={styles.profileAvatarText}>

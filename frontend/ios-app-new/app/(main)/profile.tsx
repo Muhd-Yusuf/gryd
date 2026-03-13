@@ -8,10 +8,10 @@ import {
     ActivityIndicator,
     Alert,
     Platform,
-    Image,
     useWindowDimensions,
     TextInput,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Sun, Moon, Camera, X, Check, AtSign, User, UserCircle, Mail, BadgeCheck, Building2, Users, LogOut, Edit2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -388,7 +388,7 @@ const ProfileScreen = () => {
                             activeOpacity={0.8}
                         >
                             {bannerUri ? (
-                                <Image source={{ uri: bannerUri }} style={styles.bannerImage} />
+                                <Image source={{ uri: bannerUri }} style={styles.bannerImage} cachePolicy="memory-disk" />
                             ) : (
                                 <View style={[styles.bannerPlaceholder, { backgroundColor: mode === 'dark' ? '#1a1a2e' : '#667eea' }]} />
                             )}
