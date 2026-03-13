@@ -195,6 +195,26 @@ export const useSendDirectMessage = (subgridId: string, peerId: string) => {
     });
 };
 
+export const useDeleteDirectMessage = (subgridId: string, peerId: string) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (messageId: string) => {
+            await communityDelete(`/subgrids/${subgridId}/direct-messages/${messageId}`);
+            return messageId;
+        },
+        onSuccess: (deletedId) => {
+            queryClient.setQueryData(
+                queryKeys.messages.dm(subgridId, peerId),
+                (old: any[] | undefined) => {
+                    if (!old) return [];
+                    return old.filter((msg: any) => msg._id !== deletedId);
+                }
+            );
+        },
+    });
+};
+
 // ==================
 // DM LIST (Conversations)
 // ==================

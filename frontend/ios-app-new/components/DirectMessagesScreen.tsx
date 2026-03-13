@@ -4,6 +4,7 @@ import {
     Text,
     StyleSheet,
     ScrollView,
+    FlatList,
     TouchableOpacity,
     TextInput,
     Platform,
@@ -73,6 +74,7 @@ import UserAvatar from './UserAvatar';
 import { useAgoraCall } from '../hooks';
 import { useCallContext } from '../contexts/CallContext';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
+import { hapticLight, hapticMedium, hapticSuccess, hapticError } from '../lib/haptics';
 // Import CallModal directly - Metro will resolve to .web.tsx on web platform
 import CallModal from './CallModal';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
@@ -87,6 +89,10 @@ import {
     useDirectMessages,
     useSendDirectMessage,
     useCurrentUser,
+    useSendFriendRequest,
+    useRemoveFriend,
+    useBlockUser,
+    useDeleteDirectMessage,
 } from '../hooks/queries';
 import { queryKeys } from '../lib/queryClient';
 
@@ -220,6 +226,10 @@ export default function DirectMessagesScreen() {
     const membersQuery = useMembers(activeSubgridId || '');
     const messagesQuery = useDirectMessages(activeSubgridId || '', selectedFriendId || '');
     const sendDmMutation = useSendDirectMessage(activeSubgridId || '', selectedFriendId || '');
+    const sendFriendRequestMutation = useSendFriendRequest(activeSubgridId || '');
+    const removeFriendMutation = useRemoveFriend(activeSubgridId || '');
+    const blockUserMutation = useBlockUser(activeSubgridId || '');
+    const deleteDirectMessageMutation = useDeleteDirectMessage(activeSubgridId || '', selectedFriendId || '');
 
     // Pull-to-refresh state
     const [refreshing, setRefreshing] = useState(false);
@@ -1033,6 +1043,7 @@ export default function DirectMessagesScreen() {
 
     const handleSendMessage = async () => {
         if ((!newMessage.trim() && attachments.length === 0) || !activeSubgridId || !selectedFriendId) return;
+        hapticLight();
 
         // Stop typing on send
         if (isTypingRef.current && dmRoomIdForTyping) {
@@ -1101,6 +1112,7 @@ export default function DirectMessagesScreen() {
 
     const handleDeleteMessage = async (messageId: string) => {
         if (!activeSubgridId) return;
+        hapticMedium();
         const confirmDelete = Platform.OS === 'web'
             ? window.confirm('Delete this message? This action cannot be undone.')
             : await new Promise<boolean>((resolve) => {
@@ -1117,17 +1129,7 @@ export default function DirectMessagesScreen() {
         if (!confirmDelete) return;
 
         try {
-            await communityDelete(`/subgrids/${activeSubgridId}/direct-messages/${messageId}`);
-            // Update React Query cache to remove the deleted message
-            if (selectedFriendId) {
-                queryClient.setQueryData(
-                    queryKeys.messages.dm(activeSubgridId, selectedFriendId),
-                    (old: any[] | undefined) => {
-                        if (!old) return [];
-                        return old.filter((msg: any) => msg._id !== messageId);
-                    }
-                );
-            }
+            await deleteDirectMessageMutation.mutateAsync(messageId);
         } catch (error) {
             console.error('Failed to delete message:', error);
         }
@@ -1137,7 +1139,7 @@ export default function DirectMessagesScreen() {
         if (!activeSubgridId || !recipientId) return;
         try {
             setAddingFriendId(recipientId);
-            await communityPost(`/subgrids/${activeSubgridId}/friend-requests`, { recipientId });
+            await sendFriendRequestMutation.mutateAsync(recipientId);
             await refreshFriends(activeSubgridId);
             setSelectedFriendId(recipientId);
         } catch (error: any) {
@@ -1151,9 +1153,7 @@ export default function DirectMessagesScreen() {
     const handleRemoveFriend = async () => {
         if (!activeSubgridId || !selectedFriendId) return;
         try {
-            await communityDelete(`/subgrids/${activeSubgridId}/friends/${selectedFriendId}`);
-            // Invalidate React Query cache to refresh friends list
-            queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.friends(activeSubgridId) });
+            await removeFriendMutation.mutateAsync(selectedFriendId);
             setSelectedFriendId(null);
         } catch (error) {
             console.error('Failed to remove friend:', error);
@@ -1163,9 +1163,7 @@ export default function DirectMessagesScreen() {
     const handleBlockFriend = async () => {
         if (!activeSubgridId || !selectedFriendId) return;
         try {
-            await communityPost(`/subgrids/${activeSubgridId}/friends/${selectedFriendId}/block`, {});
-            // Invalidate React Query cache to refresh friends list
-            queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.friends(activeSubgridId) });
+            await blockUserMutation.mutateAsync(selectedFriendId);
             setSelectedFriendId(null);
         } catch (error) {
             console.error('Failed to block friend:', error);
@@ -1255,6 +1253,7 @@ export default function DirectMessagesScreen() {
 
     const handleStartRecording = async () => {
         if (isRecording) return;
+        hapticMedium();
         setRecordingDuration(0);
         recordingStartRef.current = Date.now();
 
@@ -1625,66 +1624,68 @@ export default function DirectMessagesScreen() {
                     </View>
 
                     {/* Friends List - Sorted by most recent message (WhatsApp-like) */}
-                    <ScrollView style={styles.friendsList} showsVerticalScrollIndicator={false}>
-                        {(sortedFriends || []).length === 0 ? (
+                    <FlatList
+                        style={styles.friendsList}
+                        showsVerticalScrollIndicator={false}
+                        data={sortedFriends || []}
+                        keyExtractor={(item) => item}
+                        ListEmptyComponent={
                             <View style={styles.emptyFriendsList}>
                                 <UserPlus size={40} color={colors.textSubtle} />
                                 <Text style={styles.emptyFriendsTitle}>No friends yet</Text>
                                 <Text style={styles.emptyFriendsText}>Tap the + button above to add friends and start messaging</Text>
                             </View>
-                        ) : (
-                            (sortedFriends || []).map((friendId, index) => {
-                                const isActive = selectedFriendId === friendId;
-                                const name = getFriendName(friendId);
-                                const friendBadge = getFriendBadge(friendId);
-                                const lastMsg = lastMessages[friendId];
-                                const lastMsgPreview = lastMsg?.body
-                                    ? truncateMessage(lastMsg.body)
-                                    : lastMsg?.attachments?.length
-                                        ? '📎 Attachment'
-                                        : lastMsg?.callType
-                                            ? `📞 ${lastMsg.callType === 'video' ? 'Video' : 'Voice'} call`
-                                            : '';
-                                const lastMsgTime = formatLastMessageTime(lastMsg?.createdAt);
-                                const isSentByMe = String(lastMsg?.senderId || '') === String(currentUserId || '');
-                                return (
-                                    <TouchableOpacity
-                                        key={friendId}
-                                        style={[styles.friendItem, isActive && styles.friendItemActive]}
-                                        onPress={() => { setSelectedFriendId(friendId); if (isMobile) setMobileShowContent(true); }}
-                                    >
-                                        <UserAvatar
-                                            uri={getAvatarUrl(friendId)}
-                                            name={getFriendName(friendId)}
-                                            style={styles.friendAvatar}
-                                        />
-                                        <View style={styles.friendInfo}>
-                                            <View style={styles.friendNameRow}>
-                                                <View style={styles.friendNameWithBadge}>
-                                                    <Text style={[styles.friendName, isActive && styles.friendNameActive]} numberOfLines={1}>{name}</Text>
-                                                    {friendBadge && (
-                                                        <View style={[styles.friendBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[friendBadge] }]}>
-                                                            <Text style={styles.friendBadgeText}>
-                                                                {friendBadge.charAt(0).toUpperCase() + friendBadge.slice(1)}
-                                                            </Text>
-                                                        </View>
-                                                    )}
-                                                </View>
-                                                {lastMsgTime ? (
-                                                    <Text style={styles.friendLastMsgTime}>{lastMsgTime}</Text>
-                                                ) : null}
+                        }
+                        renderItem={({ item: friendId }) => {
+                            const isActive = selectedFriendId === friendId;
+                            const name = getFriendName(friendId);
+                            const friendBadge = getFriendBadge(friendId);
+                            const lastMsg = lastMessages[friendId];
+                            const lastMsgPreview = lastMsg?.body
+                                ? truncateMessage(lastMsg.body)
+                                : lastMsg?.attachments?.length
+                                    ? '📎 Attachment'
+                                    : lastMsg?.callType
+                                        ? `📞 ${lastMsg.callType === 'video' ? 'Video' : 'Voice'} call`
+                                        : '';
+                            const lastMsgTime = formatLastMessageTime(lastMsg?.createdAt);
+                            const isSentByMe = String(lastMsg?.senderId || '') === String(currentUserId || '');
+                            return (
+                                <TouchableOpacity
+                                    style={[styles.friendItem, isActive && styles.friendItemActive]}
+                                    onPress={() => { hapticSelection(); setSelectedFriendId(friendId); if (isMobile) setMobileShowContent(true); }}
+                                >
+                                    <UserAvatar
+                                        uri={getAvatarUrl(friendId)}
+                                        name={getFriendName(friendId)}
+                                        style={styles.friendAvatar}
+                                    />
+                                    <View style={styles.friendInfo}>
+                                        <View style={styles.friendNameRow}>
+                                            <View style={styles.friendNameWithBadge}>
+                                                <Text style={[styles.friendName, isActive && styles.friendNameActive]} numberOfLines={1}>{name}</Text>
+                                                {friendBadge && (
+                                                    <View style={[styles.friendBadge, { backgroundColor: STAKEHOLDER_BADGE_COLORS[friendBadge] }]}>
+                                                        <Text style={styles.friendBadgeText}>
+                                                            {friendBadge.charAt(0).toUpperCase() + friendBadge.slice(1)}
+                                                        </Text>
+                                                    </View>
+                                                )}
                                             </View>
-                                            {lastMsgPreview ? (
-                                                <Text style={styles.friendLastMsgPreview} numberOfLines={1}>
-                                                    {isSentByMe ? 'You: ' : ''}{lastMsgPreview}
-                                                </Text>
+                                            {lastMsgTime ? (
+                                                <Text style={styles.friendLastMsgTime}>{lastMsgTime}</Text>
                                             ) : null}
                                         </View>
-                                    </TouchableOpacity>
-                                );
-                            })
-                        )}
-                    </ScrollView>
+                                        {lastMsgPreview ? (
+                                            <Text style={styles.friendLastMsgPreview} numberOfLines={1}>
+                                                {isSentByMe ? 'You: ' : ''}{lastMsgPreview}
+                                            </Text>
+                                        ) : null}
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        }}
+                    />
 
                     {/* User Profile */}
                     <View style={styles.userProfile}>
@@ -1762,7 +1763,7 @@ export default function DirectMessagesScreen() {
                             </View>
 
                             {/* Chat Content */}
-                            <ScrollView style={styles.chatContent} ref={scrollViewRef} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}>
+                            <ScrollView style={styles.chatContent} ref={scrollViewRef} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}>
                                 {/* Profile Banner */}
                                 <View style={styles.profileBanner}>
                                     <View style={styles.profileAvatarLarge}>

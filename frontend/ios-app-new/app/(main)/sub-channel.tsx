@@ -31,6 +31,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { useWebSocketContext } from '../../contexts/WebSocketContext';
+import { hapticLight, hapticMedium, hapticSuccess, hapticError, hapticSelection } from '../../lib/haptics';
 import { useQueryClient } from '@tanstack/react-query';
 import { useScrollToBottom } from '../../hooks';
 import {
@@ -41,6 +42,14 @@ import {
     usePosts,
     useSubgridMessages,
     useMyRole,
+    useLikeItem,
+    useUnlikeItem,
+    useReshareItem,
+    useUnreshareItem,
+    useCreateComment,
+    useFlagContent,
+    useDeletePost,
+    useDeleteMessage,
 } from '../../hooks/queries';
 
 type Channel = {
@@ -248,6 +257,16 @@ const SubChannelScreen = () => {
     const postsQuery = usePosts(subgridId);
     const messagesQuery = useSubgridMessages(subgridId);
     const myRoleQuery = useMyRole(subgridId);
+
+    // Mutation hooks
+    const likeItemMutation = useLikeItem(subgridId);
+    const unlikeItemMutation = useUnlikeItem(subgridId);
+    const reshareItemMutation = useReshareItem(subgridId);
+    const unreshareItemMutation = useUnreshareItem(subgridId);
+    const createCommentMutation = useCreateComment(subgridId);
+    const flagContentMutation = useFlagContent(subgridId);
+    const deletePostMutation = useDeletePost(subgridId);
+    const deleteMessageMutation = useDeleteMessage(subgridId);
 
     // Derived state from React Query
     const subgrids: Subgrid[] = subgridsQuery.data || [];
@@ -536,11 +555,8 @@ const SubChannelScreen = () => {
         }
         setReportSubmitting(true);
         try {
-            const path =
-                reportTarget.type === 'post'
-                    ? `/subgrids/${subgridId}/posts/${reportTarget.id}/flag`
-                    : `/subgrids/${subgridId}/messages/${reportTarget.id}/flag`;
-            await communityPost(path, { reason });
+            const itemType = reportTarget.type === 'post' ? 'posts' as const : 'messages' as const;
+            await flagContentMutation.mutateAsync({ itemType, itemId: reportTarget.id, reason });
             setReportModalOpen(false);
             setReportTarget(null);
         } catch (err: any) {
@@ -673,6 +689,7 @@ const SubChannelScreen = () => {
 
         // Store for rollback
         const deletedItem = item;
+        hapticMedium();
 
         // Remove immediately (optimistic)
         if (isPost) {
@@ -685,9 +702,9 @@ const SubChannelScreen = () => {
 
         try {
             if (isPost) {
-                await communityDelete(`/subgrids/${subgridId}/posts/${itemId}`);
+                await deletePostMutation.mutateAsync(itemId);
             } else {
-                await communityDelete(`/subgrids/${subgridId}/messages/${itemId}`);
+                await deleteMessageMutation.mutateAsync(itemId);
             }
             // Success - item already removed
         } catch (err: any) {
@@ -714,6 +731,7 @@ const SubChannelScreen = () => {
         if ((!draft.trim() && attachments.length === 0) || !subgridId || !channelId || !currentUserId) {
             return;
         }
+        hapticLight();
         const body = draft.trim();
 
         // Clear draft immediately for instant feel
@@ -856,6 +874,7 @@ const SubChannelScreen = () => {
 
     const handleStartRecording = async () => {
         if (recording) return;
+        hapticMedium();
         setRecordingError('');
         setRecordingDuration(0);
         recordingStartRef.current = Date.now();
@@ -1178,6 +1197,7 @@ const SubChannelScreen = () => {
             return;
         }
         setLikeLoading(itemId);
+        hapticLight();
         const endpoint = isPost ? 'posts' : 'messages';
 
         // Find the item from feedItems to get current state
@@ -1201,12 +1221,10 @@ const SubChannelScreen = () => {
             });
         }
 
+        const itemType = isPost ? 'posts' as const : 'messages' as const;
+        const mutation = isLiked ? unlikeItemMutation : likeItemMutation;
         try {
-            if (isLiked) {
-                await communityDelete(`/subgrids/${subgridId}/${endpoint}/${itemId}/like`);
-            } else {
-                await communityPost(`/subgrids/${subgridId}/${endpoint}/${itemId}/like`, {});
-            }
+            await mutation.mutateAsync({ itemId, itemType, channelId });
         } catch (err: any) {
             console.error('[SubChannel Like] Error:', err.message, err);
             setError(err.message || 'Failed to update like.');
@@ -1227,6 +1245,7 @@ const SubChannelScreen = () => {
         if (!subgridId) return;
         if (reshareLoading) return;
         setReshareLoading(itemId);
+        hapticMedium();
 
         // Find the item from feedItems to get current state
         const currentItem = feedItems.find(f => f._id === itemId);
@@ -1249,13 +1268,10 @@ const SubChannelScreen = () => {
             });
         }
 
-        const endpoint = isPost ? 'posts' : 'messages';
+        const itemType = isPost ? 'posts' as const : 'messages' as const;
+        const mutation = isReshared ? unreshareItemMutation : reshareItemMutation;
         try {
-            if (isReshared) {
-                await communityDelete(`/subgrids/${subgridId}/${endpoint}/${itemId}/reshare`);
-            } else {
-                await communityPost(`/subgrids/${subgridId}/${endpoint}/${itemId}/reshare`, {});
-            }
+            await mutation.mutateAsync({ itemId, itemType, channelId });
         } catch (err: any) {
             console.error('[SubChannel Reshare] Error:', err.message, err);
             setError(err.message || 'Failed to update reshare.');
@@ -1304,15 +1320,11 @@ const SubChannelScreen = () => {
 
         setCommentLoading(true);
         try {
-            const endpoint = commentTarget.isPost
-                ? `/subgrids/${subgridId}/posts/${commentTarget.id}/comments`
-                : `/subgrids/${subgridId}/messages/${commentTarget.id}/comments`;
-
-            const res = await communityPost(endpoint, { body: commentText.trim() });
-            console.log('[SubChannel Comment] Created comment:', res);
+            const itemType = commentTarget.isPost ? 'posts' as const : 'messages' as const;
+            const res = await createCommentMutation.mutateAsync({ itemId: commentTarget.id, itemType, body: commentText.trim() });
 
             // Add the new comment to the list
-            setComments(prev => [...prev, res.comment || res]);
+            setComments(prev => [...prev, res?.comment || res]);
             setCommentText('');
 
             // Update local state for comment count
@@ -1451,6 +1463,7 @@ const SubChannelScreen = () => {
                         contentContainerStyle={styles.feedList}
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="on-drag"
                         enableOnAndroid={true}
                         extraScrollHeight={Platform.OS === 'ios' ? 20 : 0}
                         onContentSizeChange={handleContentSizeChange}
