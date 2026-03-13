@@ -296,15 +296,12 @@ export const authLoginWithRole = async (data: {
     email: string;
     password: string;
 }): Promise<{ token: string; user: AuthUser; redirectTo: string }> => {
-    console.log('[authLoginWithRole] Sending request to /auth/login-with-role');
     const response = await safeFetch('/auth/login-with-role', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
     });
-    console.log('[authLoginWithRole] Response status:', response.status, response.ok);
     const result = await parseJson(response);
-    console.log('[authLoginWithRole] Parsed result:', JSON.stringify(result));
     if (!response.ok) {
         throw new Error(result?.message || 'Login failed');
     }
@@ -321,7 +318,6 @@ export const authLoginWithRole = async (data: {
         role: userData.role,
         avatarUrl: userData.avatarUrl,
     };
-    console.log('[authLoginWithRole] Success, redirectTo:', result.redirectTo);
     return { token: result.token, user, redirectTo: result.redirectTo || '/(main)' };
 };
 
@@ -769,33 +765,24 @@ const ensureBootstrap = async () => {
         try {
             // Try to init auth from storage if we don't have a user ID yet
             if (!resolvedUserId && !authToken) {
-                console.log('[Bootstrap] No user ID or token, initializing auth from storage...');
                 await initAuth();
             }
-
-            console.log('[Bootstrap] Current state - userId:', resolvedUserId, 'tenantId:', resolvedTenantId, 'hasToken:', !!authToken);
 
             // If we have a user ID from auth, try to get tenant if needed
             if (resolvedUserId) {
                 // If we still need tenant ID, try to get user's first tenant
                 if (!resolvedTenantId) {
-                    console.log('[Bootstrap] User ID found but no tenant, fetching tenants...');
                     try {
                         const headers = buildHeaders({});
-                        console.log('[Bootstrap] Request headers:', JSON.stringify(headers));
                         const response = await safeFetch('/community/tenants', {
                             method: 'GET',
                             headers,
                         });
-                        console.log('[Bootstrap] Got response, status:', response.status);
                         const data = await parseJson(response);
-                        console.log('[Bootstrap] Tenants response:', response.status, JSON.stringify(data));
                         if (response.ok && data?.data?.length > 0) {
                             resolvedTenantId = data.data[0]._id;
-                            console.log('[Bootstrap] Set tenantId from first tenant:', resolvedTenantId);
                             bootstrapComplete = true;
                         } else {
-                            console.log('[Bootstrap] No tenants found in response or response not ok');
                             // Mark complete even if no tenants, to prevent infinite retries
                             bootstrapComplete = true;
                         }
@@ -811,7 +798,6 @@ const ensureBootstrap = async () => {
             }
 
             // No authenticated user - do nothing (user must log in)
-            console.log('[Bootstrap] No authenticated user, skipping bootstrap');
         } finally {
             bootstrapPromise = null;
         }
@@ -835,13 +821,11 @@ export const resolveUserId = async () => {
 export const apiFetch = async (path, options: any = {}) => {
     await ensureBootstrap();
     const headers = buildHeaders(options.headers || {});
-    console.log('[apiFetch] Request:', options.method || 'GET', path, 'headers:', headers);
     const response = await safeFetch(path, {
         ...options,
         headers,
     });
     const data = await parseJson(response);
-    console.log('[apiFetch] Response:', response.status, response.ok, data);
     if (!response.ok) {
         const message = data?.message || 'Request failed';
         console.error('[apiFetch] Error:', message);
@@ -1078,7 +1062,6 @@ export const uploadAvatar = async (file: { uri: string; name: string; type: stri
 
     const formData = new FormData();
 
-    console.log('[uploadAvatar] Platform:', Platform.OS, 'URI prefix:', file.uri.substring(0, 50));
 
     // For web, convert blob URL or data URI to actual Blob
     if (Platform.OS === 'web') {
@@ -1086,7 +1069,6 @@ export const uploadAvatar = async (file: { uri: string; name: string; type: stri
             // Fetch the URI (works for blob:, data:, and http/https URIs)
             const response = await fetch(file.uri);
             const blob = await response.blob();
-            console.log('[uploadAvatar] Web blob created, size:', blob.size, 'type:', blob.type);
             formData.append('file', blob, file.name);
         } catch (fetchError) {
             console.error('[uploadAvatar] Failed to fetch URI as blob:', fetchError);
@@ -1128,14 +1110,12 @@ export const uploadBanner = async (file: { uri: string; name: string; type: stri
 
     const formData = new FormData();
 
-    console.log('[uploadBanner] Platform:', Platform.OS, 'URI prefix:', file.uri.substring(0, 50));
 
     // For web, convert blob URL or data URI to actual Blob
     if (Platform.OS === 'web') {
         try {
             const response = await fetch(file.uri);
             const blob = await response.blob();
-            console.log('[uploadBanner] Web blob created, size:', blob.size, 'type:', blob.type);
             formData.append('file', blob, file.name);
         } catch (fetchError) {
             console.error('[uploadBanner] Failed to fetch URI as blob:', fetchError);

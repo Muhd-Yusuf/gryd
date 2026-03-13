@@ -226,7 +226,10 @@ type Message = {
     createdAt?: string;
     attachments?: any[];
     likeCount?: number;
+    reshareCount?: number;
+    commentCount?: number;
     userLiked?: boolean;
+    userReshared?: boolean;
 };
 
 type Member = {
@@ -2515,13 +2518,30 @@ const CreditUnionAdminScreen = () => {
         const items = isPost ? posts : messages;
         try {
             const item = items.find(i => i._id === itemId);
-            if (item?.userLiked) {
-                await unlikeItemMutation.mutateAsync({ itemId, itemType });
+            const isLiked = item?.userLiked ?? false;
+
+            // Optimistic update for immediate UI feedback
+            if (isPost) {
+                // Posts come from React Query directly - no local state
             } else {
-                await likeItemMutation.mutateAsync({ itemId, itemType });
+                setMessages(prev => prev.map(m =>
+                    m._id === itemId
+                        ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
+                        : m
+                ));
+            }
+
+            if (isLiked) {
+                await unlikeItemMutation.mutateAsync({ itemId, itemType, channelId: activeChannelId });
+            } else {
+                await likeItemMutation.mutateAsync({ itemId, itemType, channelId: activeChannelId });
             }
         } catch (err: any) {
             console.error(`Failed to like/unlike ${itemType}:`, err.message);
+            // Revert optimistic update on error by refetching
+            if (!isPost && activeChannelId) {
+                messagesQuery.refetch();
+            }
         }
     };
 
@@ -2532,13 +2552,28 @@ const CreditUnionAdminScreen = () => {
         const items = isPost ? posts : messages;
         try {
             const item = items.find(i => i._id === itemId);
-            if ((item as any)?.userReshared) {
-                await unreshareItemMutation.mutateAsync({ itemId, itemType });
+            const isReshared = (item as any)?.userReshared ?? false;
+
+            // Optimistic update for immediate UI feedback
+            if (!isPost) {
+                setMessages(prev => prev.map(m =>
+                    m._id === itemId
+                        ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
+                        : m
+                ));
+            }
+
+            if (isReshared) {
+                await unreshareItemMutation.mutateAsync({ itemId, itemType, channelId: activeChannelId });
             } else {
-                await reshareItemMutation.mutateAsync({ itemId, itemType });
+                await reshareItemMutation.mutateAsync({ itemId, itemType, channelId: activeChannelId });
             }
         } catch (err: any) {
             console.error(`Failed to reshare/unreshare ${itemType}:`, err.message);
+            // Revert optimistic update on error
+            if (!isPost && activeChannelId) {
+                messagesQuery.refetch();
+            }
         }
     };
 

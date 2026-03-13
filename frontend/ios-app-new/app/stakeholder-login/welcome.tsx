@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     StyleSheet,
     Text,
@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getUserSubgrids, StakeholderBadge } from '../../lib/api';
+import { useTheme } from '../../lib/theme';
 
 const BADGE_COLORS: Record<StakeholderBadge, string> = {
     stakeholder: '#3B82F6',
@@ -29,6 +30,8 @@ interface Subgrid {
 
 export default function StakeholderWelcomeScreen() {
     const router = useRouter();
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
     const params = useLocalSearchParams<{
         userId: string;
         firstName: string;
@@ -79,7 +82,7 @@ export default function StakeholderWelcomeScreen() {
     };
 
     const getBadgeColor = (badge: string) => {
-        return BADGE_COLORS[badge as StakeholderBadge] || '#3B82F6';
+        return BADGE_COLORS[badge as StakeholderBadge] || colors.primary;
     };
 
     const handleContinue = () => {
@@ -150,7 +153,7 @@ export default function StakeholderWelcomeScreen() {
                     {/* Server Selection */}
                     {loading ? (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#3B82F6" />
+                            <ActivityIndicator size="large" color={colors.primary} />
                             <Text style={styles.loadingText}>Loading servers...</Text>
                         </View>
                     ) : subgrids.length === 0 ? (
@@ -225,10 +228,10 @@ export default function StakeholderWelcomeScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#1F2937',
+        backgroundColor: colors.appBg,
     },
     header: {
         flexDirection: 'row',
@@ -244,7 +247,7 @@ const styles = StyleSheet.create({
     logoText: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#FFFFFF',
+        color: colors.text,
     },
     stepIndicator: {
         flexDirection: 'row',
@@ -255,10 +258,10 @@ const styles = StyleSheet.create({
         width: 10,
         height: 10,
         borderRadius: 5,
-        backgroundColor: 'rgba(255,255,255,0.3)',
+        backgroundColor: colors.border,
     },
     stepActive: {
-        backgroundColor: '#3B82F6',
+        backgroundColor: colors.primary,
     },
     stepCompleted: {
         backgroundColor: '#22C55E',
@@ -266,19 +269,19 @@ const styles = StyleSheet.create({
     stepLine: {
         width: 20,
         height: 2,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: colors.border,
     },
     stepLineCompleted: {
         backgroundColor: '#22C55E',
     },
     logoutButton: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: colors.surface,
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 8,
     },
     logoutText: {
-        color: '#FFFFFF',
+        color: colors.text,
         fontSize: 14,
         fontWeight: '500',
     },
@@ -291,25 +294,25 @@ const styles = StyleSheet.create({
     card: {
         width: '100%',
         maxWidth: 500,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: colors.surface,
         borderRadius: 16,
         padding: 32,
     },
     title: {
         fontSize: 26,
         fontWeight: '600',
-        color: '#111827',
+        color: colors.text,
         marginBottom: 8,
     },
     subtitle: {
         fontSize: 15,
-        color: '#6B7280',
+        color: colors.textMuted,
         marginBottom: 24,
     },
     userSection: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F9FAFB',
+        backgroundColor: colors.appBg,
         borderRadius: 12,
         padding: 16,
         marginBottom: 24,
@@ -319,14 +322,14 @@ const styles = StyleSheet.create({
         width: 48,
         height: 48,
         borderRadius: 24,
-        backgroundColor: '#E5E7EB',
+        backgroundColor: colors.border,
         justifyContent: 'center',
         alignItems: 'center',
     },
     userAvatarText: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#6B7280',
+        color: colors.textMuted,
     },
     userInfo: {
         flex: 1,
@@ -334,11 +337,11 @@ const styles = StyleSheet.create({
     userName: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: colors.text,
     },
     userEmail: {
         fontSize: 13,
-        color: '#6B7280',
+        color: colors.textMuted,
     },
     badge: {
         paddingHorizontal: 12,
@@ -357,7 +360,7 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 12,
         fontSize: 14,
-        color: '#6B7280',
+        color: colors.textMuted,
     },
     emptyContainer: {
         alignItems: 'center',
@@ -383,23 +386,23 @@ const styles = StyleSheet.create({
     serverListTitle: {
         fontSize: 14,
         fontWeight: '500',
-        color: '#6B7280',
+        color: colors.textMuted,
         marginBottom: 12,
     },
     serverCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F9FAFB',
+        backgroundColor: colors.appBg,
         borderWidth: 2,
-        borderColor: '#E5E7EB',
+        borderColor: colors.border,
         borderRadius: 12,
         padding: 16,
         marginBottom: 12,
         gap: 16,
     },
     serverCardSelected: {
-        borderColor: '#3B82F6',
-        backgroundColor: '#EFF6FF',
+        borderColor: colors.primary,
+        backgroundColor: colors.surface,
     },
     serverAvatarWrapper: {
         width: 56,
@@ -422,17 +425,17 @@ const styles = StyleSheet.create({
         left: 4,
         right: 4,
         height: 44,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: colors.surface,
         borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: colors.border,
     },
     serverAvatarText: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#6B7280',
+        color: colors.textMuted,
     },
     serverInfo: {
         flex: 1,
@@ -440,23 +443,23 @@ const styles = StyleSheet.create({
     serverName: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#111827',
+        color: colors.text,
     },
     serverClient: {
         fontSize: 13,
-        color: '#6B7280',
+        color: colors.textMuted,
         marginTop: 2,
     },
     serverMembers: {
         fontSize: 12,
-        color: '#9CA3AF',
+        color: colors.textMuted,
         marginTop: 2,
     },
     checkmark: {
         width: 28,
         height: 28,
         borderRadius: 14,
-        backgroundColor: '#3B82F6',
+        backgroundColor: colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -477,7 +480,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     button: {
-        backgroundColor: '#3B82F6',
+        backgroundColor: colors.primary,
         borderRadius: 30,
         paddingVertical: 16,
         alignItems: 'center',
