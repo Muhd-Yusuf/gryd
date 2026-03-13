@@ -1168,11 +1168,15 @@ export default function DirectMessagesScreen() {
                     // Upload to server
                     try {
                         const blobUrl = URL.createObjectURL(blob);
-                        const result = await uploadFile(
-                            { uri: blobUrl, name: `voice_${Date.now()}.webm`, type: voiceMime },
-                            { type: 'voice-note', subgridId: activeSubgridId || '' }
-                        );
-                        URL.revokeObjectURL(blobUrl);
+                        let result;
+                        try {
+                            result = await uploadFile(
+                                { uri: blobUrl, name: `voice_${Date.now()}.webm`, type: voiceMime },
+                                { type: 'voice-note', subgridId: activeSubgridId || '' }
+                            );
+                        } finally {
+                            URL.revokeObjectURL(blobUrl);
+                        }
 
                         if (result?.success && result?.data && activeSubgridId && selectedFriendId) {
                             const audioUrl = result.data.url || result.data.secure_url;
@@ -1691,8 +1695,8 @@ export default function DirectMessagesScreen() {
 
                                 {/* Messages */}
                                 <View style={styles.messagesContainer}>
-                                    {messageGroups.map((group, groupIndex) => (
-                                        <View key={groupIndex}>
+                                    {messageGroups.map((group) => (
+                                        <View key={group.date}>
                                             <View style={styles.dateDivider}>
                                                 <View style={styles.dateLine} />
                                                 <Text style={styles.dateText}>{group.date}</Text>

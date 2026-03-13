@@ -63,7 +63,7 @@ export default function AccountSetupScreen() {
         }
 
         // Validate email format
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
         if (!emailRegex.test(email.trim())) {
             setError('Please enter a valid email address');
             return;

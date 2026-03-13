@@ -236,7 +236,6 @@ const SuperAdminDashboard = () => {
 
     // UI state
     const [growthDropdownOpen, setGrowthDropdownOpen] = useState(false);
-    const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
     const [customerFilterDropdownOpen, setCustomerFilterDropdownOpen] = useState(false);
 
     // Action menu
@@ -336,9 +335,26 @@ const SuperAdminDashboard = () => {
         );
     }, [recentCustomers, searchQuery]);
 
-    // Load initial admin user data
+    // Load initial admin user data with cleanup to prevent state updates after unmount
     useEffect(() => {
+        let cancelled = false;
+        const loadInitialData = async () => {
+            try {
+                const user = await getAuthUser();
+                if (cancelled) return;
+                setAdminUser(user);
+                setAdminFirstName(user?.firstName || '');
+                setAdminLastName(user?.lastName || '');
+                setAdminEmail(user?.email || '');
+                setAdminUsername(user?.username || user?.email?.split('@')[0] || '');
+            } catch (err: any) {
+                if (!cancelled) {
+                    console.error('Failed to load initial data:', err.message);
+                }
+            }
+        };
         loadInitialData();
+        return () => { cancelled = true; };
     }, []);
 
     // Sync config form when config loads from React Query
@@ -353,30 +369,18 @@ const SuperAdminDashboard = () => {
 
     // Load notification preferences when notifications tab is selected
     useEffect(() => {
+        let cancelled = false;
         if (settingsTab === 'notifications') {
-            loadNotificationPreferences();
+            loadNotificationPreferences(cancelled);
         }
+        return () => { cancelled = true; };
     }, [settingsTab]);
 
-    const loadInitialData = async () => {
-        try {
-            const user = await getAuthUser();
-            setAdminUser(user);
-            // Set admin info for settings
-            setAdminFirstName(user?.firstName || '');
-            setAdminLastName(user?.lastName || '');
-            setAdminEmail(user?.email || '');
-            setAdminUsername(user?.username || user?.email?.split('@')[0] || '');
-            // Team members are now loaded via React Query (useSuperAdminDashboard)
-        } catch (err: any) {
-            console.error('Failed to load initial data:', err.message);
-        }
-    };
-
     // Load notification preferences from API
-    const loadNotificationPreferences = async () => {
+    const loadNotificationPreferences = async (cancelled?: boolean) => {
         try {
             const response = await getNotificationPreferences();
+            if (cancelled) return;
             if (response?.data) {
                 setNotificationSettings({
                     systemAlerts: response.data.systemAlerts ?? true,
@@ -386,7 +390,9 @@ const SuperAdminDashboard = () => {
                 });
             }
         } catch (err: any) {
-            console.error('Failed to load notification preferences:', err.message);
+            if (!cancelled) {
+                console.error('Failed to load notification preferences:', err.message);
+            }
         }
     };
 
@@ -704,13 +710,6 @@ const SuperAdminDashboard = () => {
         }
     };
 
-    const toggleCustomerSelection = (customerId: string) => {
-        setSelectedCustomers(prev =>
-            prev.includes(customerId)
-                ? prev.filter(id => id !== customerId)
-                : [...prev, customerId]
-        );
-    };
 
     // Get filter label for display
     const getFilterLabel = (filter: string) => {
@@ -766,26 +765,30 @@ const SuperAdminDashboard = () => {
                 URL.revokeObjectURL(url);
             } else {
                 // For mobile, use expo-file-system and expo-sharing
-                const fileUri = FileSystem.documentDirectory + fileName;
-                await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-                    encoding: FileSystem.EncodingType.UTF8,
-                });
-
-                // Check if sharing is available
-                const isSharingAvailable = await Sharing.isAvailableAsync();
-                if (isSharingAvailable) {
-                    await Sharing.shareAsync(fileUri, {
-                        mimeType: 'text/csv',
-                        dialogTitle: 'Export Customers CSV',
-                        UTI: 'public.comma-separated-values-text',
+                try {
+                    const fileUri = FileSystem.documentDirectory + fileName;
+                    await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+                        encoding: FileSystem.EncodingType.UTF8,
                     });
-                } else {
-                    setError('Sharing is not available on this device');
+
+                    const isSharingAvailable = await Sharing.isAvailableAsync();
+                    if (isSharingAvailable) {
+                        await Sharing.shareAsync(fileUri, {
+                            mimeType: 'text/csv',
+                            dialogTitle: 'Export Customers CSV',
+                            UTI: 'public.comma-separated-values-text',
+                        });
+                    } else {
+                        setError('Sharing is not available on this device');
+                    }
+                } catch (mobileErr: any) {
+                    console.error('Failed to export CSV on mobile:', mobileErr);
+                    setError(mobileErr?.message || 'Failed to save or share CSV file');
                 }
             }
         } catch (err: any) {
             console.error('Failed to export CSV:', err);
-            setError('Failed to export CSV');
+            setError(err?.message || 'Failed to export CSV');
         }
     };
 
@@ -1425,16 +1428,6 @@ const SuperAdminDashboard = () => {
 
                         {customers.map((customer) => (
                             <TouchableOpacity key={customer._id} style={styles.tableRow} onPress={() => handleViewCustomer(customer)}>
-                                <View style={[styles.tableCell, { width: 40 }]}>
-                                    <TouchableOpacity
-                                        style={[styles.checkbox, selectedCustomers.includes(customer._id) && styles.checkboxChecked]}
-                                        onPress={(e) => { e.stopPropagation(); toggleCustomerSelection(customer._id); }}
-                                    >
-                                        {selectedCustomers.includes(customer._id) && (
-                                            <Check size={14} color="#fff" />
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
                                 <View style={[styles.tableCell, { flex: 2 }]}>
                                     <Text style={styles.customerName}>{customer.clientName || customer.owner?.name || '-'}</Text>
                                     <Text style={styles.customerEmail}>{customer.owner?.email || ''}</Text>
@@ -1592,7 +1585,12 @@ const SuperAdminDashboard = () => {
                                     <Text style={styles.inviteCodeText}>
                                         {customerDetailData.customer?.inviteCode || 'N/A'}
                                     </Text>
-                                    <TouchableOpacity style={styles.copyCodeButton}>
+                                    <TouchableOpacity style={styles.copyCodeButton} onPress={() => {
+                                        const code = customerDetailData.customer?.inviteCode;
+                                        if (code) {
+                                            import('expo-clipboard').then(Clipboard => Clipboard.setStringAsync(code));
+                                        }
+                                    }}>
                                         <Copy size={18} color={colors.primary} />
                                     </TouchableOpacity>
                                 </View>
@@ -1720,7 +1718,7 @@ const SuperAdminDashboard = () => {
                         <Text style={styles.prohibitedItem}>Fraud / impersonation</Text>
                         <Text style={styles.prohibitedItem}>Misinformation</Text>
                         <Text style={styles.prohibitedItem}>Explicit content</Text>
-                        <Text style={styles.prohibitedItem}>Allos stickers in your autocomplete results.</Text>
+                        <Text style={styles.prohibitedItem}>Spam / unsolicited content</Text>
                     </View>
                 </View>
             </View>
@@ -1802,7 +1800,7 @@ const SuperAdminDashboard = () => {
                                     style={[styles.settingsInput, styles.settingsInputDisabled]}
                                     value={adminEmail}
                                     editable={false}
-                                    placeholder="admin@syphor.com"
+                                    placeholder="admin@thegryd.io"
                                     placeholderTextColor={colors.textMuted}
                                 />
                             </View>
@@ -1842,10 +1840,10 @@ const SuperAdminDashboard = () => {
                         <View style={[styles.teamHeader, isMobile && styles.teamHeaderMobile]}>
                             <View>
                                 <Text style={styles.settingsSectionTitle}>Team</Text>
-                                <Text style={styles.settingsSectionSubtitle}>Manage you team members here</Text>
+                                <Text style={styles.settingsSectionSubtitle}>Manage your team members here</Text>
                             </View>
                             <View style={styles.teamHeaderActions}>
-                                <TouchableOpacity style={styles.teamSettingsButton}>
+                                <TouchableOpacity style={styles.teamSettingsButton} onPress={() => setSettingsTab('team')}>
                                     <Settings size={20} color={colors.text} />
                                 </TouchableOpacity>
                                 <TouchableOpacity

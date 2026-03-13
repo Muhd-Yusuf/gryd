@@ -725,8 +725,11 @@ const buildCandidateUrls = () => {
         addCandidate(withApiSuffix(window.location.origin));
     }
 
-    addCandidate('http://127.0.0.1:3000/api');
-    addCandidate('http://localhost:3000/api');
+    // Only add localhost fallbacks in development
+    if (__DEV__) {
+        addCandidate('http://127.0.0.1:3000/api');
+        addCandidate('http://localhost:3000/api');
+    }
 
     return candidates;
 };

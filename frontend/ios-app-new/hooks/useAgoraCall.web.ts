@@ -192,7 +192,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     }, []);
 
     // Handle token refresh
-    const handleTokenRefresh = useCallback(async () => {
+    const handleTokenRefresh = useCallback(async (retries = 2) => {
         if (!currentCall || !clientRef.current) return;
         try {
             const response = await refreshCallToken(currentCall.channelName);
@@ -201,6 +201,9 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             }
         } catch (err) {
             console.error('[Agora Web] Token refresh failed:', err);
+            if (retries > 0) {
+                setTimeout(() => handleTokenRefresh(retries - 1), 2000);
+            }
         }
     }, [currentCall]);
 
@@ -212,14 +215,18 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 try {
                     localAudioTrackRef.current.stop();
                     localAudioTrackRef.current.close();
-                } catch (e) {}
+                } catch (e) {
+                    console.warn('[Agora Web] Failed to cleanup audio track:', e);
+                }
                 localAudioTrackRef.current = null;
             }
             if (localVideoTrackRef.current) {
                 try {
                     localVideoTrackRef.current.stop();
                     localVideoTrackRef.current.close();
-                } catch (e) {}
+                } catch (e) {
+                    console.warn('[Agora Web] Failed to cleanup video track:', e);
+                }
                 localVideoTrackRef.current = null;
                 setLocalVideoTrack(null);
             }

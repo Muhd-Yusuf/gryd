@@ -736,6 +736,8 @@ const CreditUnionAdminScreen = () => {
             if (user?.email) {
                 setAccountEmail(user.email);
             }
+        }).catch((err) => {
+            console.error('[CUA Admin] Failed to get auth user:', err);
         });
     }, []);
 
@@ -967,6 +969,7 @@ const CreditUnionAdminScreen = () => {
     useEffect(() => {
         if (!serverSettingsModalOpen || settingsTab !== 'content-moderation' || !activeSubgridId) return;
         contentModerationQuery.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
 
     // Fetch and update member online statuses
@@ -1046,6 +1049,7 @@ const CreditUnionAdminScreen = () => {
         if (settingsTab === 'roles' && activeSubgridId) {
             customRolesQuery.refetch();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [settingsTab, activeSubgridId]);
 
     // Refetch engagement settings when engagement tab is selected
@@ -1053,6 +1057,7 @@ const CreditUnionAdminScreen = () => {
         if (settingsTab === 'engagement' && activeSubgridId) {
             engagementSettingsQuery.refetch();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [settingsTab, activeSubgridId]);
 
     const handleSaveNotificationSettings = async () => {
@@ -2441,9 +2446,11 @@ const CreditUnionAdminScreen = () => {
                         }
                     } else {
                         console.error('[Voice Note CU Admin] Upload result missing success or data:', result);
+                        setRecordingError('Voice note upload failed. Please try again.');
                     }
                 } else {
                     console.error('[Voice Note CU Admin] Missing required data:', { uri: !!uri, activeSubgridId, activeChannelId });
+                    setRecordingError('Missing channel data. Please select a channel and try again.');
                 }
             } catch (err: any) {
                 setRecordingError(err.message || 'Failed to save recording.');
@@ -2483,8 +2490,13 @@ const CreditUnionAdminScreen = () => {
                 await audioRecorder.stop();
             } catch (err) {
                 console.warn('[CUA] Failed to stop audio recorder:', err);
+                setRecordingError('Failed to stop recording. Please try again.');
             }
-            await setAudioModeAsync({ allowsRecording: false });
+            try {
+                await setAudioModeAsync({ allowsRecording: false });
+            } catch (audioModeErr) {
+                console.warn('[CUA] Failed to reset audio mode:', audioModeErr);
+            }
         }
     };
 
@@ -5281,7 +5293,7 @@ const CreditUnionAdminScreen = () => {
                                             {activeSubgrid?.inviteCode ? (
                                                 <View style={styles.membersTableRow}>
                                                     <Text style={[styles.memberCellText, styles.inviteColInviter]}>
-                                                        {currentUserName || 'John Michael'}
+                                                        {currentUserName || 'Admin'}
                                                     </Text>
                                                     <Text style={[styles.memberCellText, styles.inviteColCode]}>
                                                         {activeSubgrid.inviteCode}
