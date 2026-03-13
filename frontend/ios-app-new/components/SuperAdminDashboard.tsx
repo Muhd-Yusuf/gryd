@@ -2237,7 +2237,12 @@ const SuperAdminDashboard = () => {
                                 <View style={styles.settingsSaveSection}>
                                     <TouchableOpacity
                                         style={styles.saveAdminInfoButton}
-                                        onPress={() => setConfigEditing(!configEditing)}
+                                        onPress={() => {
+                                            if (configEditing) {
+                                                handleConfigSave();
+                                            }
+                                            setConfigEditing(!configEditing);
+                                        }}
                                     >
                                         <Text style={styles.saveAdminInfoButtonText}>
                                             {configEditing ? 'Save Configuration' : 'Edit Configuration'}

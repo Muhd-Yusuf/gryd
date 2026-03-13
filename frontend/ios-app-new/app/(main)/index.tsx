@@ -1312,9 +1312,9 @@ const TenantCommunityScreen = () => {
                     queryKeys.subgrids.posts(activeSubgridId),
                     (old: any[] | undefined) => old ? old.filter((p) => p._id !== deleteTarget.id) : []
                 );
-            } else {
+            } else if (activeChannelIdRef.current) {
                 queryClient.setQueryData(
-                    queryKeys.messages.channel(activeSubgridId, activeChannelId),
+                    queryKeys.messages.channel(activeSubgridId, activeChannelIdRef.current),
                     (old: any[] | undefined) => old ? old.filter((m) => m._id !== deleteTarget.id) : []
                 );
             }

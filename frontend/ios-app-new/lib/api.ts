@@ -1038,12 +1038,17 @@ export const uploadFile = async (
     if (options.type) formData.append('type', options.type);
     if (options.subgridId) formData.append('subgridId', options.subgridId);
 
+    const uploadHeaders: Record<string, string> = {
+        'x-user-id': resolvedUserId || USER_ID,
+        'x-user-role': resolvedUserRole || USER_ROLE,
+    };
+    if (authToken) {
+        uploadHeaders['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const response = await safeFetch('/media/upload', {
         method: 'POST',
-        headers: {
-            'x-user-id': resolvedUserId || USER_ID,
-            'x-user-role': resolvedUserRole || USER_ROLE,
-        },
+        headers: uploadHeaders,
         body: formData,
     });
 
@@ -1088,12 +1093,17 @@ export const uploadAvatar = async (file: { uri: string; name: string; type: stri
         } as any);
     }
 
+    const avatarHeaders: Record<string, string> = {
+        'x-user-id': resolvedUserId || USER_ID,
+        'x-user-role': resolvedUserRole || USER_ROLE,
+    };
+    if (authToken) {
+        avatarHeaders['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const response = await safeFetch('/media/avatar', {
         method: 'POST',
-        headers: {
-            'x-user-id': resolvedUserId || USER_ID,
-            'x-user-role': resolvedUserRole || USER_ROLE,
-        },
+        headers: avatarHeaders,
         body: formData,
     });
 
@@ -1134,12 +1144,17 @@ export const uploadBanner = async (file: { uri: string; name: string; type: stri
         } as any);
     }
 
+    const bannerHeaders: Record<string, string> = {
+        'x-user-id': resolvedUserId || USER_ID,
+        'x-user-role': resolvedUserRole || USER_ROLE,
+    };
+    if (authToken) {
+        bannerHeaders['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const res = await safeFetch('/media/banner', {
         method: 'POST',
-        headers: {
-            'x-user-id': resolvedUserId || USER_ID,
-            'x-user-role': resolvedUserRole || USER_ROLE,
-        },
+        headers: bannerHeaders,
         body: formData,
     });
 
@@ -1168,12 +1183,17 @@ export const uploadVoiceNote = async (
     if (options.channelId) formData.append('channelId', options.channelId);
     if (options.dmPeerId) formData.append('dmPeerId', options.dmPeerId);
 
+    const voiceHeaders: Record<string, string> = {
+        'x-user-id': resolvedUserId || USER_ID,
+        'x-user-role': resolvedUserRole || USER_ROLE,
+    };
+    if (authToken) {
+        voiceHeaders['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const response = await safeFetch('/media/voice-note', {
         method: 'POST',
-        headers: {
-            'x-user-id': resolvedUserId || USER_ID,
-            'x-user-role': resolvedUserRole || USER_ROLE,
-        },
+        headers: voiceHeaders,
         body: formData,
     });
 
