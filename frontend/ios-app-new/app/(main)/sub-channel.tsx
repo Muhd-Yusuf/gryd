@@ -256,15 +256,18 @@ const SubChannelScreen = () => {
     const events: Event[] = eventsQuery.data || [];
     const userRole = myRoleQuery.data || null;
 
-    // Merge React Query data with local WebSocket updates
+    // Merge React Query data with local state updates (likes, WebSocket, etc.)
+    // Local state takes priority over query data for items that exist in both
     const posts = useMemo(() => {
         const queryPosts = postsQuery.data || [];
-        // Filter by channel if needed
         const filteredPosts = channelId
             ? queryPosts.filter((p: any) => !p.channelId || p.channelId === channelId)
             : queryPosts;
-        // Merge with local posts (WebSocket updates)
-        const mergedPosts = [...filteredPosts];
+        // Build a map of local overrides (keyed by _id)
+        const localPostMap = new Map(localPosts.map(p => [p._id, p]));
+        // Use local version if it exists (has optimistic updates), otherwise use query version
+        const mergedPosts = filteredPosts.map(p => localPostMap.get(p._id) || p);
+        // Add any local-only posts (e.g. from WebSocket) not in query data
         localPosts.forEach(localPost => {
             if (!mergedPosts.some(p => p._id === localPost._id)) {
                 mergedPosts.push(localPost);
@@ -275,12 +278,14 @@ const SubChannelScreen = () => {
 
     const messages = useMemo(() => {
         const queryMessages = messagesQuery.data || [];
-        // Filter by channel if needed
         const filteredMessages = channelId
             ? queryMessages.filter((m: any) => !m.channelId || m.channelId === channelId)
             : queryMessages;
-        // Merge with local messages (WebSocket updates)
-        const mergedMessages = [...filteredMessages];
+        // Build a map of local overrides (keyed by _id)
+        const localMsgMap = new Map(localMessages.map(m => [m._id, m]));
+        // Use local version if it exists (has optimistic updates), otherwise use query version
+        const mergedMessages = filteredMessages.map(m => localMsgMap.get(m._id) || m);
+        // Add any local-only messages (e.g. from WebSocket) not in query data
         localMessages.forEach(localMsg => {
             if (!mergedMessages.some(m => m._id === localMsg._id)) {
                 mergedMessages.push(localMsg);
@@ -1175,54 +1180,42 @@ const SubChannelScreen = () => {
         setLikeLoading(itemId);
         const endpoint = isPost ? 'posts' : 'messages';
 
-        // Optimistic update — update UI immediately before API call
+        // Find the item from feedItems to get current state
+        const currentItem = feedItems.find(f => f._id === itemId);
+        const updatedFields = { userLiked: !isLiked, likeCount: Math.max(0, ((currentItem?.likeCount) || 0) + (isLiked ? -1 : 1)) };
+
+        // Optimistic update — upsert into local state so merge gives it priority
         if (isPost) {
-            setLocalPosts((prev) =>
-                prev.map((p) =>
-                    p._id === itemId
-                        ? { ...p, userLiked: !isLiked, likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1) }
-                        : p
-                )
-            );
+            setLocalPosts((prev) => {
+                const exists = prev.some(p => p._id === itemId);
+                if (exists) return prev.map(p => p._id === itemId ? { ...p, ...updatedFields } : p);
+                if (currentItem) return [...prev, { ...currentItem, ...updatedFields } as any];
+                return prev;
+            });
         } else {
-            setLocalMessages((prev) =>
-                prev.map((m) =>
-                    m._id === itemId
-                        ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
-                        : m
-                )
-            );
+            setLocalMessages((prev) => {
+                const exists = prev.some(m => m._id === itemId);
+                if (exists) return prev.map(m => m._id === itemId ? { ...m, ...updatedFields } : m);
+                if (currentItem) return [...prev, { ...currentItem, ...updatedFields } as any];
+                return prev;
+            });
         }
 
         try {
             if (isLiked) {
-                console.log(`[SubChannel Like] Unliking ${endpoint}:`, `/subgrids/${subgridId}/${endpoint}/${itemId}/like`);
                 await communityDelete(`/subgrids/${subgridId}/${endpoint}/${itemId}/like`);
             } else {
-                console.log(`[SubChannel Like] Liking ${endpoint}:`, `/subgrids/${subgridId}/${endpoint}/${itemId}/like`);
                 await communityPost(`/subgrids/${subgridId}/${endpoint}/${itemId}/like`, {});
             }
-            console.log('[SubChannel Like] API call successful');
         } catch (err: any) {
             console.error('[SubChannel Like] Error:', err.message, err);
             setError(err.message || 'Failed to update like.');
             // Revert optimistic update on failure
+            const revertFields = { userLiked: isLiked, likeCount: Math.max(0, ((currentItem?.likeCount) || 0)) };
             if (isPost) {
-                setLocalPosts((prev) =>
-                    prev.map((p) =>
-                        p._id === itemId
-                            ? { ...p, userLiked: isLiked, likeCount: (p.likeCount || 0) + (isLiked ? 1 : -1) }
-                            : p
-                    )
-                );
+                setLocalPosts((prev) => prev.map(p => p._id === itemId ? { ...p, ...revertFields } : p));
             } else {
-                setLocalMessages((prev) =>
-                    prev.map((m) =>
-                        m._id === itemId
-                            ? { ...m, userLiked: isLiked, likeCount: (m.likeCount || 0) + (isLiked ? 1 : -1) }
-                            : m
-                    )
-                );
+                setLocalMessages((prev) => prev.map(m => m._id === itemId ? { ...m, ...revertFields } : m));
             }
         } finally {
             setLikeLoading(null);
@@ -1231,47 +1224,48 @@ const SubChannelScreen = () => {
 
     // Reshare handler for feed items (posts and messages)
     const handleReshareItem = async (itemId: string, isReshared: boolean, isPost: boolean) => {
-        console.log('[SubChannel Reshare] handleReshareItem called:', { itemId, isReshared, isPost, subgridId, reshareLoading });
-        if (!subgridId) {
-            console.log('[SubChannel Reshare] Early return: no subgridId');
-            return;
-        }
-        if (reshareLoading) {
-            console.log('[SubChannel Reshare] Early return: reshareLoading in progress');
-            return;
-        }
+        if (!subgridId) return;
+        if (reshareLoading) return;
         setReshareLoading(itemId);
+
+        // Find the item from feedItems to get current state
+        const currentItem = feedItems.find(f => f._id === itemId);
+        const updatedFields = { userReshared: !isReshared, reshareCount: Math.max(0, ((currentItem?.reshareCount) || 0) + (isReshared ? -1 : 1)) };
+
+        // Optimistic update — upsert into local state so merge gives it priority
+        if (isPost) {
+            setLocalPosts((prev) => {
+                const exists = prev.some(p => p._id === itemId);
+                if (exists) return prev.map(p => p._id === itemId ? { ...p, ...updatedFields } : p);
+                if (currentItem) return [...prev, { ...currentItem, ...updatedFields } as any];
+                return prev;
+            });
+        } else {
+            setLocalMessages((prev) => {
+                const exists = prev.some(m => m._id === itemId);
+                if (exists) return prev.map(m => m._id === itemId ? { ...m, ...updatedFields } : m);
+                if (currentItem) return [...prev, { ...currentItem, ...updatedFields } as any];
+                return prev;
+            });
+        }
+
         const endpoint = isPost ? 'posts' : 'messages';
         try {
             if (isReshared) {
-                console.log(`[SubChannel Reshare] Unresharing ${endpoint}:`, `/subgrids/${subgridId}/${endpoint}/${itemId}/reshare`);
                 await communityDelete(`/subgrids/${subgridId}/${endpoint}/${itemId}/reshare`);
             } else {
-                console.log(`[SubChannel Reshare] Resharing ${endpoint}:`, `/subgrids/${subgridId}/${endpoint}/${itemId}/reshare`);
                 await communityPost(`/subgrids/${subgridId}/${endpoint}/${itemId}/reshare`, {});
-            }
-            console.log('[SubChannel Reshare] API call successful');
-            // Update local state optimistically
-            if (isPost) {
-                setLocalPosts((prev) =>
-                    prev.map((p) =>
-                        p._id === itemId
-                            ? { ...p, userReshared: !isReshared, reshareCount: (p.reshareCount || 0) + (isReshared ? -1 : 1) }
-                            : p
-                    )
-                );
-            } else {
-                setLocalMessages((prev) =>
-                    prev.map((m) =>
-                        m._id === itemId
-                            ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
-                            : m
-                    )
-                );
             }
         } catch (err: any) {
             console.error('[SubChannel Reshare] Error:', err.message, err);
             setError(err.message || 'Failed to update reshare.');
+            // Revert optimistic update on failure
+            const revertFields = { userReshared: isReshared, reshareCount: Math.max(0, ((currentItem?.reshareCount) || 0)) };
+            if (isPost) {
+                setLocalPosts((prev) => prev.map(p => p._id === itemId ? { ...p, ...revertFields } : p));
+            } else {
+                setLocalMessages((prev) => prev.map(m => m._id === itemId ? { ...m, ...revertFields } : m));
+            }
         } finally {
             setReshareLoading(null);
         }
