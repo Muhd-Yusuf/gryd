@@ -24,7 +24,6 @@ import {
     Settings,
     Bell,
     Shield,
-    Hash,
     MessageSquare,
     Trophy,
     Sun,
@@ -3070,7 +3069,7 @@ const CreditUnionAdminScreen = () => {
                                                 ) : channel.visibility === 'admin' ? (
                                                     <Lock size={16} color={isActive ? colors.text : colors.textMuted} />
                                                 ) : (
-                                                    <Hash size={16} color={isActive ? colors.text : colors.textMuted} />
+                                                    <Image source={require('../assets/icon.png')} style={{ width: 16, height: 16, borderRadius: 3 }} />
                                                 )}
                                                 <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
                                                     <Text style={[styles.channelName, isActive && styles.channelNameActive]} numberOfLines={1} ellipsizeMode="tail">
@@ -3307,7 +3306,7 @@ const CreditUnionAdminScreen = () => {
                                     <ArrowLeft size={20} color={colors.text} />
                                 </TouchableOpacity>
                             )}
-                            {activeChannel?.visibility === 'admin' ? <Lock size={18} color={colors.textMuted} /> : <Hash size={18} color={colors.textMuted} />}
+                            {activeChannel?.visibility === 'admin' ? <Lock size={18} color={colors.textMuted} /> : <Image source={require('../assets/icon.png')} style={{ width: 18, height: 18, borderRadius: 3 }} />}
                             <Text style={styles.contentTitle}>{activeChannel?.name || 'general'}</Text>
                         </View>
                         <View style={styles.contentHeaderRight}>
@@ -3393,10 +3392,10 @@ const CreditUnionAdminScreen = () => {
                                 {feedItems.length === 0 && !feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
                                         <View style={styles.welcomeIcon}>
-                                            {activeChannel?.visibility === 'admin' ? <Lock size={32} color={colors.textMuted} /> : <Hash size={32} color={colors.textMuted} />}
+                                            {activeChannel?.visibility === 'admin' ? <Lock size={32} color={colors.textMuted} /> : <Image source={require('../assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />}
                                         </View>
-                                        <Text style={styles.welcomeTitle}>Welcome to {activeChannel?.visibility === 'admin' ? '' : '#'}{activeChannel?.name || 'general'}</Text>
-                                        <Text style={styles.welcomeSubtitle}>This is the start of the {activeChannel?.visibility === 'admin' ? '' : '#'}{activeChannel?.name || 'general'} channel.</Text>
+                                        <Text style={styles.welcomeTitle}>Welcome to {activeChannel?.name || 'general'}</Text>
+                                        <Text style={styles.welcomeSubtitle}>This is the start of the {activeChannel?.name || 'general'} channel.</Text>
                                         <TouchableOpacity
                                             style={styles.editChannelBtn}
                                             onPress={() => {
@@ -3826,7 +3825,7 @@ const CreditUnionAdminScreen = () => {
                                 {newChannelType === 'text' && <View style={styles.radioInner} />}
                             </View>
                             <View style={styles.typeIcon}>
-                                <Hash size={20} color={colors.textMuted} />
+                                <Image source={require('../assets/icon.png')} style={{ width: 20, height: 20, borderRadius: 4 }} />
                             </View>
                             <View style={styles.typeInfo}>
                                 <Text style={styles.typeTitle}>Text</Text>
@@ -3851,7 +3850,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>CHANNEL NAME</Text>
                         <View style={styles.inputRow}>
-                            <Hash size={18} color={colors.textMuted} />
+                            <Image source={require('../assets/icon.png')} style={{ width: 18, height: 18, borderRadius: 3 }} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="new-channel"
@@ -3944,7 +3943,7 @@ const CreditUnionAdminScreen = () => {
                                 {editChannelType === 'text' && <View style={styles.radioInner} />}
                             </View>
                             <View style={styles.typeIcon}>
-                                <Hash size={20} color={colors.textMuted} />
+                                <Image source={require('../assets/icon.png')} style={{ width: 20, height: 20, borderRadius: 4 }} />
                             </View>
                             <View style={styles.typeInfo}>
                                 <Text style={styles.typeTitle}>Text</Text>
@@ -3969,7 +3968,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>CHANNEL NAME</Text>
                         <View style={styles.inputRow}>
-                            <Hash size={18} color={colors.textMuted} />
+                            <Image source={require('../assets/icon.png')} style={{ width: 18, height: 18, borderRadius: 3 }} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="channel-name"
@@ -4488,7 +4487,7 @@ const CreditUnionAdminScreen = () => {
                     {(!isMobile || !mobileShowSettingsContent) && (
                     <View style={[styles.settingsSidebar, isMobile && styles.settingsSidebarMobile]}>
                         <View style={[styles.settingsSidebarHeader, isMobile && { paddingTop: insets.top + 12 }]}>
-                            <Hash size={16} color="#FFFFFF" />
+                            <Image source={require('../assets/icon.png')} style={{ width: 16, height: 16, borderRadius: 3 }} />
                             <Text style={styles.settingsSidebarTitle}>THE GRYD</Text>
                             {isMobile && (
                                 <TouchableOpacity style={styles.settingsMobileCloseBtn} onPress={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
@@ -5835,7 +5834,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>SERVER NAME</Text>
                         <View style={styles.inputRow}>
-                            <Hash size={18} color={colors.textMuted} />
+                            <Image source={require('../assets/icon.png')} style={{ width: 18, height: 18, borderRadius: 3 }} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="Server name"
@@ -6703,7 +6702,7 @@ const CreditUnionAdminScreen = () => {
                         </Text>
                         {deleteConfirmData?.name && (
                             <View style={styles.deleteItemPreview}>
-                                {deleteConfirmData.type === 'channel' ? <Hash size={16} color={colors.textMuted} /> : <FileText size={16} color={colors.textMuted} />}
+                                {deleteConfirmData.type === 'channel' ? <Image source={require('../assets/icon.png')} style={{ width: 16, height: 16, borderRadius: 3 }} /> : <FileText size={16} color={colors.textMuted} />}
                                 <Text style={styles.deleteItemName}>{deleteConfirmData.name}</Text>
                             </View>
                         )}

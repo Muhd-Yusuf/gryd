@@ -19,7 +19,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     ChevronDown,
-    Hash,
     MoreHorizontal,
     Search,
     Send,
@@ -1769,7 +1768,7 @@ const TenantCommunityScreen = () => {
                                                             ) : iconType === 'lock' ? (
                                                                 <Lock size={14} color={colors.textMuted} />
                                                             ) : (
-                                                                <Hash size={14} color={colors.textMuted} />
+                                                                <Image source={require('../../assets/icon.png')} style={{ width: 14, height: 14, borderRadius: 3 }} />
                                                             )}
                                                             <Text style={[
                                                                 styles.channelText,
@@ -1889,7 +1888,7 @@ const TenantCommunityScreen = () => {
                                     {activeChannel && getChannelIcon(activeChannel) === 'lock' ? (
                                         <Lock size={16} color={colors.text} />
                                     ) : (
-                                        <Hash size={16} color={colors.text} />
+                                        <Image source={require('../../assets/icon.png')} style={{ width: 16, height: 16, borderRadius: 3 }} />
                                     )}
                                     <Text style={styles.centerTitle}>{activeChannel?.name || 'general'}</Text>
                                 </View>
@@ -1909,14 +1908,14 @@ const TenantCommunityScreen = () => {
                                             {getChannelIcon(activeChannel) === 'lock' ? (
                                                 <Lock size={32} color={colors.textMuted} />
                                             ) : (
-                                                <Hash size={32} color={colors.textMuted} />
+                                                <Image source={require('../../assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />
                                             )}
                                         </View>
                                         <Text style={styles.channelWelcomeTitle}>
-                                            Welcome to {getChannelIcon(activeChannel) === 'lock' ? '' : '#'}{activeChannel.name}
+                                            Welcome to {activeChannel.name}
                                         </Text>
                                         <Text style={styles.channelWelcomeSubtitle}>
-                                            This is the start of the {getChannelIcon(activeChannel) === 'lock' ? '' : '#'}{activeChannel.name} channel.
+                                            This is the start of the {activeChannel.name} channel.
                                         </Text>
                                     </View>
                                 )}
