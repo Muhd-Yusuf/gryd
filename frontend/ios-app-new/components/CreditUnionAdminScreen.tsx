@@ -6,7 +6,6 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Image,
     useWindowDimensions,
     Modal,
     Pressable,
@@ -16,6 +15,7 @@ import {
     KeyboardAvoidingView,
     RefreshControl,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     UserPlus,
@@ -24,7 +24,6 @@ import {
     Settings,
     Bell,
     Shield,
-    Hash,
     MessageSquare,
     Trophy,
     Sun,
@@ -2549,11 +2548,18 @@ const CreditUnionAdminScreen = () => {
 
             // Optimistic update for immediate UI feedback
             if (isPost) {
-                // Posts come from React Query directly - no local state
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map((p) =>
+                        p._id === itemId
+                            ? { ...p, userLiked: !isLiked, likeCount: Math.max(0, (p.likeCount || 0) + (isLiked ? -1 : 1)) }
+                            : p
+                    ) : []
+                );
             } else {
                 setMessages(prev => prev.map(m =>
                     m._id === itemId
-                        ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
+                        ? { ...m, userLiked: !isLiked, likeCount: Math.max(0, (m.likeCount || 0) + (isLiked ? -1 : 1)) }
                         : m
                 ));
             }
@@ -2565,9 +2571,11 @@ const CreditUnionAdminScreen = () => {
             }
         } catch (err: any) {
             console.error(`Failed to like/unlike ${itemType}:`, err.message);
-            // Revert optimistic update on error by refetching
-            if (!isPost && activeChannelId) {
-                messagesQuery.refetch();
+            // Revert optimistic update on error by invalidating cache
+            if (isPost) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(activeSubgridId) });
+            } else if (activeChannelId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(activeSubgridId, activeChannelId) });
             }
         }
     };
@@ -2582,10 +2590,19 @@ const CreditUnionAdminScreen = () => {
             const isReshared = (item as any)?.userReshared ?? false;
 
             // Optimistic update for immediate UI feedback
-            if (!isPost) {
+            if (isPost) {
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map((p) =>
+                        p._id === itemId
+                            ? { ...p, userReshared: !isReshared, reshareCount: Math.max(0, (p.reshareCount || 0) + (isReshared ? -1 : 1)) }
+                            : p
+                    ) : []
+                );
+            } else {
                 setMessages(prev => prev.map(m =>
                     m._id === itemId
-                        ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
+                        ? { ...m, userReshared: !isReshared, reshareCount: Math.max(0, (m.reshareCount || 0) + (isReshared ? -1 : 1)) }
                         : m
                 ));
             }
@@ -2597,9 +2614,11 @@ const CreditUnionAdminScreen = () => {
             }
         } catch (err: any) {
             console.error(`Failed to reshare/unreshare ${itemType}:`, err.message);
-            // Revert optimistic update on error
-            if (!isPost && activeChannelId) {
-                messagesQuery.refetch();
+            // Revert optimistic update on error by invalidating cache
+            if (isPost) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(activeSubgridId) });
+            } else if (activeChannelId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(activeSubgridId, activeChannelId) });
             }
         }
     };
@@ -2888,7 +2907,7 @@ const CreditUnionAdminScreen = () => {
                     <TouchableOpacity style={[styles.railLogo, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]}>
                         {activeSubgrid ? (
                             activeSubgrid.logoUrl ? (
-                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
                             ) : (
                                 <Text style={styles.railLogoText}>
                                     {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
@@ -2945,7 +2964,7 @@ const CreditUnionAdminScreen = () => {
                             {/* Server Info Row */}
                             <View style={styles.mobileServerInfoRow}>
                                 {activeSubgrid?.logoUrl ? (
-                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} cachePolicy="memory-disk" />
                                 ) : (
                                     <View style={styles.mobileTopBarLogoPlaceholder}>
                                         <Text style={styles.mobileTopBarLogoText}>
@@ -3065,7 +3084,7 @@ const CreditUnionAdminScreen = () => {
                                                 ) : channel.visibility === 'admin' ? (
                                                     <Lock size={16} color={isActive ? colors.text : colors.textMuted} />
                                                 ) : (
-                                                    <Hash size={16} color={isActive ? colors.text : colors.textMuted} />
+                                                    <Image source={require('../assets/icon.png')} style={{ width: 16, height: 16, borderRadius: 3 }} />
                                                 )}
                                                 <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
                                                     <Text style={[styles.channelName, isActive && styles.channelNameActive]} numberOfLines={1} ellipsizeMode="tail">
@@ -3302,7 +3321,7 @@ const CreditUnionAdminScreen = () => {
                                     <ArrowLeft size={20} color={colors.text} />
                                 </TouchableOpacity>
                             )}
-                            {activeChannel?.visibility === 'admin' ? <Lock size={18} color={colors.textMuted} /> : <Hash size={18} color={colors.textMuted} />}
+                            {activeChannel?.visibility === 'admin' ? <Lock size={18} color={colors.textMuted} /> : <Image source={require('../assets/icon.png')} style={{ width: 18, height: 18, borderRadius: 3 }} />}
                             <Text style={styles.contentTitle}>{activeChannel?.name || 'general'}</Text>
                         </View>
                         <View style={styles.contentHeaderRight}>
@@ -3388,10 +3407,10 @@ const CreditUnionAdminScreen = () => {
                                 {feedItems.length === 0 && !feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
                                         <View style={styles.welcomeIcon}>
-                                            {activeChannel?.visibility === 'admin' ? <Lock size={32} color={colors.textMuted} /> : <Hash size={32} color={colors.textMuted} />}
+                                            {activeChannel?.visibility === 'admin' ? <Lock size={32} color={colors.textMuted} /> : <Image source={require('../assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />}
                                         </View>
-                                        <Text style={styles.welcomeTitle}>Welcome to {activeChannel?.visibility === 'admin' ? '' : '#'}{activeChannel?.name || 'general'}</Text>
-                                        <Text style={styles.welcomeSubtitle}>This is the start of the {activeChannel?.visibility === 'admin' ? '' : '#'}{activeChannel?.name || 'general'} channel.</Text>
+                                        <Text style={styles.welcomeTitle}>Welcome to {activeChannel?.name || 'general'}</Text>
+                                        <Text style={styles.welcomeSubtitle}>This is the start of the {activeChannel?.name || 'general'} channel.</Text>
                                         <TouchableOpacity
                                             style={styles.editChannelBtn}
                                             onPress={() => {
@@ -3523,6 +3542,7 @@ const CreditUnionAdminScreen = () => {
                                                                                                 source={{ uri: origUrl }}
                                                                                                 style={styles.reshareImage}
                                                                                                 resizeMode="cover"
+                                                                                                cachePolicy="memory-disk"
                                                                                             />
                                                                                         );
                                                                                     }
@@ -3572,6 +3592,7 @@ const CreditUnionAdminScreen = () => {
                                                                     source={{ uri: url }}
                                                                     style={styles.postImage}
                                                                     resizeMode="contain"
+                                                                    cachePolicy="memory-disk"
                                                                 />
                                                             );
                                                         }
@@ -3640,7 +3661,7 @@ const CreditUnionAdminScreen = () => {
                                     {attachments.map((attachment, index) => (
                                         <View key={index} style={styles.attachmentItem}>
                                             {attachment.type.startsWith('image/') ? (
-                                                <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} />
+                                                <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} cachePolicy="memory-disk" />
                                             ) : (
                                                 <View style={styles.attachmentFileIcon}>
                                                     <File size={24} color={colors.textMuted} />
@@ -3821,7 +3842,7 @@ const CreditUnionAdminScreen = () => {
                                 {newChannelType === 'text' && <View style={styles.radioInner} />}
                             </View>
                             <View style={styles.typeIcon}>
-                                <Hash size={20} color={colors.textMuted} />
+                                <Image source={require('../assets/icon.png')} style={{ width: 20, height: 20, borderRadius: 4 }} />
                             </View>
                             <View style={styles.typeInfo}>
                                 <Text style={styles.typeTitle}>Text</Text>
@@ -3846,7 +3867,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>CHANNEL NAME</Text>
                         <View style={styles.inputRow}>
-                            <Hash size={18} color={colors.textMuted} />
+                            <Image source={require('../assets/icon.png')} style={{ width: 18, height: 18, borderRadius: 3 }} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="new-channel"
@@ -3939,7 +3960,7 @@ const CreditUnionAdminScreen = () => {
                                 {editChannelType === 'text' && <View style={styles.radioInner} />}
                             </View>
                             <View style={styles.typeIcon}>
-                                <Hash size={20} color={colors.textMuted} />
+                                <Image source={require('../assets/icon.png')} style={{ width: 20, height: 20, borderRadius: 4 }} />
                             </View>
                             <View style={styles.typeInfo}>
                                 <Text style={styles.typeTitle}>Text</Text>
@@ -3964,7 +3985,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>CHANNEL NAME</Text>
                         <View style={styles.inputRow}>
-                            <Hash size={18} color={colors.textMuted} />
+                            <Image source={require('../assets/icon.png')} style={{ width: 18, height: 18, borderRadius: 3 }} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="channel-name"
@@ -4483,7 +4504,7 @@ const CreditUnionAdminScreen = () => {
                     {(!isMobile || !mobileShowSettingsContent) && (
                     <View style={[styles.settingsSidebar, isMobile && styles.settingsSidebarMobile]}>
                         <View style={[styles.settingsSidebarHeader, isMobile && { paddingTop: insets.top + 12 }]}>
-                            <Hash size={16} color="#FFFFFF" />
+                            <Image source={require('../assets/icon.png')} style={{ width: 16, height: 16, borderRadius: 3 }} />
                             <Text style={styles.settingsSidebarTitle}>THE GRYD</Text>
                             {isMobile && (
                                 <TouchableOpacity style={styles.settingsMobileCloseBtn} onPress={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
@@ -4629,6 +4650,7 @@ const CreditUnionAdminScreen = () => {
                                                         <Image
                                                             source={{ uri: serverLogoUrl || activeSubgrid?.logoUrl }}
                                                             style={styles.serverPreviewAvatarImage}
+                                                            cachePolicy="memory-disk"
                                                         />
                                                     ) : (
                                                         <Text style={styles.serverPreviewAvatarText}>
@@ -5830,7 +5852,7 @@ const CreditUnionAdminScreen = () => {
 
                         <Text style={styles.modalLabel}>SERVER NAME</Text>
                         <View style={styles.inputRow}>
-                            <Hash size={18} color={colors.textMuted} />
+                            <Image source={require('../assets/icon.png')} style={{ width: 18, height: 18, borderRadius: 3 }} />
                             <TextInput
                                 style={styles.modalInput}
                                 placeholder="Server name"
@@ -6698,7 +6720,7 @@ const CreditUnionAdminScreen = () => {
                         </Text>
                         {deleteConfirmData?.name && (
                             <View style={styles.deleteItemPreview}>
-                                {deleteConfirmData.type === 'channel' ? <Hash size={16} color={colors.textMuted} /> : <FileText size={16} color={colors.textMuted} />}
+                                {deleteConfirmData.type === 'channel' ? <Image source={require('../assets/icon.png')} style={{ width: 16, height: 16, borderRadius: 3 }} /> : <FileText size={16} color={colors.textMuted} />}
                                 <Text style={styles.deleteItemName}>{deleteConfirmData.name}</Text>
                             </View>
                         )}
