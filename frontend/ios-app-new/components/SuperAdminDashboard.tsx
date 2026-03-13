@@ -3116,15 +3116,8 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 34,
             height: 34,
             borderRadius: 10,
-            borderWidth: 2,
-            borderColor: colors.sidebarText,
             justifyContent: 'center',
             alignItems: 'center',
-        },
-        logoHash: {
-            fontSize: 18,
-            fontWeight: '700',
-            color: colors.sidebarText,
         },
         logoText: {
             fontSize: 17,
@@ -3215,16 +3208,8 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 32,
             height: 32,
             borderRadius: 8,
-            borderWidth: 2,
-            borderColor: colors.primary,
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: colors.primary + '15',
-        },
-        mobileLogoHash: {
-            fontSize: 16,
-            fontWeight: '700',
-            color: colors.primary,
         },
         mobileLogoText: {
             fontSize: 16,

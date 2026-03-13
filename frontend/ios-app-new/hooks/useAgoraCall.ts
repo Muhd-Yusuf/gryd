@@ -150,6 +150,8 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const currentCallRef = useRef<CallSession | null>(null);
     const isInitializedRef = useRef(false);
     const eventHandlerRef = useRef<any>(null);
+    const optionsRef = useRef(options);
+    optionsRef.current = options;
 
     // Keep refs in sync with state
     useEffect(() => {
@@ -242,7 +244,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 onError: (err: number, msg: string) => {
                     console.error('[Agora Native] Error:', err, msg);
                     setError(`Agora error: ${msg}`);
-                    options.onError?.(new Error(msg));
+                    optionsRef.current.onError?.(new Error(msg));
                 },
                 onTokenPrivilegeWillExpire: (connection: any, token: string) => {
                     console.log('[Agora Native] Token will expire, refreshing...');
@@ -270,7 +272,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             setError(err.message);
             throw err;
         }
-    }, [options, startDurationTimer, handleTokenRefresh]);
+    }, [startDurationTimer, handleTokenRefresh]);
 
     // Enable video for video calls
     const enableVideo = useCallback(async (engine: IRtcEngine) => {
@@ -542,7 +544,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
             // Call the onCallEnded callback if we have a callId
             if (callId) {
-                options.onCallEnded?.(callId, 'remote_ended');
+                optionsRef.current.onCallEnded?.(callId, 'remote_ended');
             }
 
             // Reset to idle after a short delay
@@ -550,11 +552,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 setCallState('idle');
             }, 1500);
         }
-    }, [callState, stopDurationTimer, options]);
+    }, [callState, stopDurationTimer]);
 
     // Auto-join for voice channels (pre-existing credentials)
+    const { autoJoin, channelName: optChannelName, token: optToken, appId: optAppId, uid: optUid, callId: optCallId } = options;
     useEffect(() => {
-        if (!options.autoJoin || !options.channelName || !options.token || !options.appId) return;
+        if (!autoJoin || !optChannelName || !optToken || !optAppId) return;
         if (callStateRef.current !== 'idle') return;
 
         const joinAsync = async () => {
@@ -576,11 +579,11 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 setError(null);
                 setCallDuration(0);
 
-                const engine = await initEngine(options.appId!);
+                const engine = await initEngine(optAppId);
                 engine.setClientRole(agora.ClientRoleType.ClientRoleBroadcaster);
 
-                console.log('[Agora Native] Auto-joining voice channel:', options.channelName, 'uid:', options.uid);
-                engine.joinChannel(options.token!, options.channelName!, options.uid || 0, {
+                console.log('[Agora Native] Auto-joining voice channel:', optChannelName, 'uid:', optUid);
+                engine.joinChannel(optToken, optChannelName, optUid || 0, {
                     clientRoleType: agora.ClientRoleType.ClientRoleBroadcaster,
                     publishMicrophoneTrack: true,
                     publishCameraTrack: false,
@@ -589,12 +592,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 });
 
                 setCurrentCall({
-                    callId: options.callId || '',
-                    channelName: options.channelName!,
+                    callId: optCallId || '',
+                    channelName: optChannelName,
                     callType: 'audio',
-                    token: options.token!,
-                    uid: options.uid || 0,
-                    appId: options.appId!,
+                    token: optToken,
+                    uid: optUid || 0,
+                    appId: optAppId,
                     participants: [],
                     duration: 0,
                 });
@@ -605,12 +608,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 console.error('[Agora Native] Auto-join failed:', err);
                 setError(err.message);
                 setCallState('idle');
-                options.onError?.(err);
+                optionsRef.current.onError?.(err);
             }
         };
 
         joinAsync();
-    }, [options.autoJoin, options.channelName, options.token, options.appId, options.uid, options.callId, initEngine, startDurationTimer]);
+    }, [autoJoin, optChannelName, optToken, optAppId, optUid, optCallId, initEngine, startDurationTimer]);
 
     // Cleanup on unmount
     useEffect(() => {

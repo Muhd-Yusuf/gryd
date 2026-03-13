@@ -810,15 +810,18 @@ export const useLikeItem = (subgridId: string) => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ itemId, itemType }: { itemId: string; itemType: 'posts' | 'messages' }) => {
+        mutationFn: async ({ itemId, itemType, channelId }: { itemId: string; itemType: 'posts' | 'messages'; channelId?: string }) => {
             const response = await communityPost(`/subgrids/${subgridId}/${itemType}/${itemId}/like`, {});
             return response?.data;
         },
-        onSuccess: (_, { itemType }) => {
+        onSuccess: (_, { itemId, itemType, channelId }) => {
             if (itemType === 'posts') {
                 queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(subgridId) });
             } else {
                 queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.messages(subgridId) });
+                if (channelId) {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(subgridId, channelId) });
+                }
             }
         },
     });
@@ -828,14 +831,17 @@ export const useUnlikeItem = (subgridId: string) => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ itemId, itemType }: { itemId: string; itemType: 'posts' | 'messages' }) => {
+        mutationFn: async ({ itemId, itemType, channelId }: { itemId: string; itemType: 'posts' | 'messages'; channelId?: string }) => {
             await communityDelete(`/subgrids/${subgridId}/${itemType}/${itemId}/like`);
         },
-        onSuccess: (_, { itemType }) => {
+        onSuccess: (_, { itemId, itemType, channelId }) => {
             if (itemType === 'posts') {
                 queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(subgridId) });
             } else {
                 queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.messages(subgridId) });
+                if (channelId) {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(subgridId, channelId) });
+                }
             }
         },
     });
@@ -845,15 +851,18 @@ export const useReshareItem = (subgridId: string) => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ itemId, itemType }: { itemId: string; itemType: 'posts' | 'messages' }) => {
+        mutationFn: async ({ itemId, itemType, channelId }: { itemId: string; itemType: 'posts' | 'messages'; channelId?: string }) => {
             const response = await communityPost(`/subgrids/${subgridId}/${itemType}/${itemId}/reshare`, {});
             return response?.data;
         },
-        onSuccess: (_, { itemType }) => {
+        onSuccess: (_, { itemType, channelId }) => {
             if (itemType === 'posts') {
                 queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(subgridId) });
             } else {
                 queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.messages(subgridId) });
+                if (channelId) {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(subgridId, channelId) });
+                }
             }
         },
     });
@@ -863,14 +872,17 @@ export const useUnreshareItem = (subgridId: string) => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ itemId, itemType }: { itemId: string; itemType: 'posts' | 'messages' }) => {
+        mutationFn: async ({ itemId, itemType, channelId }: { itemId: string; itemType: 'posts' | 'messages'; channelId?: string }) => {
             await communityDelete(`/subgrids/${subgridId}/${itemType}/${itemId}/reshare`);
         },
-        onSuccess: (_, { itemType }) => {
+        onSuccess: (_, { itemType, channelId }) => {
             if (itemType === 'posts') {
                 queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(subgridId) });
             } else {
                 queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.messages(subgridId) });
+                if (channelId) {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(subgridId, channelId) });
+                }
             }
         },
     });

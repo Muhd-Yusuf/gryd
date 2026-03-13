@@ -1174,6 +1174,26 @@ const SubChannelScreen = () => {
         }
         setLikeLoading(itemId);
         const endpoint = isPost ? 'posts' : 'messages';
+
+        // Optimistic update — update UI immediately before API call
+        if (isPost) {
+            setLocalPosts((prev) =>
+                prev.map((p) =>
+                    p._id === itemId
+                        ? { ...p, userLiked: !isLiked, likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1) }
+                        : p
+                )
+            );
+        } else {
+            setLocalMessages((prev) =>
+                prev.map((m) =>
+                    m._id === itemId
+                        ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
+                        : m
+                )
+            );
+        }
+
         try {
             if (isLiked) {
                 console.log(`[SubChannel Like] Unliking ${endpoint}:`, `/subgrids/${subgridId}/${endpoint}/${itemId}/like`);
@@ -1183,12 +1203,15 @@ const SubChannelScreen = () => {
                 await communityPost(`/subgrids/${subgridId}/${endpoint}/${itemId}/like`, {});
             }
             console.log('[SubChannel Like] API call successful');
-            // Update local state optimistically
+        } catch (err: any) {
+            console.error('[SubChannel Like] Error:', err.message, err);
+            setError(err.message || 'Failed to update like.');
+            // Revert optimistic update on failure
             if (isPost) {
                 setLocalPosts((prev) =>
                     prev.map((p) =>
                         p._id === itemId
-                            ? { ...p, userLiked: !isLiked, likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1) }
+                            ? { ...p, userLiked: isLiked, likeCount: (p.likeCount || 0) + (isLiked ? 1 : -1) }
                             : p
                     )
                 );
@@ -1196,14 +1219,11 @@ const SubChannelScreen = () => {
                 setLocalMessages((prev) =>
                     prev.map((m) =>
                         m._id === itemId
-                            ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
+                            ? { ...m, userLiked: isLiked, likeCount: (m.likeCount || 0) + (isLiked ? 1 : -1) }
                             : m
                     )
                 );
             }
-        } catch (err: any) {
-            console.error('[SubChannel Like] Error:', err.message, err);
-            setError(err.message || 'Failed to update like.');
         } finally {
             setLikeLoading(null);
         }

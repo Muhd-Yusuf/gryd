@@ -69,7 +69,6 @@ import {
     useChannelMessages,
     useDirectMessages,
     useSendChannelMessage,
-    useSendDirectMessage,
 } from '../../hooks/queries';
 import { queryKeys } from '../../lib/queryClient';
 
@@ -1966,7 +1965,7 @@ const TenantCommunityScreen = () => {
                                                         return null;
                                                     })}
                                                 </View>
-                                            )}
+                                            ) : null; })()}
                                             {/* Show reactions for all feed items (posts and messages) */}
                                             <View style={styles.feedReactions}>
                                                 <TouchableOpacity
