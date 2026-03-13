@@ -129,14 +129,14 @@ export default function StakeholderWelcomeScreen() {
                     <View style={styles.userSection}>
                         <View style={styles.userAvatar}>
                             <Text style={styles.userAvatarText}>
-                                {getInitials(`${params.firstName} ${params.lastName}`)}
+                                {getInitials(`${params.firstName || ''} ${params.lastName || ''}`)}
                             </Text>
                         </View>
                         <View style={styles.userInfo}>
                             <Text style={styles.userName}>
-                                {params.firstName} {params.lastName}
+                                {params.firstName || ''} {params.lastName || ''}
                             </Text>
-                            <Text style={styles.userEmail}>{params.email}</Text>
+                            <Text style={styles.userEmail}>{params.email || ''}</Text>
                         </View>
                         {params.stakeholderBadge && (
                             <View style={[styles.badge, { backgroundColor: getBadgeColor(params.stakeholderBadge) }]}>

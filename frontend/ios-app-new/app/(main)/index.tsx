@@ -1226,9 +1226,10 @@ const TenantCommunityScreen = () => {
         const target = event.currentTarget || event.target;
         if (target && target.getBoundingClientRect) {
             const rect = target.getBoundingClientRect();
+            const screenWidth = Platform.OS === 'web' && typeof window !== 'undefined' ? window.innerWidth : width;
             setFeedMenuPosition({
                 top: rect.bottom + 5,
-                right: window.innerWidth - rect.right,
+                right: screenWidth - rect.right,
             });
         }
         setFeedMenuItem({ ...item, isPost });
@@ -1343,7 +1344,7 @@ const TenantCommunityScreen = () => {
                             : p
                     ) : []
                 );
-            } else {
+            } else if (activeChannelId) {
                 queryClient.setQueryData(
                     queryKeys.messages.channel(activeSubgridId, activeChannelId),
                     (old: any[] | undefined) => old ? old.map((m) =>
@@ -1393,7 +1394,7 @@ const TenantCommunityScreen = () => {
                             : p
                     ) : []
                 );
-            } else {
+            } else if (activeChannelId) {
                 queryClient.setQueryData(
                     queryKeys.messages.channel(activeSubgridId, activeChannelId),
                     (old: any[] | undefined) => old ? old.map((m) =>
@@ -1465,7 +1466,7 @@ const TenantCommunityScreen = () => {
                             : p
                     ) : []
                 );
-            } else {
+            } else if (activeChannelId) {
                 queryClient.setQueryData(
                     queryKeys.messages.channel(activeSubgridId, activeChannelId),
                     (old: any[] | undefined) => old ? old.map(m =>

@@ -86,6 +86,8 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
     const socketRef = useRef<Socket | null>(null);
     const [status, setStatus] = useState<ConnectionStatus>('disconnected');
     const joinedRoomsRef = useRef<Set<string>>(new Set());
+    const optionsRef = useRef({ reconnection, reconnectionAttempts, reconnectionDelay });
+    optionsRef.current = { reconnection, reconnectionAttempts, reconnectionDelay };
 
     const connect = useCallback(() => {
         if (socketRef.current?.connected) return;
@@ -104,9 +106,9 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
         const wsUrl = baseUrl.replace(/\/api$/, '');
 
         socketRef.current = io(wsUrl, {
-            reconnection,
-            reconnectionAttempts,
-            reconnectionDelay,
+            reconnection: optionsRef.current.reconnection,
+            reconnectionAttempts: optionsRef.current.reconnectionAttempts,
+            reconnectionDelay: optionsRef.current.reconnectionDelay,
             transports: ['websocket', 'polling'],
             autoConnect: true,
         });
@@ -153,7 +155,7 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
         socket.on('reconnect_failed', () => {
             setStatus('error');
         });
-    }, [reconnection, reconnectionAttempts, reconnectionDelay]);
+    }, []);
 
     const disconnect = useCallback(() => {
         if (socketRef.current) {

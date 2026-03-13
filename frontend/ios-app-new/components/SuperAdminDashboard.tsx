@@ -331,8 +331,8 @@ const SuperAdminDashboard = () => {
         const query = searchQuery.toLowerCase().trim();
         return recentCustomers.filter((customer) =>
             customer.name?.toLowerCase().includes(query) ||
-            customer.email?.toLowerCase().includes(query) ||
-            customer.tenantName?.toLowerCase().includes(query)
+            customer.owner?.email?.toLowerCase().includes(query) ||
+            customer.serverName?.toLowerCase().includes(query)
         );
     }, [recentCustomers, searchQuery]);
 

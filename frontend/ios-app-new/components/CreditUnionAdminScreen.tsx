@@ -998,7 +998,7 @@ const CreditUnionAdminScreen = () => {
                 setUserOnline(msg.senderId, true);
             }
         });
-    }, [messages]);
+    }, [messages, userId]);
 
     useEffect(() => {
         if (!activeSubgridId) return;
@@ -2481,7 +2481,9 @@ const CreditUnionAdminScreen = () => {
         if (audioRecorder.isRecording) {
             try {
                 await audioRecorder.stop();
-            } catch { }
+            } catch (err) {
+                console.warn('[CUA] Failed to stop audio recorder:', err);
+            }
             await setAudioModeAsync({ allowsRecording: false });
         }
     };
