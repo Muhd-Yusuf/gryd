@@ -36,7 +36,7 @@ export default function InviteMembersScreen() {
     // Generate the invite URL with actual code or placeholder
     const baseUrl = Platform.OS === 'web' && typeof window !== 'undefined'
         ? window.location.origin
-        : 'https://the-gryd.com';
+        : 'https://thegryd.io';
     const inviteUrl = inviteCode
         ? `${baseUrl}/join/${inviteCode}`
         : `${baseUrl}/join/XXXXXX`;

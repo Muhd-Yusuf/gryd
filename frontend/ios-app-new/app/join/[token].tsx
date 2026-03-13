@@ -148,13 +148,13 @@ export default function JoinInviteScreen() {
                 password,
             });
 
-            // Step 2: Store auth data
-            await setAuthUser(authTokenResult, user);
-
-            // Step 3: Accept invite
+            // Step 2: Accept invite before storing auth (avoid inconsistent state)
             await communityPost(`/subgrids/${inviteDetails?.subgridId}/invites/accept`, {
                 inviteToken: token,
             });
+
+            // Step 3: Store auth data only after invite is accepted
+            await setAuthUser(authTokenResult, user);
 
             Alert.alert(
                 'Welcome!',
@@ -199,13 +199,13 @@ export default function JoinInviteScreen() {
                 password,
             });
 
-            // Step 2: Store auth data
-            await setAuthUser(authTokenResult, user);
-
-            // Step 3: Accept invite
+            // Step 2: Accept invite before storing auth (avoid inconsistent state)
             await communityPost(`/subgrids/${inviteDetails?.subgridId}/invites/accept`, {
                 inviteToken: token,
             });
+
+            // Step 3: Store auth data only after invite is accepted
+            await setAuthUser(authTokenResult, user);
 
             Alert.alert(
                 'Welcome!',

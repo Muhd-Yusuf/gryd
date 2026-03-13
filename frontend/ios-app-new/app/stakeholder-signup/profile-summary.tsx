@@ -78,6 +78,7 @@ export default function StakeholderProfileSummaryScreen() {
                     avatarUrl = uploadResult.data?.url || uploadResult.url || '';
                 } catch (uploadErr) {
                     console.warn('Failed to upload profile image:', uploadErr);
+                    // Continue without avatar - user can update it later
                 }
             }
 
@@ -100,10 +101,8 @@ export default function StakeholderProfileSummaryScreen() {
             setSuccess(true);
             setLoading(false);
 
-            // Auto-navigate after a short delay
-            setTimeout(() => {
-                router.replace('/(main)');
-            }, 2000);
+            // Navigate after auth state is stored
+            router.replace('/(main)');
         } catch (err: any) {
             setError(err.message || 'Failed to create account');
             setLoading(false);
