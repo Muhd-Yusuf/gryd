@@ -259,12 +259,20 @@ callSchema.statics.getDMCallHistory = async function(userId1, userId2, limit = 2
 callSchema.statics.getActiveCall = async function(userId) {
     // Stale threshold: calls older than 2 minutes in ringing/initiating status should be ignored
     const staleThreshold = new Date(Date.now() - 2 * 60 * 1000);
+    // Active calls older than 2 hours are stale (call ended but status wasn't updated)
+    const activeStaleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
     return this.findOne({
         'participants.userId': userId,
         $or: [
-            // Active calls are always valid
-            { status: 'active' },
+            // Active calls are valid only if not too old (prevents permanently "busy" users)
+            {
+                status: 'active',
+                $or: [
+                    { answeredAt: { $gte: activeStaleThreshold } },
+                    { initiatedAt: { $gte: activeStaleThreshold } }
+                ]
+            },
             // Ringing/initiating calls are only valid if recent
             {
                 status: { $in: ['initiating', 'ringing'] },
@@ -295,8 +303,10 @@ callSchema.statics.isUserBusy = async function(userId) {
  */
 callSchema.statics.cleanupStaleCalls = async function(userId) {
     const staleThreshold = new Date(Date.now() - 2 * 60 * 1000);
+    const activeStaleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
-    const result = await this.updateMany(
+    // Clean up stale ringing/initiating calls (older than 2 minutes)
+    const result1 = await this.updateMany(
         {
             'participants.userId': userId,
             status: { $in: ['initiating', 'ringing'] },
@@ -311,11 +321,28 @@ callSchema.statics.cleanupStaleCalls = async function(userId) {
         }
     );
 
-    if (result.modifiedCount > 0) {
-        console.log(`[Call] Cleaned up ${result.modifiedCount} stale calls for user ${userId}`);
+    // Clean up stale active calls (older than 2 hours - call ended but status wasn't updated)
+    const result2 = await this.updateMany(
+        {
+            'participants.userId': userId,
+            status: 'active',
+            initiatedAt: { $lt: activeStaleThreshold }
+        },
+        {
+            $set: {
+                status: 'ended',
+                endedAt: new Date(),
+                endReason: 'timeout'
+            }
+        }
+    );
+
+    const totalCleaned = result1.modifiedCount + result2.modifiedCount;
+    if (totalCleaned > 0) {
+        console.log(`[Call] Cleaned up ${result1.modifiedCount} stale ringing + ${result2.modifiedCount} stale active calls for user ${userId}`);
     }
 
-    return result.modifiedCount;
+    return totalCleaned;
 };
 
 module.exports = mongoose.model('Call', callSchema);
