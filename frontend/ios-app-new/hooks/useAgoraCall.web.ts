@@ -65,9 +65,9 @@ interface UseAgoraCallOptions {
 
 export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const [callState, setCallStateInternal] = useState<CallState>('idle');
-    // Simplified setCallState wrapper
+    // setCallState wrapper that handles both direct values and functional updaters
     const setCallState = useCallback((newState: CallState | ((prev: CallState) => CallState)) => {
-        setCallStateInternal(newState);
+        setCallStateInternal(prev => typeof newState === 'function' ? newState(prev) : newState);
     }, []);
     const [callType, setCallType] = useState<CallType>('audio');
     const [currentCall, setCurrentCall] = useState<CallSession | null>(null);
