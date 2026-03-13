@@ -653,6 +653,16 @@ export default function DirectMessagesScreen() {
         };
     }, [isConnected, currentUserId, selectedFriendId, activeSubgridId, joinRoom, leaveRoom, subscribe, queryClient]);
 
+    // Refetch messages when WebSocket reconnects (catches messages missed while disconnected)
+    const prevConnectedRef = useRef(isConnected);
+    useEffect(() => {
+        if (isConnected && !prevConnectedRef.current && selectedFriendId) {
+            console.log('[DirectMessages] WebSocket reconnected, refetching messages');
+            messagesQuery.refetch();
+        }
+        prevConnectedRef.current = isConnected;
+    }, [isConnected, selectedFriendId]);
+
     useEffect(() => {
         if (!activeSubgridId || !selectedFriendId) {
             setMutualFriends([]);

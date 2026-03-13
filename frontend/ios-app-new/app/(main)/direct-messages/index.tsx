@@ -527,6 +527,16 @@ const DirectMessagesScreen = () => {
         };
     }, [isConnected, userId, activePeerId, joinRoom, leaveRoom, subscribe]);
 
+    // Refetch messages when WebSocket reconnects (catches messages missed while disconnected)
+    const prevConnectedRef = useRef(isConnected);
+    useEffect(() => {
+        if (isConnected && !prevConnectedRef.current && activePeerId) {
+            console.log('[DM Web] WebSocket reconnected, refetching messages');
+            directMessagesQuery.refetch();
+        }
+        prevConnectedRef.current = isConnected;
+    }, [isConnected, activePeerId]);
+
     const friendSet = useMemo(() => new Set(friends), [friends]);
     const blockedSet = useMemo(() => new Set(blockedIds), [blockedIds]);
     const outgoingSet = useMemo(
