@@ -74,7 +74,7 @@ import UserAvatar from './UserAvatar';
 import { useAgoraCall } from '../hooks';
 import { useCallContext } from '../contexts/CallContext';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
-import { hapticLight, hapticMedium, hapticSuccess, hapticError } from '../lib/haptics';
+import { hapticLight, hapticMedium, hapticSuccess, hapticError, hapticSelection } from '../lib/haptics';
 // Import CallModal directly - Metro will resolve to .web.tsx on web platform
 import CallModal from './CallModal';
 import VoiceMessagePlayer from './VoiceMessagePlayer';

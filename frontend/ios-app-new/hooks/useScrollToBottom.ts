@@ -44,23 +44,30 @@ export const useScrollToBottom = (): UseScrollToBottomReturn => {
         }
     }, []);
 
-    // Handle content size change - track height and scroll on initial load
-    const handleContentSizeChange = useCallback((contentWidth: number, contentHeight: number) => {
-        contentHeightRef.current = contentHeight;
-        // Only scroll on initial load
-        if (shouldScrollToBottomRef.current && contentHeight > 0 && scrollViewHeightRef.current > 0) {
-            const scrollTo = contentHeight - scrollViewHeightRef.current;
+    // Attempt scroll to bottom if both content and layout dimensions are available
+    const tryInitialScroll = useCallback(() => {
+        if (shouldScrollToBottomRef.current && contentHeightRef.current > 0 && scrollViewHeightRef.current > 0) {
+            const scrollTo = contentHeightRef.current - scrollViewHeightRef.current;
             if (scrollTo > 0) {
-                scrollViewRef.current?.scrollTo({ y: scrollTo, animated: false });
+                requestAnimationFrame(() => {
+                    scrollViewRef.current?.scrollTo({ y: scrollTo, animated: false });
+                });
             }
             shouldScrollToBottomRef.current = false;
         }
     }, []);
 
-    // Handle layout to get scroll view height
+    // Handle content size change - track height and attempt scroll
+    const handleContentSizeChange = useCallback((contentWidth: number, contentHeight: number) => {
+        contentHeightRef.current = contentHeight;
+        tryInitialScroll();
+    }, [tryInitialScroll]);
+
+    // Handle layout to get scroll view height - also attempt scroll (fixes race condition)
     const handleScrollViewLayout = useCallback((event: any) => {
         scrollViewHeightRef.current = event.nativeEvent.layout.height;
-    }, []);
+        tryInitialScroll();
+    }, [tryInitialScroll]);
 
     // Reset scroll state when switching conversations
     const resetScrollState = useCallback(() => {
