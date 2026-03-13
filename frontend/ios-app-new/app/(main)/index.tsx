@@ -14,8 +14,8 @@ import {
     Alert,
     Pressable,
     RefreshControl,
+    Image,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     ChevronDown,
@@ -413,39 +413,8 @@ const TenantCommunityScreen = () => {
                 if (!current) return subgrids[0]._id;
                 return current;
             });
-            // Cache subgrids for offline/instant loading
-            if (tenantId) {
-                cacheSubgrids(tenantId, subgrids);
-            }
         }
     }, [subgrids, tenantId]);
-
-    // Cache members for DM loading (backward compatibility)
-    useEffect(() => {
-        if (members.length > 0) {
-            const memberProfiles: Record<string, any> = {};
-            members.forEach((m: any) => {
-                if (m.userId) {
-                    memberProfiles[m.userId] = {
-                        id: m.userId,
-                        firstName: m.firstName,
-                        lastName: m.lastName,
-                        email: m.email,
-                        avatarUrl: m.avatarUrl,
-                        role: m.role || m.userRole,
-                    };
-                }
-            });
-            cacheUsers(memberProfiles);
-        }
-    }, [members]);
-
-    // Cache friends data
-    useEffect(() => {
-        if (activeSubgridId && friends.length > 0) {
-            cacheFriends(activeSubgridId, friends, friendUsers);
-        }
-    }, [activeSubgridId, friends, friendUsers]);
 
     // Set active channel when channels load
     useEffect(() => {
