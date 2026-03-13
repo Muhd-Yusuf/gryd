@@ -1226,14 +1226,20 @@ const SubChannelScreen = () => {
         try {
             await mutation.mutateAsync({ itemId, itemType, channelId });
         } catch (err: any) {
-            console.error('[SubChannel Like] Error:', err.message, err);
-            setError(err.message || 'Failed to update like.');
-            // Revert optimistic update on failure
-            const revertFields = { userLiked: isLiked, likeCount: Math.max(0, ((currentItem?.likeCount) || 0)) };
-            if (isPost) {
-                setLocalPosts((prev) => prev.map(p => p._id === itemId ? { ...p, ...revertFields } : p));
+            const msg = (err.message || '').toLowerCase();
+            // If server says "already liked", the item IS liked — keep optimistic state
+            if (!isLiked && msg.includes('already liked')) {
+                hapticSuccess();
             } else {
-                setLocalMessages((prev) => prev.map(m => m._id === itemId ? { ...m, ...revertFields } : m));
+                console.error('[SubChannel Like] Error:', err.message, err);
+                setError(err.message || 'Failed to update like.');
+                // Revert optimistic update on failure
+                const revertFields = { userLiked: isLiked, likeCount: Math.max(0, ((currentItem?.likeCount) || 0)) };
+                if (isPost) {
+                    setLocalPosts((prev) => prev.map(p => p._id === itemId ? { ...p, ...revertFields } : p));
+                } else {
+                    setLocalMessages((prev) => prev.map(m => m._id === itemId ? { ...m, ...revertFields } : m));
+                }
             }
         } finally {
             setLikeLoading(null);
@@ -1273,14 +1279,20 @@ const SubChannelScreen = () => {
         try {
             await mutation.mutateAsync({ itemId, itemType, channelId });
         } catch (err: any) {
-            console.error('[SubChannel Reshare] Error:', err.message, err);
-            setError(err.message || 'Failed to update reshare.');
-            // Revert optimistic update on failure
-            const revertFields = { userReshared: isReshared, reshareCount: Math.max(0, ((currentItem?.reshareCount) || 0)) };
-            if (isPost) {
-                setLocalPosts((prev) => prev.map(p => p._id === itemId ? { ...p, ...revertFields } : p));
+            const msg = (err.message || '').toLowerCase();
+            // If server says "already reshared", keep optimistic state
+            if (!isReshared && msg.includes('already reshared')) {
+                hapticSuccess();
             } else {
-                setLocalMessages((prev) => prev.map(m => m._id === itemId ? { ...m, ...revertFields } : m));
+                console.error('[SubChannel Reshare] Error:', err.message, err);
+                setError(err.message || 'Failed to update reshare.');
+                // Revert optimistic update on failure
+                const revertFields = { userReshared: isReshared, reshareCount: Math.max(0, ((currentItem?.reshareCount) || 0)) };
+                if (isPost) {
+                    setLocalPosts((prev) => prev.map(p => p._id === itemId ? { ...p, ...revertFields } : p));
+                } else {
+                    setLocalMessages((prev) => prev.map(m => m._id === itemId ? { ...m, ...revertFields } : m));
+                }
             }
         } finally {
             setReshareLoading(null);

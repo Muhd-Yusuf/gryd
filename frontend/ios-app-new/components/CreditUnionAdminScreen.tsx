@@ -2573,12 +2573,20 @@ const CreditUnionAdminScreen = () => {
                 await likeItemMutation.mutateAsync({ itemId, itemType, channelId: activeChannelId });
             }
         } catch (err: any) {
-            console.error(`Failed to like/unlike ${itemType}:`, err.message);
-            // Revert optimistic update on error by invalidating cache
-            if (isPost) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(activeSubgridId) });
-            } else if (activeChannelId) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(activeSubgridId, activeChannelId) });
+            const msg = (err.message || '').toLowerCase();
+            const item = items.find(i => i._id === itemId);
+            const isLiked = item?.userLiked ?? false;
+            // If server says "already liked", keep optimistic state
+            if (!isLiked && msg.includes('already liked')) {
+                // Don't revert — the server confirms it's liked
+            } else {
+                console.error(`Failed to like/unlike ${itemType}:`, err.message);
+                // Revert optimistic update on error by invalidating cache
+                if (isPost) {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(activeSubgridId) });
+                } else if (activeChannelId) {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(activeSubgridId, activeChannelId) });
+                }
             }
         }
     };
@@ -2616,12 +2624,20 @@ const CreditUnionAdminScreen = () => {
                 await reshareItemMutation.mutateAsync({ itemId, itemType, channelId: activeChannelId });
             }
         } catch (err: any) {
-            console.error(`Failed to reshare/unreshare ${itemType}:`, err.message);
-            // Revert optimistic update on error by invalidating cache
-            if (isPost) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(activeSubgridId) });
-            } else if (activeChannelId) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(activeSubgridId, activeChannelId) });
+            const msg = (err.message || '').toLowerCase();
+            const item = items.find(i => i._id === itemId);
+            const isReshared = (item as any)?.userReshared ?? false;
+            // If server says "already reshared", keep optimistic state
+            if (!isReshared && msg.includes('already reshared')) {
+                // Don't revert — the server confirms it's reshared
+            } else {
+                console.error(`Failed to reshare/unreshare ${itemType}:`, err.message);
+                // Revert optimistic update on error by invalidating cache
+                if (isPost) {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(activeSubgridId) });
+                } else if (activeChannelId) {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(activeSubgridId, activeChannelId) });
+                }
             }
         }
     };

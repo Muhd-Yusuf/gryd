@@ -1435,7 +1435,7 @@ const TenantCommunityScreen = () => {
         // Optimistically update UI immediately
         const updateCache = (revert?: boolean) => {
             const liked = revert ? isLiked : newLiked;
-            const delta = revert ? 0 : likeDelta;
+            const delta = revert ? -likeDelta : likeDelta;
             if (isPost) {
                 queryClient.setQueryData(
                     queryKeys.subgrids.posts(activeSubgridId),
@@ -1465,10 +1465,17 @@ const TenantCommunityScreen = () => {
             const mutation = isLiked ? unlikeItemMutation : likeItemMutation;
             await mutation.mutateAsync({ itemId, itemType, channelId: activeChannelIdRef.current });
         } catch (err: any) {
-            // Revert optimistic update on failure
-            updateCache(true);
-            console.error('[Like] Error:', err.message, err);
-            setError(err.message || 'Failed to update like.');
+            const msg = (err.message || '').toLowerCase();
+            // If server says "already liked", the item IS liked — keep optimistic state
+            if (!isLiked && msg.includes('already liked')) {
+                // Don't revert — the server confirms it's liked
+                hapticSuccess();
+            } else {
+                // Revert optimistic update on genuine failure
+                updateCache(true);
+                console.error('[Like] Error:', err.message, err);
+                setError(err.message || 'Failed to update like.');
+            }
         } finally {
             setLikeLoading(null);
         }
@@ -1487,7 +1494,7 @@ const TenantCommunityScreen = () => {
         // Optimistically update UI immediately
         const updateCache = (revert?: boolean) => {
             const reshared = revert ? isReshared : newReshared;
-            const delta = revert ? 0 : reshareDelta;
+            const delta = revert ? -reshareDelta : reshareDelta;
             if (isPost) {
                 queryClient.setQueryData(
                     queryKeys.subgrids.posts(activeSubgridId),
@@ -1517,10 +1524,16 @@ const TenantCommunityScreen = () => {
             const mutation = isReshared ? unreshareItemMutation : reshareItemMutation;
             await mutation.mutateAsync({ itemId, itemType, channelId: activeChannelIdRef.current });
         } catch (err: any) {
-            // Revert optimistic update on failure
-            updateCache(true);
-            console.error('[Reshare] Error:', err.message, err);
-            setError(err.message || 'Failed to update reshare.');
+            const msg = (err.message || '').toLowerCase();
+            // If server says "already reshared", keep optimistic state
+            if (!isReshared && msg.includes('already reshared')) {
+                hapticSuccess();
+            } else {
+                // Revert optimistic update on genuine failure
+                updateCache(true);
+                console.error('[Reshare] Error:', err.message, err);
+                setError(err.message || 'Failed to update reshare.');
+            }
         } finally {
             setReshareLoading(null);
         }
