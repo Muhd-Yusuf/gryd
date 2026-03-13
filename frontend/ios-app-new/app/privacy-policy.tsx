@@ -16,7 +16,7 @@ const sections = [
 • Messages, posts, and comments you send
 • Voice messages and media files you share
 • Community and channel participation data
-
+1
 Information collected automatically:
 • Device information (device type, operating system)
 • Push notification tokens

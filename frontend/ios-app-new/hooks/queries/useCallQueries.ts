@@ -29,8 +29,8 @@ export const useVoiceChannelParticipants = (channelId: string, subgridId?: strin
             return response?.data || { participants: [], hostId: null, waveRequests: [] };
         },
         enabled: !!channelId,
-        staleTime: 2 * 1000, // 2 seconds - voice channels need fresh data
-        refetchInterval: 3000, // Auto-refetch every 3 seconds
+        staleTime: 5 * 1000, // 5 seconds - voice channels need reasonably fresh data
+        refetchInterval: 10000, // Auto-refetch every 10 seconds (rely on WebSocket for real-time updates)
     });
 };
 

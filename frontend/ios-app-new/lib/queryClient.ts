@@ -44,8 +44,8 @@ export const queryClient = new QueryClient({
 export const asyncStoragePersister = createAsyncStoragePersister({
     storage: AsyncStorage,
     key: 'GRYD_REACT_QUERY_CACHE',
-    // Throttle writes to storage (performance optimization)
-    throttleTime: 1000,
+    // Throttle writes to storage - balance between performance and data safety
+    throttleTime: 250,
     // Serialize/deserialize functions (default JSON is fine)
 });
 

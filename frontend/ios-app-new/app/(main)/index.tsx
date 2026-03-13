@@ -261,6 +261,8 @@ const TenantCommunityScreen = () => {
         return cached && cached.length > 0 ? cached[0]._id : '';
     });
     const [activeChannelId, setActiveChannelId] = useState('');
+    const activeChannelIdRef = useRef(activeChannelId);
+    activeChannelIdRef.current = activeChannelId;
     const [channelDraft, setChannelDraft] = useState('');
     const [showEventsView, setShowEventsView] = useState(false);
     const [directMessagePeers, setDirectMessagePeers] = useState<string[]>([]);
@@ -295,8 +297,6 @@ const TenantCommunityScreen = () => {
 
     // Mutations for sending messages
     const sendChannelMessage = useSendChannelMessage(activeSubgridId, activeChannelId);
-    const sendDmMessage = useSendDirectMessage(activeSubgridId, activeDmId);
-
     // Derive data from queries (memoize fallbacks to prevent infinite loops)
     const subgrids = subgridsQuery.data || [];
     const channels = channelsQuery.data || [];
@@ -828,11 +828,16 @@ const TenantCommunityScreen = () => {
         {
             id: 'messages',
             icon: 'chat-bubble-outline' as const,
-            onPress: () =>
+            onPress: () => {
+                if (!activeSubgridId) {
+                    setError('Please select a community first.');
+                    return;
+                }
                 router.push({
                     pathname: '/(main)/direct-messages',
                     params: { subgridId: activeSubgridId },
-                }),
+                });
+            },
         },
         {
             id: 'contributors',
@@ -1091,13 +1096,19 @@ const TenantCommunityScreen = () => {
             try {
                 await audioRecorder.stop();
                 const uri = audioRecorder.uri;
-                const durationMs = Date.now() - recordingStartRef.current;
 
                 if (uri && activeSubgridId && activeChannelId) {
-                    const result = await uploadFile(
-                        { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' },
-                        { type: 'voice-note', subgridId: activeSubgridId }
-                    );
+                    let result;
+                    try {
+                        result = await uploadFile(
+                            { uri, name: `voice_${Date.now()}.m4a`, type: 'audio/m4a' },
+                            { type: 'voice-note', subgridId: activeSubgridId }
+                        );
+                    } catch (uploadErr: any) {
+                        console.error('Voice message upload failed:', uploadErr?.message || uploadErr);
+                        setError('Failed to upload voice message. Please try again.');
+                        return;
+                    }
 
                     if (result?.success && result?.data) {
                         // Send voice message and update cache
@@ -1107,12 +1118,19 @@ const TenantCommunityScreen = () => {
                             subgridId: activeSubgridId,
                             channelId: activeChannelId,
                         });
+                    } else {
+                        setError('Voice message upload failed. Please try again.');
                     }
                 }
             } catch (err: any) {
                 console.error('Failed to save recording:', err.message);
+                setError(err.message || 'Failed to send voice message.');
             } finally {
-                await setAudioModeAsync({ allowsRecording: false });
+                try {
+                    await setAudioModeAsync({ allowsRecording: false });
+                } catch (audioModeErr) {
+                    console.warn('Failed to reset audio mode:', audioModeErr);
+                }
             }
         }
     };
@@ -1344,9 +1362,9 @@ const TenantCommunityScreen = () => {
                             : p
                     ) : []
                 );
-            } else if (activeChannelId) {
+            } else if (activeChannelIdRef.current) {
                 queryClient.setQueryData(
-                    queryKeys.messages.channel(activeSubgridId, activeChannelId),
+                    queryKeys.messages.channel(activeSubgridId, activeChannelIdRef.current),
                     (old: any[] | undefined) => old ? old.map((m) =>
                         m._id === itemId
                             ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
@@ -1394,9 +1412,9 @@ const TenantCommunityScreen = () => {
                             : p
                     ) : []
                 );
-            } else if (activeChannelId) {
+            } else if (activeChannelIdRef.current) {
                 queryClient.setQueryData(
-                    queryKeys.messages.channel(activeSubgridId, activeChannelId),
+                    queryKeys.messages.channel(activeSubgridId, activeChannelIdRef.current),
                     (old: any[] | undefined) => old ? old.map((m) =>
                         m._id === itemId
                             ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
@@ -1466,9 +1484,9 @@ const TenantCommunityScreen = () => {
                             : p
                     ) : []
                 );
-            } else if (activeChannelId) {
+            } else if (activeChannelIdRef.current) {
                 queryClient.setQueryData(
-                    queryKeys.messages.channel(activeSubgridId, activeChannelId),
+                    queryKeys.messages.channel(activeSubgridId, activeChannelIdRef.current),
                     (old: any[] | undefined) => old ? old.map(m =>
                         m._id === commentTarget.id
                             ? { ...m, commentCount: (m.commentCount || 0) + 1 }
@@ -1842,9 +1860,9 @@ const TenantCommunityScreen = () => {
                                                     {item.body.length > 200 && <Text style={styles.moreText}> More</Text>}
                                                 </Text>
                                             )}
-                                            {normalizeAttachments(item.attachments).length > 0 && (
+                                            {(() => { const attachments = normalizeAttachments(item.attachments); return attachments.length > 0 ? (
                                                 <View style={styles.attachmentStack}>
-                                                    {normalizeAttachments(item.attachments).map((attachment, idx) => {
+                                                    {attachments.map((attachment, idx) => {
                                                         if (attachment.type === 'audio' || attachment.type === 'voice') {
                                                             return (
                                                                 <VoiceMessagePlayer
@@ -2078,10 +2096,13 @@ const TenantCommunityScreen = () => {
                                 </View>
                                 <TouchableOpacity
                                     style={styles.addFriendsBtn}
-                                    onPress={() => router.push({
-                                        pathname: '/(main)/direct-messages',
-                                        params: { subgridId: activeSubgridId },
-                                    })}
+                                    onPress={() => {
+                                        if (!activeSubgridId) return;
+                                        router.push({
+                                            pathname: '/(main)/direct-messages',
+                                            params: { subgridId: activeSubgridId },
+                                        });
+                                    }}
                                 >
                                     <Text style={styles.addFriendsText}>Add Friends</Text>
                                     <UserPlus size={14} color={colors.text} />

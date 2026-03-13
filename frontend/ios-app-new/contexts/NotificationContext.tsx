@@ -60,6 +60,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     const [notification, setNotification] = useState<Notifications.Notification | null>(null);
     const [permissionStatus, setPermissionStatus] = useState<Notifications.PermissionStatus | null>(null);
     const [isRegistered, setIsRegistered] = useState(false);
+    const isRegisteringRef = useRef(false);
     const router = useRouter();
 
     const notificationListener = useRef<Notifications.Subscription>();
@@ -178,27 +179,31 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      * Register the push token with the backend
      */
     const registerToken = useCallback(async (): Promise<void> => {
-        const userId = getUserId();
-        if (!userId) {
-            return;
-        }
+        // Prevent concurrent registration calls
+        if (isRegisteringRef.current) return;
+        isRegisteringRef.current = true;
 
-        // Check if we have permission
-        const hasPermission = await requestPermissions();
-        if (!hasPermission) {
-            return;
-        }
-
-        // Get push token
-        const token = await getExpoPushToken();
-        if (!token) {
-            return;
-        }
-
-        setExpoPushToken(token);
-
-        // Register with backend
         try {
+            const userId = getUserId();
+            if (!userId) {
+                return;
+            }
+
+            // Check if we have permission
+            const hasPermission = await requestPermissions();
+            if (!hasPermission) {
+                return;
+            }
+
+            // Get push token
+            const token = await getExpoPushToken();
+            if (!token) {
+                return;
+            }
+
+            setExpoPushToken(token);
+
+            // Register with backend
             const platform = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
             const deviceId = Device.deviceName || undefined;
 
@@ -206,6 +211,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             setIsRegistered(true);
         } catch {
             // Silently fail - token registration is best-effort
+        } finally {
+            isRegisteringRef.current = false;
         }
     }, [requestPermissions]);
 
@@ -321,12 +328,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     );
 };
 
-export const useNotifications = (): NotificationContextValue => {
-    const context = useContext(NotificationContext);
-    if (!context) {
-        throw new Error('useNotifications must be used within a NotificationProvider');
-    }
-    return context;
+export const useNotifications = (): NotificationContextValue | null => {
+    return useContext(NotificationContext);
 };
 
 export default NotificationContext;

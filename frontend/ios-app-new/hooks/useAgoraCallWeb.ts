@@ -261,6 +261,20 @@ export const useAgoraCallWeb = (options: UseAgoraCallWebOptions = {}) => {
                     }
                 }
 
+                // Check for microphone permission before joining (consistent with native)
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
+                } catch (permErr: any) {
+                    const msg = permErr?.name === 'NotAllowedError'
+                        ? 'Microphone permission is required for calls. Please allow access in your browser settings.'
+                        : 'Unable to access microphone. Please check your device settings.';
+                    setError(msg);
+                    setCallState('idle');
+                    isJoiningRef.current = false;
+                    return;
+                }
+
                 // Join the channel
                 console.log('[AgoraWeb] Joining channel:', options.channelName);
                 await client.join(options.appId, options.channelName, options.token, options.uid || 0);

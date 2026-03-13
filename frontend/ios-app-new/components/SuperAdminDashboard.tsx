@@ -161,7 +161,7 @@ type NotificationSettings = {
     weeklyReports: boolean;
 };
 
-type SettingsTab = 'admin' | 'team' | 'notifications';
+type SettingsTab = 'admin' | 'team' | 'notifications' | 'system';
 
 const formatDate = (value?: string) => {
     if (!value) return '';
@@ -265,6 +265,7 @@ const SuperAdminDashboard = () => {
     const [inviteFirstName, setInviteFirstName] = useState('');
     const [inviteLastName, setInviteLastName] = useState('');
     const [inviteRole, setInviteRole] = useState('admin');
+    const [inviteRoleDropdownOpen, setInviteRoleDropdownOpen] = useState(false);
     const [invitingMember, setInvitingMember] = useState(false);
 
     // Team member action menu
@@ -1722,6 +1723,55 @@ const SuperAdminDashboard = () => {
                     </View>
                 </View>
             </View>
+
+            {/* Moderation Queue */}
+            <View style={styles.moderationCard}>
+                <View style={styles.moderationCardContentVertical}>
+                    <Text style={styles.moderationCardTitle}>Moderation Queue ({moderationTotal || 0})</Text>
+                    {moderationItems.length > 0 ? (
+                        moderationItems.map((item) => (
+                            <View key={item._id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>
+                                            {item.contentType} — {item.communityName}
+                                        </Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>
+                                            Reason: {item.reason}
+                                        </Text>
+                                        {item.reportedBy && (
+                                            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                                                Reported by: {item.reportedBy}
+                                            </Text>
+                                        )}
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                                            {formatTimeAgo(item.createdAt)}
+                                        </Text>
+                                    </View>
+                                    <View style={{
+                                        backgroundColor: item.status === 'pending' ? '#fef3c7' : item.status === 'resolved' ? '#dcfce7' : '#f3f4f6',
+                                        paddingHorizontal: 8,
+                                        paddingVertical: 4,
+                                        borderRadius: 6,
+                                    }}>
+                                        <Text style={{
+                                            color: item.status === 'pending' ? '#d97706' : item.status === 'resolved' ? '#16a34a' : '#6b7280',
+                                            fontSize: 12,
+                                            fontWeight: '600',
+                                        }}>
+                                            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </View>
+                        ))
+                    ) : (
+                        <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                            <Text style={{ color: colors.textMuted, fontSize: 14 }}>No moderation items</Text>
+                        </View>
+                    )}
+                </View>
+            </View>
         </ScrollView>
     );
 
@@ -1761,6 +1811,12 @@ const SuperAdminDashboard = () => {
                         onPress={() => setSettingsTab('notifications')}
                     >
                         <Text style={[styles.settingsTabText, settingsTab === 'notifications' && styles.settingsTabTextActive]}>Notifications</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.settingsTab, settingsTab === 'system' && styles.settingsTabActive]}
+                        onPress={() => setSettingsTab('system')}
+                    >
+                        <Text style={[styles.settingsTabText, settingsTab === 'system' && styles.settingsTabTextActive]}>System</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -2085,6 +2141,117 @@ const SuperAdminDashboard = () => {
                         </View>
                     </View>
                 )}
+
+                {/* System Config Tab */}
+                {settingsTab === 'system' && (
+                    <View style={[styles.settingsContent, isMobile && styles.settingsContentMobile]}>
+                        <Text style={styles.settingsSectionTitle}>System Configuration</Text>
+                        <Text style={styles.settingsSectionSubtitle}>Manage platform features, limits, and defaults</Text>
+
+                        {configForm ? (
+                            <>
+                                {/* Features */}
+                                <Text style={[styles.settingsSectionTitle, { fontSize: 15, marginTop: 16 }]}>Features</Text>
+                                {Object.entries(configForm.features).map(([key, enabled]) => (
+                                    <View key={key} style={styles.notificationCard}>
+                                        <View style={styles.notificationCardContent}>
+                                            <View style={styles.notificationCardInfo}>
+                                                <Text style={styles.notificationCardTitle}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
+                                            </View>
+                                            <TouchableOpacity
+                                                style={[styles.toggle, enabled && styles.toggleActive]}
+                                                disabled={!configEditing}
+                                                onPress={() => setConfigForm(prev => prev ? {
+                                                    ...prev,
+                                                    features: { ...prev.features, [key]: !enabled }
+                                                } : prev)}
+                                            >
+                                                <View style={[styles.toggleKnob, enabled && styles.toggleKnobActive]} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                ))}
+
+                                {/* Limits */}
+                                <Text style={[styles.settingsSectionTitle, { fontSize: 15, marginTop: 16 }]}>Limits</Text>
+                                {Object.entries(configForm.limits).map(([key, value]) => (
+                                    <View key={key} style={[styles.settingsFormGroup, { marginBottom: 12 }]}>
+                                        <Text style={styles.settingsLabel}>
+                                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                                        </Text>
+                                        <TextInput
+                                            style={[styles.settingsInput, !configEditing && styles.settingsInputDisabled]}
+                                            value={String(value)}
+                                            editable={configEditing}
+                                            keyboardType="numeric"
+                                            onChangeText={(text) => {
+                                                const num = parseInt(text, 10);
+                                                if (!isNaN(num)) {
+                                                    setConfigForm(prev => prev ? {
+                                                        ...prev,
+                                                        limits: { ...prev.limits, [key]: num }
+                                                    } : prev);
+                                                }
+                                            }}
+                                            placeholderTextColor={colors.textMuted}
+                                        />
+                                    </View>
+                                ))}
+
+                                {/* Defaults */}
+                                <Text style={[styles.settingsSectionTitle, { fontSize: 15, marginTop: 16 }]}>Defaults</Text>
+                                <View style={[styles.settingsFormGroup, { marginBottom: 12 }]}>
+                                    <Text style={styles.settingsLabel}>New Community Plan</Text>
+                                    <TextInput
+                                        style={[styles.settingsInput, !configEditing && styles.settingsInputDisabled]}
+                                        value={configForm.defaults.newCommunityPlan}
+                                        editable={configEditing}
+                                        onChangeText={(text) => setConfigForm(prev => prev ? {
+                                            ...prev,
+                                            defaults: { ...prev.defaults, newCommunityPlan: text }
+                                        } : prev)}
+                                        placeholderTextColor={colors.textMuted}
+                                    />
+                                </View>
+                                <View style={[styles.settingsFormGroup, { marginBottom: 12 }]}>
+                                    <Text style={styles.settingsLabel}>Trial Duration (days)</Text>
+                                    <TextInput
+                                        style={[styles.settingsInput, !configEditing && styles.settingsInputDisabled]}
+                                        value={String(configForm.defaults.trialDurationDays)}
+                                        editable={configEditing}
+                                        keyboardType="numeric"
+                                        onChangeText={(text) => {
+                                            const num = parseInt(text, 10);
+                                            if (!isNaN(num)) {
+                                                setConfigForm(prev => prev ? {
+                                                    ...prev,
+                                                    defaults: { ...prev.defaults, trialDurationDays: num }
+                                                } : prev);
+                                            }
+                                        }}
+                                        placeholderTextColor={colors.textMuted}
+                                    />
+                                </View>
+
+                                {/* Edit/Save button */}
+                                <View style={styles.settingsSaveSection}>
+                                    <TouchableOpacity
+                                        style={styles.saveAdminInfoButton}
+                                        onPress={() => setConfigEditing(!configEditing)}
+                                    >
+                                        <Text style={styles.saveAdminInfoButtonText}>
+                                            {configEditing ? 'Save Configuration' : 'Edit Configuration'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        ) : (
+                            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                                <Text style={{ color: colors.textMuted, fontSize: 14 }}>Loading system configuration...</Text>
+                            </View>
+                        )}
+                    </View>
+                )}
             </ScrollView>
         );
     };
@@ -2261,9 +2428,6 @@ const SuperAdminDashboard = () => {
             </Pressable>
         </Modal>
     );
-
-    // Role dropdown state for invite modal
-    const [inviteRoleDropdownOpen, setInviteRoleDropdownOpen] = useState(false);
 
     // Render Invite Team Member Modal
     const renderInviteModal = () => (

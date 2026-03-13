@@ -75,10 +75,10 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
             friction: 8,
         }).start();
 
-        // Auto-dismiss
+        // Auto-dismiss (treat negative durations as no auto-dismiss)
         const duration = toast.duration ?? 4000;
         if (duration > 0) {
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 hideToast(id);
             }, duration);
         }

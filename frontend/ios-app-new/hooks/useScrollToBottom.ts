@@ -38,16 +38,9 @@ export const useScrollToBottom = (): UseScrollToBottomReturn => {
         // Calculate the scroll position based on content height and visible area
         const scrollTo = contentHeightRef.current - scrollViewHeightRef.current;
         if (scrollTo > 0) {
-            // Use multiple attempts with increasing delays to ensure scroll happens
-            const doScroll = () => {
+            requestAnimationFrame(() => {
                 scrollViewRef.current?.scrollTo({ y: scrollTo, animated });
-            };
-            // First attempt immediately
-            doScroll();
-            // Second attempt after layout
-            requestAnimationFrame(doScroll);
-            // Third attempt with delay for slower devices
-            setTimeout(doScroll, 150);
+            });
         }
     }, []);
 

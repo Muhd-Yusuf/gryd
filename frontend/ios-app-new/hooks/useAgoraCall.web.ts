@@ -263,13 +263,21 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     // Clean up local tracks
     const cleanupLocalTracks = useCallback(() => {
         if (localAudioTrackRef.current) {
-            localAudioTrackRef.current.stop();
-            localAudioTrackRef.current.close();
+            try {
+                localAudioTrackRef.current.stop();
+                localAudioTrackRef.current.close();
+            } catch (e) {
+                console.warn('[Agora Web] Failed to cleanup audio track:', e);
+            }
             localAudioTrackRef.current = null;
         }
         if (localVideoTrackRef.current) {
-            localVideoTrackRef.current.stop();
-            localVideoTrackRef.current.close();
+            try {
+                localVideoTrackRef.current.stop();
+                localVideoTrackRef.current.close();
+            } catch (e) {
+                console.warn('[Agora Web] Failed to cleanup video track:', e);
+            }
             localVideoTrackRef.current = null;
         }
         setLocalVideoTrack(null); // Reset state

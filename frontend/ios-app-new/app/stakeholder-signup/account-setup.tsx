@@ -60,7 +60,7 @@ export default function StakeholderAccountSetupScreen() {
             return;
         }
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
         if (!emailRegex.test(email.trim())) {
             setError('Please enter a valid email address');
             return;
@@ -186,7 +186,7 @@ export default function StakeholderAccountSetupScreen() {
                             <Text style={styles.label}>Username</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="@username"
+                                placeholder="username"
                                 placeholderTextColor={colors.textSubtle}
                                 value={username.startsWith('@') ? username : username ? `@${username}` : ''}
                                 onChangeText={(text) => {

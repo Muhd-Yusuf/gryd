@@ -63,7 +63,7 @@ const LoginScreen = () => {
             return;
         }
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
         if (!emailRegex.test(email.trim())) {
             setError('Please enter a valid email address');
             return;
@@ -134,7 +134,19 @@ const LoginScreen = () => {
                 otp: code,
             });
 
+            if (!result?.token) {
+                throw new Error('Authentication failed. Please try again.');
+            }
+
             await setAuthUser(result.token, result.user);
+
+            // Verify auth was persisted before redirecting
+            const { getAuthUser } = await import('../lib/api');
+            const savedUser = await getAuthUser();
+            if (!savedUser?.token) {
+                throw new Error('Failed to save authentication. Please try again.');
+            }
+
             router.replace(result.redirectTo as any);
         } catch (err: any) {
             setError(err.message || 'Invalid verification code');
