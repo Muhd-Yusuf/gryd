@@ -1161,7 +1161,7 @@ const CreditUnionAdminScreen = () => {
     }, [channels, categories]);
 
     // Check if server is empty (no channels)
-    const isServerEmpty = channels.length === 0;
+    const isServerEmpty = channels.length === 0 && !channelsQuery.isLoading && channelsQuery.isFetched;
 
     const permissionOptions: { key: ChannelPermissionKey; label: string }[] = [
         { key: 'members', label: 'Members' },
