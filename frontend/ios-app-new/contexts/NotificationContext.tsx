@@ -179,6 +179,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      * Register the push token with the backend
      */
     const registerToken = useCallback(async (): Promise<void> => {
+        // Push notifications via Expo are not supported on web
+        if (Platform.OS === 'web') return;
+
         // Prevent concurrent registration calls
         if (isRegisteringRef.current) return;
         isRegisteringRef.current = true;

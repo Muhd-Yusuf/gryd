@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     StyleSheet,
     Text,
@@ -12,6 +12,7 @@ import {
     ActivityIndicator,
     Platform,
     Image,
+    RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -59,6 +60,8 @@ import {
 } from '../lib/api';
 import { useTheme } from '../lib/theme';
 import { useSuperAdminDashboard } from '../hooks/useSuperAdminData';
+import { ErrorRetry } from './ErrorRetry';
+import { CardSkeleton } from './SkeletonLoader';
 
 type NavItem = 'overview' | 'customers' | 'moderation' | 'configuration';
 
@@ -197,6 +200,9 @@ const SuperAdminDashboard = () => {
     // Navigation state
     const [activeNav, setActiveNav] = useState<NavItem>('overview');
 
+    // Pull-to-refresh state
+    const [refreshing, setRefreshing] = useState(false);
+
     // Data states - no loading overlays for seamless UX
     const [error, setError] = useState('');
 
@@ -233,6 +239,18 @@ const SuperAdminDashboard = () => {
     const moderationTotal = superAdminData.moderationTotal;
     const config = superAdminData.config;
     const teamMembers: TeamMember[] = superAdminData.teamMembers;
+
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([
+                superAdminData.refetchOverview(),
+                superAdminData.refetchCustomers(),
+            ]);
+        } finally {
+            setRefreshing(false);
+        }
+    }, [superAdminData]);
 
     // UI state
     const [growthDropdownOpen, setGrowthDropdownOpen] = useState(false);
@@ -1061,8 +1079,19 @@ const SuperAdminDashboard = () => {
 
     // Render Overview Page
     const renderOverviewPage = () => (
-        <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}>
+            {/* Loading skeleton for stats */}
+            {superAdminData.overviewLoading && (
+                <View style={[styles.statsGrid, isMobile && styles.statsGridMobile]}>
+                    {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={`stat-sk-${i}`} />)}
+                </View>
+            )}
+            {/* Error retry for stats */}
+            {superAdminData.overviewError && !superAdminData.overviewLoading && (
+                <ErrorRetry message="Failed to load overview stats" onRetry={() => superAdminData.refetchOverview()} />
+            )}
             {/* Stats Cards */}
+            {!superAdminData.overviewLoading && !superAdminData.overviewError && (
             <View style={[styles.statsGrid, isMobile && styles.statsGridMobile]}>
                 <View style={styles.statCard}>
                     <View style={[styles.statIcon, { backgroundColor: '#dbeafe' }]}>
@@ -1104,6 +1133,7 @@ const SuperAdminDashboard = () => {
                     </View>
                 </View>
             </View>
+            )}
 
             {/* Recent Customers Table */}
             <View style={styles.tableCard}>
@@ -1272,7 +1302,7 @@ const SuperAdminDashboard = () => {
 
     // Render Customers Page
     const renderCustomersPage = () => (
-        <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}>
             <View style={[styles.customersHeader, isMobile && styles.customersHeaderMobile]}>
                 <Text style={[styles.pageTitle, isMobile && styles.pageTitleMobile]}>Customers</Text>
                 <TouchableOpacity style={[styles.addCustomerButton, isMobile && styles.addCustomerButtonMobile]} onPress={() => setAddCustomerModalOpen(true)}>
@@ -1628,7 +1658,7 @@ const SuperAdminDashboard = () => {
 
     // Render Moderation Page
     const renderModerationPage = () => (
-        <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}>
             <View style={[styles.pageHeader, isMobile && styles.pageHeaderMobile]}>
                 <Text style={[styles.pageTitle, isMobile && styles.pageTitleMobile]}>Moderation & Safety</Text>
             </View>
@@ -1787,7 +1817,7 @@ const SuperAdminDashboard = () => {
         };
 
         return (
-            <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false}>
+            <ScrollView style={[styles.pageContent, isMobile && styles.pageContentMobile]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}>
                 <View style={[styles.pageHeader, isMobile && styles.pageHeaderMobile]}>
                     <Text style={[styles.pageTitle, isMobile && styles.pageTitleMobile]}>Settings</Text>
                 </View>

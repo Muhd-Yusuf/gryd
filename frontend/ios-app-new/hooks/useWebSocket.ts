@@ -79,7 +79,7 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
     const {
         autoConnect = true,
         reconnection = true,
-        reconnectionAttempts = 5,
+        reconnectionAttempts = 15,
         reconnectionDelay = 1000,
     } = options;
 

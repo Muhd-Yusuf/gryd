@@ -14,6 +14,7 @@ import {
     Animated,
     useWindowDimensions,
     KeyboardAvoidingView,
+    RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -75,6 +76,9 @@ import { useWebSocketContext } from '../contexts/WebSocketContext';
 // Import CallModal directly - Metro will resolve to .web.tsx on web platform
 import CallModal from './CallModal';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
+import { ImageViewer } from './ImageViewer';
+import { ErrorRetry } from './ErrorRetry';
+import { MessageSkeleton } from './SkeletonLoader';
 import { MessageBubble, MessageComposer } from './messaging';
 import {
     useSubgrids,
@@ -186,9 +190,16 @@ export default function DirectMessagesScreen() {
     const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
     const topInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.top, 16) : 0;
     const [mobileShowContent, setMobileShowContent] = useState(false);
+    const [viewerImage, setViewerImage] = useState<string | null>(null);
 
     // WebSocket for real-time messages
-    const { isConnected, joinRoom, leaveRoom, subscribe } = useWebSocketContext();
+    const { isConnected, joinRoom, leaveRoom, subscribe, startTyping, stopTyping } = useWebSocketContext();
+
+    // Typing indicator state
+    const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+    const typingTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+    const stopTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const isTypingRef = useRef(false);
 
     const [tenantId, setTenantId] = useState<string>('');
     const [activeSubgridId, setActiveSubgridId] = useState<string | null>(null);
@@ -209,6 +220,20 @@ export default function DirectMessagesScreen() {
     const membersQuery = useMembers(activeSubgridId || '');
     const messagesQuery = useDirectMessages(activeSubgridId || '', selectedFriendId || '');
     const sendDmMutation = useSendDirectMessage(activeSubgridId || '', selectedFriendId || '');
+
+    // Pull-to-refresh state
+    const [refreshing, setRefreshing] = useState(false);
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([
+                friendsQuery.refetch(),
+                messagesQuery.refetch(),
+            ]);
+        } finally {
+            setRefreshing(false);
+        }
+    }, []);
 
     // Derive currentUserId from React Query (primary) or state (fallback)
     const currentUserId = currentUserQuery.data?.userId || currentUserIdState;
@@ -565,11 +590,56 @@ export default function DirectMessagesScreen() {
             }
         });
 
+        // Subscribe to typing events
+        const unsubTyping = subscribe('user_typing', (data: any) => {
+            const typingUserId = String(data.userId || '');
+            const myId = String(currentUserIdRef.current || '');
+            // Ignore own typing events
+            if (!typingUserId || typingUserId === myId) return;
+            // Only handle typing for this DM conversation
+            if (data.roomType !== 'dm' || String(data.roomId) !== dmRoomId) return;
+
+            if (data.isTyping) {
+                setTypingUsers(prev => {
+                    const next = new Set(prev);
+                    next.add(typingUserId);
+                    return next;
+                });
+                // Auto-clear after 3 seconds if no stop event received
+                const existingTimeout = typingTimeoutsRef.current.get(typingUserId);
+                if (existingTimeout) clearTimeout(existingTimeout);
+                typingTimeoutsRef.current.set(typingUserId, setTimeout(() => {
+                    setTypingUsers(prev => {
+                        const next = new Set(prev);
+                        next.delete(typingUserId);
+                        return next;
+                    });
+                    typingTimeoutsRef.current.delete(typingUserId);
+                }, 3000));
+            } else {
+                setTypingUsers(prev => {
+                    const next = new Set(prev);
+                    next.delete(typingUserId);
+                    return next;
+                });
+                const existingTimeout = typingTimeoutsRef.current.get(typingUserId);
+                if (existingTimeout) {
+                    clearTimeout(existingTimeout);
+                    typingTimeoutsRef.current.delete(typingUserId);
+                }
+            }
+        });
+
         return () => {
             leaveRoom('dm', dmRoomId);
             unsubNewMessage();
             unsubMessageUpdated();
             unsubMessageDeleted();
+            unsubTyping();
+            // Clear all typing timeouts
+            typingTimeoutsRef.current.forEach(t => clearTimeout(t));
+            typingTimeoutsRef.current.clear();
+            setTypingUsers(new Set());
         };
     }, [isConnected, currentUserId, selectedFriendId, activeSubgridId, joinRoom, leaveRoom, subscribe, queryClient]);
 
@@ -931,8 +1001,48 @@ export default function DirectMessagesScreen() {
         return `${mins} min`;
     };
 
+    // Build DM room ID for typing events
+    const dmRoomIdForTyping = useMemo(() => {
+        if (!currentUserId || !selectedFriendId) return '';
+        const userIdStr = String(currentUserId);
+        const friendIdStr = String(selectedFriendId);
+        return userIdStr < friendIdStr ? `${userIdStr}_${friendIdStr}` : `${friendIdStr}_${userIdStr}`;
+    }, [currentUserId, selectedFriendId]);
+
+    const handleTextChange = useCallback((text: string) => {
+        setNewMessage(text);
+        if (!dmRoomIdForTyping) return;
+        // Emit startTyping (debounced - only emit if not already typing)
+        if (!isTypingRef.current && text.trim().length > 0) {
+            isTypingRef.current = true;
+            startTyping('dm', dmRoomIdForTyping);
+        }
+        // Reset the stop-typing timeout
+        if (stopTypingTimeoutRef.current) clearTimeout(stopTypingTimeoutRef.current);
+        if (text.trim().length > 0) {
+            stopTypingTimeoutRef.current = setTimeout(() => {
+                isTypingRef.current = false;
+                stopTyping('dm', dmRoomIdForTyping);
+            }, 2000);
+        } else {
+            // Input cleared, stop typing immediately
+            isTypingRef.current = false;
+            stopTyping('dm', dmRoomIdForTyping);
+        }
+    }, [dmRoomIdForTyping, startTyping, stopTyping]);
+
     const handleSendMessage = async () => {
         if ((!newMessage.trim() && attachments.length === 0) || !activeSubgridId || !selectedFriendId) return;
+
+        // Stop typing on send
+        if (isTypingRef.current && dmRoomIdForTyping) {
+            isTypingRef.current = false;
+            stopTyping('dm', dmRoomIdForTyping);
+            if (stopTypingTimeoutRef.current) {
+                clearTimeout(stopTypingTimeoutRef.current);
+                stopTypingTimeoutRef.current = null;
+            }
+        }
 
         const body = newMessage.trim();
         setNewMessage('');
@@ -1652,7 +1762,7 @@ export default function DirectMessagesScreen() {
                             </View>
 
                             {/* Chat Content */}
-                            <ScrollView style={styles.chatContent} ref={scrollViewRef}>
+                            <ScrollView style={styles.chatContent} ref={scrollViewRef} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}>
                                 {/* Profile Banner */}
                                 <View style={styles.profileBanner}>
                                     <View style={styles.profileAvatarLarge}>
@@ -1695,6 +1805,14 @@ export default function DirectMessagesScreen() {
 
                                 {/* Messages */}
                                 <View style={styles.messagesContainer}>
+                                    {messagesQuery.isLoading && messages.length === 0 && (
+                                        <View style={{ padding: 16 }}>
+                                            {Array.from({ length: 5 }).map((_, i) => <MessageSkeleton key={`dm-sk-${i}`} />)}
+                                        </View>
+                                    )}
+                                    {messagesQuery.isError && messages.length === 0 && (
+                                        <ErrorRetry message="Failed to load messages" onRetry={() => messagesQuery.refetch()} loading={messagesQuery.isRefetching} />
+                                    )}
                                     {!currentUserId && messages.length > 0 && (
                                         <View style={{ paddingVertical: 8, alignItems: 'center' }}>
                                             <Text style={{ color: colors.textMuted, fontSize: 12 }}>Loading user info...</Text>
@@ -1807,21 +1925,23 @@ export default function DirectMessagesScreen() {
                                                                 }
                                                                 if (attachment.type === 'image') {
                                                                     return (
-                                                                        <Image
-                                                                            key={`${msg._id}-img-${idx}`}
-                                                                            source={{ uri: attachment.value }}
-                                                                            style={styles.msgAttachmentImage}
-                                                                            resizeMode="cover"
-                                                                        />
+                                                                        <TouchableOpacity key={`${msg._id}-img-${idx}`} onPress={() => setViewerImage(attachment.value)}>
+                                                                            <Image
+                                                                                source={{ uri: attachment.value }}
+                                                                                style={styles.msgAttachmentImage}
+                                                                                resizeMode="cover"
+                                                                            />
+                                                                        </TouchableOpacity>
                                                                     );
                                                                 }
                                                                 if (attachment.type === 'emoji' || attachment.type === 'sticker') {
                                                                     return (
-                                                                        <Image
-                                                                            key={`${msg._id}-sticker-${idx}`}
-                                                                            source={{ uri: attachment.uri }}
-                                                                            style={styles.msgStickerImage}
-                                                                        />
+                                                                        <TouchableOpacity key={`${msg._id}-sticker-${idx}`} onPress={() => setViewerImage(attachment.uri)}>
+                                                                            <Image
+                                                                                source={{ uri: attachment.uri }}
+                                                                                style={styles.msgStickerImage}
+                                                                            />
+                                                                        </TouchableOpacity>
                                                                     );
                                                                 }
                                                                 if (attachment.type === 'file') {
@@ -1843,6 +1963,15 @@ export default function DirectMessagesScreen() {
                                     )) : null}
                                 </View>
                             </ScrollView>
+
+                            {/* Typing Indicator */}
+                            {typingUsers.size > 0 && (
+                                <View style={styles.typingContainer}>
+                                    <Text style={[styles.typingText, { color: colors.textMuted }]}>
+                                        {typingUsers.size === 1 ? 'Someone is typing' : `${typingUsers.size} people typing`}...
+                                    </Text>
+                                </View>
+                            )}
 
                             {/* Message Input */}
                             <View style={[styles.inputContainer, isMobile && { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}>
@@ -1894,7 +2023,7 @@ export default function DirectMessagesScreen() {
                                                 placeholder={`Message @${selectedFriendName}`}
                                                 placeholderTextColor={colors.textMuted}
                                                 value={newMessage}
-                                                onChangeText={setNewMessage}
+                                                onChangeText={handleTextChange}
                                                 multiline
                                             />
                                             <View style={styles.inputActions}>
@@ -2174,6 +2303,7 @@ export default function DirectMessagesScreen() {
                     onSwitchCamera={agoraCall.switchCamera}
                 />
             )}
+            <ImageViewer visible={!!viewerImage} imageUrl={viewerImage || ''} onClose={() => setViewerImage(null)} />
         </View>
     );
 }
@@ -3472,5 +3602,13 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             color: colors.textMuted,
             textAlign: 'center',
             lineHeight: 18,
+        },
+        typingContainer: {
+            paddingHorizontal: 16,
+            paddingVertical: 4,
+        },
+        typingText: {
+            fontSize: 12,
+            fontStyle: 'italic' as const,
         },
     });

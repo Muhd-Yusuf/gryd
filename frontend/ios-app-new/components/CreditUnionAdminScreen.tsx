@@ -14,6 +14,7 @@ import {
     Alert,
     ActivityIndicator,
     KeyboardAvoidingView,
+    RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -97,6 +98,8 @@ import { communityGet, communityPost, communityPatch, communityPut, communityDel
 import { useTheme } from '../lib/theme';
 import UserAvatar from './UserAvatar';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
+import { ErrorRetry } from './ErrorRetry';
+import { MessageSkeleton, ChannelSkeleton } from './SkeletonLoader';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { getCachedSubgrids, cacheSubgrids, getCachedChannelMessages, cacheChannelMessages, getCachedChannelPosts, cacheChannelPosts, getCachedCUAdminMembers, cacheCUAdminMembers, addChannelMessageToCache } from '../lib/userCache';
 import { generateTempId, isTempId } from '../lib/messageQueue';
@@ -416,6 +419,21 @@ const CreditUnionAdminScreen = () => {
     const categoriesQuery = useCategories(activeSubgridId);
     const eventsQuery = useEvents(activeSubgridId);
     const messagesQuery = useChannelMessages(activeSubgridId, activeChannelId);
+
+    // Pull-to-refresh state
+    const [refreshing, setRefreshing] = useState(false);
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([
+                channelsQuery.refetch(),
+                membersQuery.refetch(),
+                messagesQuery.refetch(),
+            ]);
+        } finally {
+            setRefreshing(false);
+        }
+    }, []);
 
     // Server Settings React Query hooks
     const contentModerationQuery = useContentModerationSettings(activeSubgridId);
@@ -2981,7 +2999,11 @@ const CreditUnionAdminScreen = () => {
                         {serverMenuOpen && <ServerMenuDropdown />}
                     </View>
 
+                    {channelsQuery.isError && (
+                        <ErrorRetry message="Failed to load channels" onRetry={() => channelsQuery.refetch()} loading={channelsQuery.isRefetching} />
+                    )}
                     <ScrollView style={styles.channelList} showsVerticalScrollIndicator={false}>
+                        {channelsQuery.isLoading && Array.from({ length: 5 }).map((_, i) => <ChannelSkeleton key={`ch-sk-${i}`} />)}
                         {/* Events */}
                         <TouchableOpacity
                             style={[styles.eventsButton, showEventsView && styles.eventsButtonActive]}
@@ -3342,7 +3364,16 @@ const CreditUnionAdminScreen = () => {
                                 onScrollBeginDrag={() => {
                                     if (serverMenuOpen) setServerMenuOpen(false);
                                 }}
+                                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}
                             >
+                                {messagesQuery.isLoading && feedItems.length === 0 && (
+                                    <View style={{ padding: 16 }}>
+                                        {Array.from({ length: 5 }).map((_, i) => <MessageSkeleton key={`msg-sk-${i}`} />)}
+                                    </View>
+                                )}
+                                {messagesQuery.isError && feedItems.length === 0 && (
+                                    <ErrorRetry message="Failed to load messages" onRetry={() => messagesQuery.refetch()} loading={messagesQuery.isRefetching} />
+                                )}
                                 {feedItems.length === 0 && feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
                                         <View style={styles.welcomeIcon}>
