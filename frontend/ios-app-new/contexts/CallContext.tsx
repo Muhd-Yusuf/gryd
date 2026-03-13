@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import { subscribeToCallEventsAsync } from '../lib/api';
 import { useWebSocketContext } from './WebSocketContext';
 
@@ -324,6 +325,32 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
             unsubs.forEach(unsub => unsub());
         };
     }, [subscribe, handleCallEvent]);
+
+    // Listen for foreground push notifications with call data (fallback when WebSocket is down)
+    useEffect(() => {
+        if (Platform.OS === 'web') return;
+
+        const subscription = Notifications.addNotificationReceivedListener((notification) => {
+            const data = notification.request.content.data;
+            if (data?.type === 'call' && data?.callId) {
+                console.log('[CallContext] Call notification received via push:', data.callId);
+                // Forward to the same handler as WebSocket events
+                handleCallEvent('incoming_call', {
+                    callId: data.callId,
+                    callerId: data.callerId,
+                    callerName: data.callerName,
+                    callerAvatar: data.callerAvatar,
+                    callType: data.callType,
+                    channelName: data.channelName,
+                    token: data.token,
+                    uid: data.uid,
+                    appId: data.appId,
+                });
+            }
+        });
+
+        return () => subscription.remove();
+    }, [handleCallEvent]);
 
     return (
         <CallContext.Provider value={{ incomingCall, activeCall, setActiveCall, startActiveCall, markCallConnected, answerCall, declineCall, clearIncomingCall, endCall }}>
