@@ -1609,8 +1609,13 @@ exports.listChannels = async (req, res) => {
         const userId = req.user?.id || req.embed?.userId;
         let isAdmin = false;
         if (req.user?.id) {
-            const membership = await getSubgridMembership(subgrid.tenantId, subgridId, req.user.id);
-            isAdmin = membership && ['subgrid_admin'].includes(membership.role);
+            // Check user-level admin role first
+            if (req.user.role === 'super_admin' || req.user.role === 'admin') {
+                isAdmin = true;
+            } else {
+                const membership = await getSubgridMembership(subgrid.tenantId, subgridId, req.user.id);
+                isAdmin = membership && ['subgrid_admin'].includes(membership.role);
+            }
         }
 
         let channels;

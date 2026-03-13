@@ -47,6 +47,11 @@ const requireSubgridRead = async (req, res, next) => {
             return res.status(401).json({ message: 'Authentication required' });
         }
 
+        // Allow platform-level admins through without membership check
+        if (req.user.role === 'super_admin' || req.user.role === 'admin') {
+            return next();
+        }
+
         const membership = await getSubgridMembership(req.subgrid.tenantId, subgridId, String(req.user.id));
         if (!membership || !isMembershipActive(membership)) {
             return res.status(403).json({ message: 'Subgrid access denied' });
@@ -87,6 +92,11 @@ const requireSubgridWrite = async (req, res, next) => {
         return res.status(401).json({ message: 'Authentication required' });
     }
 
+    // Allow platform-level admins through without membership check
+    if (req.user.role === 'super_admin' || req.user.role === 'admin') {
+        return next();
+    }
+
     const membership = await getSubgridMembership(req.subgrid.tenantId, subgridId, req.user.id);
     if (!membership || !canWriteInSubgrid(membership)) {
         return res.status(403).json({ message: 'Subgrid access denied' });
@@ -109,6 +119,11 @@ const requireSubgridModeration = async (req, res, next) => {
         return res.status(401).json({ message: 'Authentication required' });
     }
 
+    // Allow platform-level admins through without membership check
+    if (req.user.role === 'super_admin' || req.user.role === 'admin') {
+        return next();
+    }
+
     const membership = await getSubgridMembership(req.subgrid.tenantId, req.subgrid._id, req.user.id);
     if (!membership || !isMembershipActive(membership) || !requireSubgridRole(membership, ['subgrid_admin', 'moderator'])) {
         return res.status(403).json({ message: 'Moderation access denied' });
@@ -129,6 +144,12 @@ const requireSubgridAdmin = async (req, res, next) => {
     if (!req.user) {
         console.log('[requireSubgridAdmin] No user found');
         return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    // Allow platform-level admins through without membership check
+    if (req.user.role === 'super_admin' || req.user.role === 'admin') {
+        console.log('[requireSubgridAdmin] Platform admin access granted');
+        return next();
     }
 
     console.log('[requireSubgridAdmin] User:', req.user.id, 'Subgrid:', req.subgrid._id);

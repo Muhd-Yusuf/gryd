@@ -5,7 +5,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { Platform, AppState, AppStateStatus } from 'react-native';
 import Constants from 'expo-constants';
 import { io, Socket } from 'socket.io-client';
 import { getApiBaseUrl, getUserId, getTenantId, resolveUserId, resolveTenantId } from '../lib/api';
@@ -268,6 +268,17 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             disconnect();
         };
     }, [connect, disconnect]);
+
+    // Reconnect when app comes back to foreground
+    useEffect(() => {
+        const handleAppStateChange = (nextState: AppStateStatus) => {
+            if (nextState === 'active' && !socketRef.current?.connected) {
+                connect();
+            }
+        };
+        const subscription = AppState.addEventListener('change', handleAppStateChange);
+        return () => subscription.remove();
+    }, [connect]);
 
     const value: WebSocketContextValue = {
         socket: socketRef.current,

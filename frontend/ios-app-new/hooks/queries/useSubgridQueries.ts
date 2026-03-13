@@ -34,9 +34,8 @@ export const useSubgrids = (tenantId: string) => {
             return response?.data || [];
         },
         enabled: !!tenantId,
-        staleTime: Infinity, // Never stale - show cached data instantly, refetch manually
-        gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
-        refetchOnMount: false, // Don't refetch on mount - use cache
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        gcTime: 24 * 60 * 60 * 1000,
     });
 };
 
@@ -48,7 +47,7 @@ export const useSubgridDetail = (subgridId: string) => {
             return response?.data;
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
     });
 };
@@ -61,7 +60,7 @@ export const useMyRole = (subgridId: string) => {
             return response?.data?.role || null;
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
     });
 };
@@ -78,9 +77,8 @@ export const useChannels = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000, // 5 minutes
         gcTime: 24 * 60 * 60 * 1000,
-        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -137,9 +135,8 @@ export const usePosts = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
-        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -155,7 +152,7 @@ export const useSubgridMessages = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
     });
 };
@@ -186,9 +183,8 @@ export const useMembers = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
-        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -231,9 +227,8 @@ export const useFriends = (subgridId: string) => {
             return response?.data || { friends: [], users: {} };
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
-        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -245,9 +240,8 @@ export const useFriendRequests = (subgridId: string, direction: 'incoming' | 'ou
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
-        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -301,9 +295,8 @@ export const useBlocks = (subgridId: string) => {
             return response?.data || { blocked: [], users: {} };
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Never stale - show cached data instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
-        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -360,9 +353,8 @@ export const useEvents = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Show cached instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
-        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -426,7 +418,7 @@ export const useCategories = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Show cached instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
     });
 };
@@ -457,7 +449,7 @@ export const useCustomRoles = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Show cached instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
     });
 };
@@ -541,7 +533,7 @@ export const useContentModerationSettings = (subgridId: string) => {
             return response?.data;
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Show cached instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
     });
 };
@@ -605,7 +597,7 @@ export const useEngagementSettings = (subgridId: string) => {
             };
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Show cached instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
     });
 };
@@ -637,7 +629,7 @@ export const useBannedUsers = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Show cached instantly
+        staleTime: 5 * 60 * 1000,
         gcTime: 24 * 60 * 60 * 1000,
     });
 };

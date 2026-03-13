@@ -62,6 +62,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { useWebSocketContext } from '../../contexts/WebSocketContext';
+import { hapticLight, hapticMedium, hapticSuccess, hapticError, hapticSelection } from '../../lib/haptics';
 import {
     useSubgrids,
     useChannels,
@@ -73,6 +74,14 @@ import {
     useChannelMessages,
     useDirectMessages,
     useSendChannelMessage,
+    useLikeItem,
+    useUnlikeItem,
+    useReshareItem,
+    useUnreshareItem,
+    useCreateComment,
+    useFlagContent,
+    useDeletePost,
+    useDeleteMessage,
 } from '../../hooks/queries';
 import { queryKeys } from '../../lib/queryClient';
 
@@ -301,6 +310,16 @@ const TenantCommunityScreen = () => {
     const categoriesQuery = useCategories(activeSubgridId);
     const messagesQuery = useChannelMessages(activeSubgridId, activeChannelId);
     const dmMessagesQuery = useDirectMessages(activeSubgridId, activeDmId);
+
+    // Mutation hooks
+    const likeItemMutation = useLikeItem(activeSubgridId);
+    const unlikeItemMutation = useUnlikeItem(activeSubgridId);
+    const reshareItemMutation = useReshareItem(activeSubgridId);
+    const unreshareItemMutation = useUnreshareItem(activeSubgridId);
+    const createCommentMutation = useCreateComment(activeSubgridId);
+    const flagContentMutation = useFlagContent(activeSubgridId);
+    const deletePostMutation = useDeletePost(activeSubgridId);
+    const deleteMessageMutation = useDeleteMessage(activeSubgridId);
 
     // Pull-to-refresh state
     const [refreshing, setRefreshing] = useState(false);
@@ -969,6 +988,7 @@ const TenantCommunityScreen = () => {
         if ((!channelDraft.trim() && attachments.length === 0) || !activeSubgridId || !activeChannelId) {
             return;
         }
+        hapticLight();
 
         // Stop typing on send
         if (channelIsTypingRef.current && activeChannelId) {
@@ -1073,6 +1093,7 @@ const TenantCommunityScreen = () => {
     // Voice recording handlers
     const handleStartRecording = async () => {
         if (isRecording) return;
+        hapticMedium();
         setRecordingDuration(0);
         recordingStartRef.current = Date.now();
 
@@ -1346,11 +1367,8 @@ const TenantCommunityScreen = () => {
         }
         setReportSubmitting(true);
         try {
-            const path =
-                reportTarget.type === 'post'
-                    ? `/subgrids/${activeSubgridId}/posts/${reportTarget.id}/flag`
-                    : `/subgrids/${activeSubgridId}/messages/${reportTarget.id}/flag`;
-            await communityPost(path, { reason });
+            const itemType = reportTarget.type === 'post' ? 'posts' as const : 'messages' as const;
+            await flagContentMutation.mutateAsync({ itemType, itemId: reportTarget.id, reason });
             setReportModalOpen(false);
             setReportTarget(null);
         } catch (err: any) {
@@ -1374,11 +1392,11 @@ const TenantCommunityScreen = () => {
         if (!activeSubgridId || !deleteTarget) return;
         setDeleteSubmitting(true);
         try {
-            const path =
-                deleteTarget.type === 'post'
-                    ? `/subgrids/${activeSubgridId}/posts/${deleteTarget.id}`
-                    : `/subgrids/${activeSubgridId}/messages/${deleteTarget.id}`;
-            await communityDelete(path);
+            if (deleteTarget.type === 'post') {
+                await deletePostMutation.mutateAsync(deleteTarget.id);
+            } else {
+                await deleteMessageMutation.mutateAsync(deleteTarget.id);
+            }
             // Update cache
             if (deleteTarget.type === 'post') {
                 queryClient.setQueryData(
@@ -1408,6 +1426,7 @@ const TenantCommunityScreen = () => {
     const handleLikeItem = async (itemId: string, isLiked: boolean, isPost: boolean) => {
         if (!activeSubgridId) return;
         if (likeLoading) return;
+        hapticLight();
         setLikeLoading(itemId);
 
         const newLiked = !isLiked;
@@ -1441,13 +1460,10 @@ const TenantCommunityScreen = () => {
         // Update UI before API call
         updateCache();
 
-        const endpoint = isPost ? 'posts' : 'messages';
+        const itemType = isPost ? 'posts' as const : 'messages' as const;
         try {
-            if (isLiked) {
-                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
-            } else {
-                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`, {});
-            }
+            const mutation = isLiked ? unlikeItemMutation : likeItemMutation;
+            await mutation.mutateAsync({ itemId, itemType, channelId: activeChannelIdRef.current });
         } catch (err: any) {
             // Revert optimistic update on failure
             updateCache(true);
@@ -1462,6 +1478,7 @@ const TenantCommunityScreen = () => {
     const handleReshareItem = async (itemId: string, isReshared: boolean, isPost: boolean) => {
         if (!activeSubgridId) return;
         if (reshareLoading) return;
+        hapticMedium();
         setReshareLoading(itemId);
 
         const newReshared = !isReshared;
@@ -1495,13 +1512,10 @@ const TenantCommunityScreen = () => {
         // Update UI before API call
         updateCache();
 
-        const endpoint = isPost ? 'posts' : 'messages';
+        const itemType = isPost ? 'posts' as const : 'messages' as const;
         try {
-            if (isReshared) {
-                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
-            } else {
-                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`, {});
-            }
+            const mutation = isReshared ? unreshareItemMutation : reshareItemMutation;
+            await mutation.mutateAsync({ itemId, itemType, channelId: activeChannelIdRef.current });
         } catch (err: any) {
             // Revert optimistic update on failure
             updateCache(true);
@@ -1545,15 +1559,11 @@ const TenantCommunityScreen = () => {
 
         setCommentLoading(true);
         try {
-            const endpoint = commentTarget.isPost
-                ? `/subgrids/${activeSubgridId}/posts/${commentTarget.id}/comments`
-                : `/subgrids/${activeSubgridId}/messages/${commentTarget.id}/comments`;
-
-            const res = await communityPost(endpoint, { body: commentText.trim() });
-            console.log('[Comment] Created comment:', res);
+            const itemType = commentTarget.isPost ? 'posts' as const : 'messages' as const;
+            const res = await createCommentMutation.mutateAsync({ itemId: commentTarget.id, itemType, body: commentText.trim() });
 
             // Add the new comment to the list
-            setComments(prev => [...prev, res.comment || res]);
+            setComments(prev => [...prev, res?.comment || res]);
             setCommentText('');
 
             // Update cache for comment count
@@ -1872,6 +1882,8 @@ const TenantCommunityScreen = () => {
                                 ref={feedScrollRef}
                                 contentContainerStyle={styles.feedList}
                                 showsVerticalScrollIndicator={false}
+                                keyboardDismissMode="on-drag"
+                                keyboardShouldPersistTaps="handled"
                                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}
                             >
                                 {/* Channel Welcome Banner */}

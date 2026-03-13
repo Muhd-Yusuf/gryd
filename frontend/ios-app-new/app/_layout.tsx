@@ -12,6 +12,8 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { ToastProvider } from '../contexts/ToastContext';
 import { QueryProvider } from '../contexts/QueryProvider';
 import IncomingCallOverlay from '../components/IncomingCallOverlay';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { NetworkIndicator } from '../components/NetworkIndicator';
 
 const RootStack = () => {
     const { colors, mode } = useTheme();
@@ -94,19 +96,22 @@ export default function RootLayout() {
     }
 
     return (
-        <QueryProvider>
-            <ThemeProvider>
-                <ToastProvider>
-                    <WebSocketProvider>
-                        <NotificationProvider>
-                            <CallProvider>
-                                <RootStack />
-                                <IncomingCallOverlay />
-                            </CallProvider>
-                        </NotificationProvider>
-                    </WebSocketProvider>
-                </ToastProvider>
-            </ThemeProvider>
-        </QueryProvider>
+        <ErrorBoundary>
+            <QueryProvider>
+                <ThemeProvider>
+                    <ToastProvider>
+                        <WebSocketProvider>
+                            <NotificationProvider>
+                                <CallProvider>
+                                    <RootStack />
+                                    <IncomingCallOverlay />
+                                    <NetworkIndicator />
+                                </CallProvider>
+                            </NotificationProvider>
+                        </WebSocketProvider>
+                    </ToastProvider>
+                </ThemeProvider>
+            </QueryProvider>
+        </ErrorBoundary>
     );
 }
