@@ -11,6 +11,7 @@ import {
     Pressable,
     ActivityIndicator,
     Platform,
+    Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -931,7 +932,7 @@ const SuperAdminDashboard = () => {
             {/* Logo */}
             <View style={styles.logoContainer}>
                 <View style={styles.logoIcon}>
-                    <Text style={styles.logoHash}>#</Text>
+                    <Image source={require('../../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
                 </View>
                 <Text style={styles.logoText}>THE GRYD</Text>
             </View>
@@ -989,7 +990,7 @@ const SuperAdminDashboard = () => {
                 <View style={styles.mobileHeaderRow}>
                     <View style={styles.mobileLogoContainer}>
                         <View style={styles.mobileLogoIcon}>
-                            <Text style={styles.mobileLogoHash}>#</Text>
+                            <Image source={require('../../assets/icon.png')} style={{ width: 24, height: 24, borderRadius: 4 }} />
                         </View>
                         <Text style={styles.mobileLogoText}>THE GRYD</Text>
                     </View>

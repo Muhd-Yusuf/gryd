@@ -3,6 +3,7 @@ import {
     StyleSheet,
     View,
     Text,
+    Image,
     ImageBackground,
     ScrollView,
     TouchableOpacity,
@@ -44,13 +45,7 @@ const OnboardingLayout = ({
 
     const TheGrydLogo = ({ color }: { color: string }) => (
         <View style={styles.logoRow}>
-            <View style={styles.logoContainer}>
-                <View style={[styles.logoOuter, { borderColor: color }]}>
-                    <View style={[styles.logoInner, { borderColor: color }]}>
-                        <View style={[styles.logoCore, { backgroundColor: color }]} />
-                    </View>
-                </View>
-            </View>
+            <Image source={require('../../assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />
             <Text style={[styles.brandName, { color }]}>THE GRYD</Text>
         </View>
     );

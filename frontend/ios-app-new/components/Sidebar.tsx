@@ -5,6 +5,7 @@ import {
     StyleSheet,
     TouchableOpacity,
     ScrollView,
+    Image,
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import {
@@ -69,13 +70,7 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
 
     const TheGrydLogo = () => (
         <View style={styles.logoRow}>
-            <View style={styles.logoContainer}>
-                <View style={styles.logoOuter}>
-                    <View style={styles.logoInner}>
-                        <View style={styles.logoCore} />
-                    </View>
-                </View>
-            </View>
+            <Image source={require('../../assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />
             <Text style={styles.brandName}>THE GRYD</Text>
         </View>
     );

@@ -6,6 +6,7 @@ import {
     Platform,
     Modal,
     Text,
+    Image,
     useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,13 +32,7 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
     const styles = useMemo(() => createStyles(colors), [colors]);
 
     const TheGrydLogoSmall = () => (
-        <View style={styles.logoContainer}>
-            <View style={styles.logoOuter}>
-                <View style={styles.logoInner}>
-                    <View style={styles.logoCore} />
-                </View>
-            </View>
-        </View>
+        <Image source={require('../../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
     );
 
     return (
