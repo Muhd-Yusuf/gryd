@@ -9,7 +9,6 @@ import {
     ScrollView,
     ActivityIndicator,
     Alert,
-    Image,
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';

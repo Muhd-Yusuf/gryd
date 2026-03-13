@@ -139,6 +139,7 @@ export const usePosts = (subgridId: string) => {
         enabled: !!subgridId,
         staleTime: Infinity, // Never stale - show cached data instantly
         gcTime: 24 * 60 * 60 * 1000,
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 
@@ -361,6 +362,7 @@ export const useEvents = (subgridId: string) => {
         enabled: !!subgridId,
         staleTime: Infinity, // Show cached instantly
         gcTime: 24 * 60 * 60 * 1000,
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 

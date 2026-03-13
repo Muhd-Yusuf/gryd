@@ -4,10 +4,10 @@ import {
     Text,
     View,
     TouchableOpacity,
-    Image,
     ActivityIndicator,
     TextInput,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Sun, Moon } from 'lucide-react-native';
@@ -147,6 +147,7 @@ export default function StakeholderServerDetailsScreen() {
                             <Image
                                 source={{ uri: serverData.logoUrl }}
                                 style={styles.serverLogo}
+                                cachePolicy="memory-disk"
                             />
                         ) : null}
                     </View>

@@ -6,9 +6,9 @@ import {
     Platform,
     Modal,
     Text,
-    Image,
     useWindowDimensions
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react-native';

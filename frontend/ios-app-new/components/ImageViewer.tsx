@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, View, Image, TouchableOpacity, StyleSheet, Dimensions, Platform, StatusBar } from 'react-native';
+import { Modal, View, TouchableOpacity, StyleSheet, Dimensions, Platform, StatusBar } from 'react-native';
+import { Image } from 'expo-image';
 import { X, Download } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -50,6 +51,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ visible, imageUrl, onC
                     source={{ uri: imageUrl }}
                     style={{ width: width * 0.95, height: height * 0.75 }}
                     resizeMode="contain"
+                    cachePolicy="memory-disk"
                 />
             </View>
         </Modal>

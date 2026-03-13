@@ -141,6 +141,7 @@ export const useUserSubgrids = () => {
         },
         enabled: !!user?.userId,
         staleTime: Infinity, // Show cached instantly
+        refetchOnMount: false, // Don't refetch on mount - use cache
     });
 };
 

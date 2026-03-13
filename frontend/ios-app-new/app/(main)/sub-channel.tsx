@@ -7,7 +7,6 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Image,
     Modal,
     Platform,
     Alert,
@@ -15,6 +14,7 @@ import {
     useWindowDimensions,
     KeyboardAvoidingView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X, Calendar, BadgeCheck, Megaphone, Clock, MapPin, PlayCircle, File, Flag } from 'lucide-react-native';
@@ -1541,6 +1541,7 @@ const SubChannelScreen = () => {
                                                         key={`${item._id}-img-${idx}`}
                                                         source={{ uri: attachment.uri || attachment.value }}
                                                         style={styles.feedImage}
+                                                        cachePolicy="memory-disk"
                                                     />
                                                 );
                                             }
@@ -1600,6 +1601,7 @@ const SubChannelScreen = () => {
                                                                                     source={{ uri: origUrl }}
                                                                                     style={styles.reshareImage}
                                                                                     resizeMode="cover"
+                                                                                    cachePolicy="memory-disk"
                                                                                 />
                                                                             );
                                                                         }
@@ -1666,7 +1668,7 @@ const SubChannelScreen = () => {
                             {attachments.map((att, idx) => (
                                 <View key={`att-${idx}`} style={styles.attachmentPreviewItem}>
                                     {att.type === 'image' ? (
-                                        <Image source={{ uri: att.uri }} style={styles.attachmentPreviewImage} />
+                                        <Image source={{ uri: att.uri }} style={styles.attachmentPreviewImage} cachePolicy="memory-disk" />
                                     ) : (
                                         <View style={styles.attachmentPreviewFile}>
                                             <File size={20} color={colors.textMuted} />
@@ -1919,7 +1921,7 @@ const SubChannelScreen = () => {
                                         });
                                     }}
                                 >
-                                    <Image source={{ uri: twemojiUrl(emoji.code) }} style={styles.pickerImage} />
+                                    <Image source={{ uri: twemojiUrl(emoji.code) }} style={styles.pickerImage} cachePolicy="memory-disk" />
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -1956,7 +1958,7 @@ const SubChannelScreen = () => {
                                         });
                                     }}
                                 >
-                                    <Image source={{ uri: sticker.uri }} style={styles.pickerImage} />
+                                    <Image source={{ uri: sticker.uri }} style={styles.pickerImage} cachePolicy="memory-disk" />
                                 </TouchableOpacity>
                             ))}
                         </View>

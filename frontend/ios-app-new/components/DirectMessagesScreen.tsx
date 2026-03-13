@@ -6,7 +6,6 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Image,
     Platform,
     Modal,
     Pressable,
@@ -16,6 +15,7 @@ import {
     KeyboardAvoidingView,
     RefreshControl,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -1534,7 +1534,7 @@ export default function DirectMessagesScreen() {
                         <TouchableOpacity style={[styles.serverIcon, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]} onPress={() => router.push('/admin')}>
                             {activeSubgrid ? (
                                 activeSubgrid.logoUrl ? (
-                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} />
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} cachePolicy="memory-disk" />
                                 ) : (
                                     <Text style={styles.serverIconText}>
                                         {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
@@ -1582,7 +1582,7 @@ export default function DirectMessagesScreen() {
                             {/* Server Info Row */}
                             <View style={styles.mobileServerInfoRow}>
                                 {activeSubgrid?.logoUrl ? (
-                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} cachePolicy="memory-disk" />
                                 ) : (
                                     <View style={[
                                         styles.mobileTopBarLogoPlaceholder,
@@ -1930,6 +1930,7 @@ export default function DirectMessagesScreen() {
                                                                                 source={{ uri: attachment.value }}
                                                                                 style={styles.msgAttachmentImage}
                                                                                 resizeMode="cover"
+                                                                                cachePolicy="memory-disk"
                                                                             />
                                                                         </TouchableOpacity>
                                                                     );
@@ -1940,6 +1941,7 @@ export default function DirectMessagesScreen() {
                                                                             <Image
                                                                                 source={{ uri: attachment.uri }}
                                                                                 style={styles.msgStickerImage}
+                                                                                cachePolicy="memory-disk"
                                                                             />
                                                                         </TouchableOpacity>
                                                                     );
@@ -1981,7 +1983,7 @@ export default function DirectMessagesScreen() {
                                         {attachments.map((attachment, index) => (
                                             <View key={index} style={styles.attachmentPreview}>
                                                 {attachment.type.startsWith('image/') ? (
-                                                    <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
+                                                    <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} cachePolicy="memory-disk" />
                                                 ) : (
                                                     <View style={styles.attachmentFileIcon}>
                                                         <File size={24} color={colors.textMuted} />
@@ -2082,6 +2084,7 @@ export default function DirectMessagesScreen() {
                                     source={{ uri: selectedFriendUser.bannerUrl }}
                                     style={styles.bannerImage}
                                     resizeMode="cover"
+                                    cachePolicy="memory-disk"
                                 />
                             ) : null}
                             {/* More icon */}

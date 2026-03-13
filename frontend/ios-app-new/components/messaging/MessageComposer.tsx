@@ -12,12 +12,12 @@ import {
     TextInput,
     TouchableOpacity,
     ScrollView,
-    Image,
     Platform,
     Animated,
     KeyboardAvoidingView,
     InputAccessoryView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Trash2, Send, File, X, Plus, Smile, Mic } from 'lucide-react-native';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync } from 'expo-audio';
@@ -258,7 +258,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                     {pendingAttachments.map((att, index) => (
                         <View key={index} style={styles.attachmentItem}>
                             {att.type.startsWith('image/') ? (
-                                <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
+                                <Image source={{ uri: att.uri }} style={styles.attachmentThumb} cachePolicy="memory-disk" />
                             ) : (
                                 <View style={[styles.attachmentFileThumb, { backgroundColor: colors.surfaceMuted }]}>
                                     <File size={24} color={colors.textMuted} />

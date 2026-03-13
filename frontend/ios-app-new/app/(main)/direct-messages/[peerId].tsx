@@ -7,13 +7,13 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Image,
     Modal,
     Platform,
     Animated,
     Alert,
     KeyboardAvoidingView,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { ArrowLeft, Phone, Video, Search, Trash2, File, Copy, Send, Smile, Paperclip, X, Mic, PhoneIncoming, PhoneOutgoing, PhoneMissed, ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
@@ -1463,6 +1463,7 @@ const DirectMessageChatScreen = () => {
                                                                 source={{ uri: attachment.uri }}
                                                                 style={styles.attachmentImage}
                                                                 resizeMode="cover"
+                                                                cachePolicy="memory-disk"
                                                             />
                                                         );
                                                     }
@@ -1473,6 +1474,7 @@ const DirectMessageChatScreen = () => {
                                                                 source={{ uri: attachment.value }}
                                                                 style={styles.attachmentImage}
                                                                 resizeMode="cover"
+                                                                cachePolicy="memory-disk"
                                                             />
                                                         );
                                                     }
@@ -1566,7 +1568,7 @@ const DirectMessageChatScreen = () => {
                                         {pendingAttachments.map((att, idx) => (
                                             <View key={idx} style={{ position: 'relative' }}>
                                                 {att.type.startsWith('image/') ? (
-                                                    <Image source={{ uri: att.uri }} style={{ width: 32, height: 32, borderRadius: 4 }} />
+                                                    <Image source={{ uri: att.uri }} style={{ width: 32, height: 32, borderRadius: 4 }} cachePolicy="memory-disk" />
                                                 ) : (
                                                     <View style={{ width: 32, height: 32, borderRadius: 4, backgroundColor: colors.cardBg, justifyContent: 'center', alignItems: 'center' }}>
                                                         <File size={16} color={colors.textMuted} />

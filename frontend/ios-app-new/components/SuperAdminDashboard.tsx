@@ -11,9 +11,9 @@ import {
     Pressable,
     ActivityIndicator,
     Platform,
-    Image,
     RefreshControl,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     LayoutDashboard,

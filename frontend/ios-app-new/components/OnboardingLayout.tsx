@@ -3,12 +3,12 @@ import {
     StyleSheet,
     View,
     Text,
-    Image,
     ImageBackground,
     ScrollView,
     TouchableOpacity,
     useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';

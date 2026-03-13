@@ -4,12 +4,12 @@ import {
     Text,
     View,
     TouchableOpacity,
-    Image,
     ActivityIndicator,
     Platform,
     ScrollView,
     useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Sun, Moon, CheckCircle, ArrowLeft, Mail, Building2, Key, AlertCircle } from 'lucide-react-native';
@@ -136,6 +136,7 @@ export default function ProfileSummaryScreen() {
                     <Image
                         source={{ uri: params.profileImage }}
                         style={styles.avatarImage}
+                        cachePolicy="memory-disk"
                     />
                 ) : (
                     <View style={styles.avatarPlaceholder}>
