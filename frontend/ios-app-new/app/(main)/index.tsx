@@ -7,7 +7,6 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Image,
     useWindowDimensions,
     Platform,
     Modal,
@@ -16,6 +15,7 @@ import {
     Pressable,
     RefreshControl,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     ChevronDown,
@@ -49,7 +49,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, resolveUserId, initiateChannelCall, uploadFile, logout } from '../../lib/api';
-import { cacheUsers, getCachedSubgrids, cacheSubgrids, cacheFriends } from '../../lib/userCache';
 import { useTheme } from '../../lib/theme';
 import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
@@ -265,11 +264,7 @@ const TenantCommunityScreen = () => {
     const channelIsTypingRef = useRef(false);
 
     const [tenantId, setTenantId] = useState(getTenantId());
-    const [activeSubgridId, setActiveSubgridId] = useState(() => {
-        const tid = getTenantId();
-        const cached = tid ? getCachedSubgrids(tid) : null;
-        return cached && cached.length > 0 ? cached[0]._id : '';
-    });
+    const [activeSubgridId, setActiveSubgridId] = useState('');
     const [activeChannelId, setActiveChannelId] = useState('');
     const activeChannelIdRef = useRef(activeChannelId);
     activeChannelIdRef.current = activeChannelId;
@@ -1441,33 +1436,23 @@ const TenantCommunityScreen = () => {
 
     // Like handler for feed items (posts and messages)
     const handleLikeItem = async (itemId: string, isLiked: boolean, isPost: boolean) => {
-        console.log('[Like] handleLikeItem called:', { itemId, isLiked, isPost, activeSubgridId, likeLoading });
-        if (!activeSubgridId) {
-            console.log('[Like] Early return: no activeSubgridId');
-            return;
-        }
-        if (likeLoading) {
-            console.log('[Like] Early return: likeLoading in progress');
-            return;
-        }
+        if (!activeSubgridId) return;
+        if (likeLoading) return;
         setLikeLoading(itemId);
-        const endpoint = isPost ? 'posts' : 'messages';
-        try {
-            if (isLiked) {
-                console.log(`[Like] Unliking ${endpoint}:`, `/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
-                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
-            } else {
-                console.log(`[Like] Liking ${endpoint}:`, `/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
-                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`, {});
-            }
-            console.log('[Like] API call successful');
-            // Update cache optimistically
+
+        const newLiked = !isLiked;
+        const likeDelta = isLiked ? -1 : 1;
+
+        // Optimistically update UI immediately
+        const updateCache = (revert?: boolean) => {
+            const liked = revert ? isLiked : newLiked;
+            const delta = revert ? 0 : likeDelta;
             if (isPost) {
                 queryClient.setQueryData(
                     queryKeys.subgrids.posts(activeSubgridId),
                     (old: any[] | undefined) => old ? old.map((p) =>
                         p._id === itemId
-                            ? { ...p, userLiked: !isLiked, likeCount: (p.likeCount || 0) + (isLiked ? -1 : 1) }
+                            ? { ...p, userLiked: liked, likeCount: Math.max(0, (p.likeCount || 0) + delta) }
                             : p
                     ) : []
                 );
@@ -1476,12 +1461,26 @@ const TenantCommunityScreen = () => {
                     queryKeys.messages.channel(activeSubgridId, activeChannelIdRef.current),
                     (old: any[] | undefined) => old ? old.map((m) =>
                         m._id === itemId
-                            ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
+                            ? { ...m, userLiked: liked, likeCount: Math.max(0, (m.likeCount || 0) + delta) }
                             : m
                     ) : []
                 );
             }
+        };
+
+        // Update UI before API call
+        updateCache();
+
+        const endpoint = isPost ? 'posts' : 'messages';
+        try {
+            if (isLiked) {
+                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`);
+            } else {
+                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/like`, {});
+            }
         } catch (err: any) {
+            // Revert optimistic update on failure
+            updateCache(true);
             console.error('[Like] Error:', err.message, err);
             setError(err.message || 'Failed to update like.');
         } finally {
@@ -1491,33 +1490,23 @@ const TenantCommunityScreen = () => {
 
     // Reshare handler for feed items (posts and messages)
     const handleReshareItem = async (itemId: string, isReshared: boolean, isPost: boolean) => {
-        console.log('[Reshare] handleReshareItem called:', { itemId, isReshared, isPost, activeSubgridId, reshareLoading });
-        if (!activeSubgridId) {
-            console.log('[Reshare] Early return: no activeSubgridId');
-            return;
-        }
-        if (reshareLoading) {
-            console.log('[Reshare] Early return: reshareLoading in progress');
-            return;
-        }
+        if (!activeSubgridId) return;
+        if (reshareLoading) return;
         setReshareLoading(itemId);
-        const endpoint = isPost ? 'posts' : 'messages';
-        try {
-            if (isReshared) {
-                console.log(`[Reshare] Unresharing ${endpoint}:`, `/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
-                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
-            } else {
-                console.log(`[Reshare] Resharing ${endpoint}:`, `/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
-                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`, {});
-            }
-            console.log('[Reshare] API call successful');
-            // Update cache optimistically
+
+        const newReshared = !isReshared;
+        const reshareDelta = isReshared ? -1 : 1;
+
+        // Optimistically update UI immediately
+        const updateCache = (revert?: boolean) => {
+            const reshared = revert ? isReshared : newReshared;
+            const delta = revert ? 0 : reshareDelta;
             if (isPost) {
                 queryClient.setQueryData(
                     queryKeys.subgrids.posts(activeSubgridId),
                     (old: any[] | undefined) => old ? old.map((p) =>
                         p._id === itemId
-                            ? { ...p, userReshared: !isReshared, reshareCount: (p.reshareCount || 0) + (isReshared ? -1 : 1) }
+                            ? { ...p, userReshared: reshared, reshareCount: Math.max(0, (p.reshareCount || 0) + delta) }
                             : p
                     ) : []
                 );
@@ -1526,12 +1515,26 @@ const TenantCommunityScreen = () => {
                     queryKeys.messages.channel(activeSubgridId, activeChannelIdRef.current),
                     (old: any[] | undefined) => old ? old.map((m) =>
                         m._id === itemId
-                            ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
+                            ? { ...m, userReshared: reshared, reshareCount: Math.max(0, (m.reshareCount || 0) + delta) }
                             : m
                     ) : []
                 );
             }
+        };
+
+        // Update UI before API call
+        updateCache();
+
+        const endpoint = isPost ? 'posts' : 'messages';
+        try {
+            if (isReshared) {
+                await communityDelete(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`);
+            } else {
+                await communityPost(`/subgrids/${activeSubgridId}/${endpoint}/${itemId}/reshare`, {});
+            }
         } catch (err: any) {
+            // Revert optimistic update on failure
+            updateCache(true);
             console.error('[Reshare] Error:', err.message, err);
             setError(err.message || 'Failed to update reshare.');
         } finally {
@@ -1630,7 +1633,7 @@ const TenantCommunityScreen = () => {
                             >
                                 {activeSubgrid ? (
                                     activeSubgrid.logoUrl ? (
-                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
                                     ) : (
                                         <Text style={styles.railLogoText}>
                                             {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
@@ -2007,6 +2010,7 @@ const TenantCommunityScreen = () => {
                                                                         source={{ uri: imageUrl }}
                                                                         style={styles.feedImage}
                                                                         resizeMode="cover"
+                                                                        cachePolicy="memory-disk"
                                                                     />
                                                                 </TouchableOpacity>
                                                             );
@@ -2017,6 +2021,7 @@ const TenantCommunityScreen = () => {
                                                                     <Image
                                                                         source={{ uri: attachment.uri }}
                                                                         style={styles.feedImage}
+                                                                        cachePolicy="memory-disk"
                                                                     />
                                                                 </TouchableOpacity>
                                                             );
@@ -2079,6 +2084,7 @@ const TenantCommunityScreen = () => {
                                                                                                     source={{ uri: origUrl }}
                                                                                                     style={styles.reshareImage}
                                                                                                     resizeMode="cover"
+                                                                                                    cachePolicy="memory-disk"
                                                                                                 />
                                                                                             </TouchableOpacity>
                                                                                         );
@@ -2152,7 +2158,7 @@ const TenantCommunityScreen = () => {
                                     {attachments.map((att, idx) => (
                                         <View key={idx} style={styles.attachmentItem}>
                                             {att.type.startsWith('image/') ? (
-                                                <Image source={{ uri: att.uri }} style={styles.attachmentThumb} />
+                                                <Image source={{ uri: att.uri }} style={styles.attachmentThumb} cachePolicy="memory-disk" />
                                             ) : (
                                                 <View style={styles.attachmentFileIcon}>
                                                     <File size={20} color={colors.textMuted} />

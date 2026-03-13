@@ -6,7 +6,6 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Image,
     useWindowDimensions,
     Modal,
     Pressable,
@@ -16,6 +15,7 @@ import {
     KeyboardAvoidingView,
     RefreshControl,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     UserPlus,
@@ -2553,11 +2553,18 @@ const CreditUnionAdminScreen = () => {
 
             // Optimistic update for immediate UI feedback
             if (isPost) {
-                // Posts come from React Query directly - no local state
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map((p) =>
+                        p._id === itemId
+                            ? { ...p, userLiked: !isLiked, likeCount: Math.max(0, (p.likeCount || 0) + (isLiked ? -1 : 1)) }
+                            : p
+                    ) : []
+                );
             } else {
                 setMessages(prev => prev.map(m =>
                     m._id === itemId
-                        ? { ...m, userLiked: !isLiked, likeCount: (m.likeCount || 0) + (isLiked ? -1 : 1) }
+                        ? { ...m, userLiked: !isLiked, likeCount: Math.max(0, (m.likeCount || 0) + (isLiked ? -1 : 1)) }
                         : m
                 ));
             }
@@ -2569,9 +2576,11 @@ const CreditUnionAdminScreen = () => {
             }
         } catch (err: any) {
             console.error(`Failed to like/unlike ${itemType}:`, err.message);
-            // Revert optimistic update on error by refetching
-            if (!isPost && activeChannelId) {
-                messagesQuery.refetch();
+            // Revert optimistic update on error by invalidating cache
+            if (isPost) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(activeSubgridId) });
+            } else if (activeChannelId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(activeSubgridId, activeChannelId) });
             }
         }
     };
@@ -2586,10 +2595,19 @@ const CreditUnionAdminScreen = () => {
             const isReshared = (item as any)?.userReshared ?? false;
 
             // Optimistic update for immediate UI feedback
-            if (!isPost) {
+            if (isPost) {
+                queryClient.setQueryData(
+                    queryKeys.subgrids.posts(activeSubgridId),
+                    (old: any[] | undefined) => old ? old.map((p) =>
+                        p._id === itemId
+                            ? { ...p, userReshared: !isReshared, reshareCount: Math.max(0, (p.reshareCount || 0) + (isReshared ? -1 : 1)) }
+                            : p
+                    ) : []
+                );
+            } else {
                 setMessages(prev => prev.map(m =>
                     m._id === itemId
-                        ? { ...m, userReshared: !isReshared, reshareCount: (m.reshareCount || 0) + (isReshared ? -1 : 1) }
+                        ? { ...m, userReshared: !isReshared, reshareCount: Math.max(0, (m.reshareCount || 0) + (isReshared ? -1 : 1)) }
                         : m
                 ));
             }
@@ -2601,9 +2619,11 @@ const CreditUnionAdminScreen = () => {
             }
         } catch (err: any) {
             console.error(`Failed to reshare/unreshare ${itemType}:`, err.message);
-            // Revert optimistic update on error
-            if (!isPost && activeChannelId) {
-                messagesQuery.refetch();
+            // Revert optimistic update on error by invalidating cache
+            if (isPost) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.posts(activeSubgridId) });
+            } else if (activeChannelId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.messages.channel(activeSubgridId, activeChannelId) });
             }
         }
     };
@@ -2892,7 +2912,7 @@ const CreditUnionAdminScreen = () => {
                     <TouchableOpacity style={[styles.railLogo, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]}>
                         {activeSubgrid ? (
                             activeSubgrid.logoUrl ? (
-                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} />
+                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
                             ) : (
                                 <Text style={styles.railLogoText}>
                                     {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
@@ -2949,7 +2969,7 @@ const CreditUnionAdminScreen = () => {
                             {/* Server Info Row */}
                             <View style={styles.mobileServerInfoRow}>
                                 {activeSubgrid?.logoUrl ? (
-                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} />
+                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.mobileTopBarLogo} cachePolicy="memory-disk" />
                                 ) : (
                                     <View style={styles.mobileTopBarLogoPlaceholder}>
                                         <Text style={styles.mobileTopBarLogoText}>
@@ -3527,6 +3547,7 @@ const CreditUnionAdminScreen = () => {
                                                                                                 source={{ uri: origUrl }}
                                                                                                 style={styles.reshareImage}
                                                                                                 resizeMode="cover"
+                                                                                                cachePolicy="memory-disk"
                                                                                             />
                                                                                         );
                                                                                     }
@@ -3576,6 +3597,7 @@ const CreditUnionAdminScreen = () => {
                                                                     source={{ uri: url }}
                                                                     style={styles.postImage}
                                                                     resizeMode="contain"
+                                                                    cachePolicy="memory-disk"
                                                                 />
                                                             );
                                                         }
@@ -3644,7 +3666,7 @@ const CreditUnionAdminScreen = () => {
                                     {attachments.map((attachment, index) => (
                                         <View key={index} style={styles.attachmentItem}>
                                             {attachment.type.startsWith('image/') ? (
-                                                <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} />
+                                                <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} cachePolicy="memory-disk" />
                                             ) : (
                                                 <View style={styles.attachmentFileIcon}>
                                                     <File size={24} color={colors.textMuted} />
@@ -4633,6 +4655,7 @@ const CreditUnionAdminScreen = () => {
                                                         <Image
                                                             source={{ uri: serverLogoUrl || activeSubgrid?.logoUrl }}
                                                             style={styles.serverPreviewAvatarImage}
+                                                            cachePolicy="memory-disk"
                                                         />
                                                     ) : (
                                                         <Text style={styles.serverPreviewAvatarText}>
