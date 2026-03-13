@@ -1401,7 +1401,7 @@ export default function DirectMessagesScreen() {
             {!isMobile && (
                 <View style={styles.topNav}>
                     <View style={styles.logo}>
-                        <Image source={require('../../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
+                        <Image source={require('../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
                         <Text style={styles.logoText}>The Gryd</Text>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navTabs}>
@@ -1460,7 +1460,7 @@ export default function DirectMessagesScreen() {
                             <View style={styles.mobileHeaderBrandRow}>
                                 <View style={styles.mobileGrydLogo}>
                                     <View style={styles.mobileGrydLogoIcon}>
-                                        <Image source={require('../../assets/icon.png')} style={{ width: 24, height: 24, borderRadius: 4 }} />
+                                        <Image source={require('../assets/icon.png')} style={{ width: 24, height: 24, borderRadius: 4 }} />
                                     </View>
                                     <Text style={styles.mobileGrydLogoText}>THE GRYD</Text>
                                 </View>

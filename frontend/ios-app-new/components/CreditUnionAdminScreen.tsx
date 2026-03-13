@@ -2786,7 +2786,7 @@ const CreditUnionAdminScreen = () => {
             {!isMobile && (
             <View style={styles.topNav}>
                 <View style={styles.topNavLeft}>
-                    <Image source={require('../../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
+                    <Image source={require('../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
                     <Text style={styles.logoText}>THE GRYD</Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topNavTabs}>
@@ -2848,7 +2848,7 @@ const CreditUnionAdminScreen = () => {
                             <View style={styles.mobileHeaderBrandRow}>
                                 <View style={styles.mobileGrydLogo}>
                                     <View style={styles.mobileGrydLogoIcon}>
-                                        <Image source={require('../../assets/icon.png')} style={{ width: 24, height: 24, borderRadius: 4 }} />
+                                        <Image source={require('../assets/icon.png')} style={{ width: 24, height: 24, borderRadius: 4 }} />
                                     </View>
                                     <Text style={styles.mobileGrydLogoText}>THE GRYD</Text>
                                 </View>
