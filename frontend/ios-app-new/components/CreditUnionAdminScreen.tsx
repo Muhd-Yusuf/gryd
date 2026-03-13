@@ -3360,11 +3360,25 @@ const CreditUnionAdminScreen = () => {
                         </View>
                     </View>
 
-                    {/* Show Loading, Empty State, or Feed */}
+                    {/* Show Loading, Error, Empty State, or Feed */}
                     {isInitializing ? (
                         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                             <ActivityIndicator size="large" color={colors.primary} />
                             <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 14 }}>Loading server data...</Text>
+                        </View>
+                    ) : (channelsQuery.isError || subgridsQuery.isError) ? (
+                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+                            <AlertTriangle size={48} color={colors.error || '#EF4444'} />
+                            <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600', marginTop: 16 }}>Failed to load server data</Text>
+                            <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 8, textAlign: 'center' }}>
+                                {channelsQuery.error?.message || subgridsQuery.error?.message || 'Please check your connection and try again.'}
+                            </Text>
+                            <TouchableOpacity
+                                style={{ marginTop: 16, backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 }}
+                                onPress={() => { channelsQuery.refetch(); subgridsQuery.refetch(); membersQuery.refetch(); }}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
+                            </TouchableOpacity>
                         </View>
                     ) : isServerEmpty ? (
                         <EmptyServerWelcome />
