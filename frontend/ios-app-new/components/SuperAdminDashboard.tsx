@@ -490,7 +490,7 @@ const SuperAdminDashboard = () => {
     const handleSuspendTeamMember = async () => {
         if (!teamSuspendMemberId || !teamSuspendConfirmChecked) return;
 
-        const member = teamMembers.find(m => m._id === teamSuspendMemberId);
+        const member = teamMembers?.find(m => m._id === teamSuspendMemberId);
         const shouldSuspend = member?.status !== 'suspended';
 
         try {
@@ -2591,7 +2591,7 @@ const SuperAdminDashboard = () => {
 
     // Render Team Member Suspend Modal
     const renderTeamSuspendModal = () => {
-        const member = teamMembers.find(m => m._id === teamSuspendMemberId);
+        const member = teamMembers?.find(m => m._id === teamSuspendMemberId);
         const isSuspended = member?.status === 'suspended';
 
         return (

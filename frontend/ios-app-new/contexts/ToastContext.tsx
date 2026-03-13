@@ -56,6 +56,30 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     const { colors } = useTheme();
     const [toasts, setToasts] = useState<Toast[]>([]);
     const animatedValues = useRef<Map<string, Animated.Value>>(new Map());
+    const toastTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+    const hideToast = useCallback((id: string) => {
+        // Clear auto-dismiss timer if it exists
+        const timer = toastTimers.current.get(id);
+        if (timer) {
+            clearTimeout(timer);
+            toastTimers.current.delete(id);
+        }
+
+        const animatedValue = animatedValues.current.get(id);
+        if (animatedValue) {
+            Animated.timing(animatedValue, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: true,
+            }).start(() => {
+                setToasts(prev => prev.filter(t => t.id !== id));
+                animatedValues.current.delete(id);
+            });
+        } else {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }
+    }, []);
 
     const showToast = useCallback((toast: Omit<Toast, 'id'>) => {
         const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -81,24 +105,9 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
             const timer = setTimeout(() => {
                 hideToast(id);
             }, duration);
+            toastTimers.current.set(id, timer);
         }
-    }, []);
-
-    const hideToast = useCallback((id: string) => {
-        const animatedValue = animatedValues.current.get(id);
-        if (animatedValue) {
-            Animated.timing(animatedValue, {
-                toValue: 0,
-                duration: 200,
-                useNativeDriver: true,
-            }).start(() => {
-                setToasts(prev => prev.filter(t => t.id !== id));
-                animatedValues.current.delete(id);
-            });
-        } else {
-            setToasts(prev => prev.filter(t => t.id !== id));
-        }
-    }, []);
+    }, [hideToast]);
 
     const hideAllToasts = useCallback(() => {
         toasts.forEach(toast => hideToast(toast.id));

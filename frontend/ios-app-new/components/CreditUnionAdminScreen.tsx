@@ -937,16 +937,16 @@ const CreditUnionAdminScreen = () => {
             if (data.subgridId === activeSubgridId) {
                 queryClient.setQueryData(
                     queryKeys.subgrids.members(activeSubgridId),
-                    (old: Member[] | undefined) => old ? old.filter(m => m.userId !== data.userId) : []
+                    (old: Member[] | undefined) => old ? old.filter(m => (m.userId || m._id) !== data.userId) : []
                 );
             }
         });
 
         const unsubscribeMemberUpdated = subscribe('member_updated', (data) => {
-            if (data.subgridId === activeSubgridId) {
+            if (data.subgridId === activeSubgridId && data.member) {
                 queryClient.setQueryData(
                     queryKeys.subgrids.members(activeSubgridId),
-                    (old: Member[] | undefined) => old ? old.map(m => m.userId === data.member.userId ? { ...m, ...data.member } : m) : [data.member]
+                    (old: Member[] | undefined) => old ? old.map(m => (m.userId || m._id) === (data.member.userId || data.member._id) ? { ...m, ...data.member } : m) : [data.member]
                 );
             }
         });
@@ -982,7 +982,7 @@ const CreditUnionAdminScreen = () => {
         if (!activeSubgridId || members.length === 0) return;
 
         // Update current user's presence
-        updatePresence(activeSubgridId);
+        updatePresence(activeSubgridId).catch(err => console.warn('[CUA] Presence update failed:', err));
 
         // Fetch online statuses for members
         const fetchStatuses = async () => {
@@ -2284,13 +2284,23 @@ const CreditUnionAdminScreen = () => {
 
     // Handle voice recording - send voice note as message attachment
     const sendVoiceNote = async (dataUrl: string, mimeType: string, durationMs: number) => {
-        if (!activeSubgridId || !activeChannelId) return;
+        if (!activeSubgridId || !activeChannelId) {
+            setRecordingError('Missing channel data. Please select a channel and try again.');
+            return;
+        }
         try {
             // Upload voice note first
-            const uploadResult = await uploadFile(
-                { uri: dataUrl, name: `voice_${Date.now()}.webm`, type: mimeType },
-                { type: 'voice-note', subgridId: activeSubgridId }
-            );
+            let uploadResult;
+            try {
+                uploadResult = await uploadFile(
+                    { uri: dataUrl, name: `voice_${Date.now()}.webm`, type: mimeType },
+                    { type: 'voice-note', subgridId: activeSubgridId }
+                );
+            } catch (uploadError: any) {
+                console.error('[Voice Note Web] Upload failed:', uploadError?.message || uploadError);
+                setRecordingError('Failed to upload voice note.');
+                return;
+            }
 
             if (uploadResult?.success && uploadResult?.data) {
                 // Send message with voice attachment
@@ -2313,9 +2323,13 @@ const CreditUnionAdminScreen = () => {
                         return [...prev, messageResponse.data];
                     });
                 }
+            } else {
+                console.error('[Voice Note Web] Upload result missing success or data:', uploadResult);
+                setRecordingError('Voice note upload failed. Please try again.');
             }
         } catch (err: any) {
             console.error('Failed to send voice note:', err.message);
+            setRecordingError(err.message || 'Failed to send voice note.');
         }
     };
 
