@@ -1160,8 +1160,11 @@ const CreditUnionAdminScreen = () => {
         return groups;
     }, [channels, categories]);
 
-    // Check if server is empty (no channels)
-    const isServerEmpty = channels.length === 0 && !channelsQuery.isLoading && channelsQuery.isFetched;
+    // Check if data is still initializing (tenant not resolved or subgrids still loading)
+    const isInitializing = !tenantId || subgridsQuery.isLoading || (!subgridsQuery.isFetched && !subgridsQuery.isError);
+
+    // Check if server is empty (no channels) - only after data has fully loaded
+    const isServerEmpty = !isInitializing && channels.length === 0 && !channelsQuery.isLoading && channelsQuery.isFetched;
 
     const permissionOptions: { key: ChannelPermissionKey; label: string }[] = [
         { key: 'members', label: 'Members' },
@@ -2844,7 +2847,7 @@ const CreditUnionAdminScreen = () => {
             </View>
             <View style={styles.emptyServerContent}>
                 <Text style={styles.emptyServerTitle}>Welcome to</Text>
-                <Text style={styles.emptyServerName}>{activeSubgrid?.name || 'RBFCU Server'}</Text>
+                <Text style={styles.emptyServerName}>{activeSubgrid?.name || 'My Server'}</Text>
                 <Text style={styles.emptyServerSubtitle}>
                     This is your brand new server. Here are some steps to help you get started
                 </Text>
@@ -2999,7 +3002,7 @@ const CreditUnionAdminScreen = () => {
                             <View style={[styles.serverHeaderLeft, { flex: 1, overflow: 'hidden', paddingRight: 4 }]}>
                                 <View style={{ flex: 1 }}>
                                     <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={{ alignItems: 'center', paddingRight: 16 }}>
-                                        <Text style={styles.serverName} numberOfLines={1}>{activeSubgrid?.name || 'RBFCU Server'}</Text>
+                                        <Text style={styles.serverName} numberOfLines={1}>{activeSubgrid?.name || 'My Server'}</Text>
                                     </ScrollView>
                                 </View>
                                 <TouchableOpacity onPress={() => setServerSettingsModalOpen(true)} style={{ marginLeft: 4 }}>
@@ -3357,8 +3360,13 @@ const CreditUnionAdminScreen = () => {
                         </View>
                     </View>
 
-                    {/* Show Empty State or Feed */}
-                    {isServerEmpty ? (
+                    {/* Show Loading, Empty State, or Feed */}
+                    {isInitializing ? (
+                        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                            <ActivityIndicator size="large" color={colors.primary} />
+                            <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 14 }}>Loading server data...</Text>
+                        </View>
+                    ) : isServerEmpty ? (
                         <EmptyServerWelcome />
                     ) : (
                         <>
@@ -4513,7 +4521,7 @@ const CreditUnionAdminScreen = () => {
                             )}
                         </View>
 
-                        <Text style={styles.settingsSectionLabel}>{activeSubgrid?.name || 'RBFCU Server'}</Text>
+                        <Text style={styles.settingsSectionLabel}>{activeSubgrid?.name || 'My Server'}</Text>
 
                         <TouchableOpacity
                             style={[styles.settingsNavItem, settingsTab === 'server-profile' && styles.settingsNavItemActive]}
@@ -4605,7 +4613,7 @@ const CreditUnionAdminScreen = () => {
                                             <Text style={styles.settingsLabel}>Name</Text>
                                             <TextInput
                                                 style={styles.settingsInput}
-                                                value={serverName || activeSubgrid?.name || 'RBFCU Server'}
+                                                value={serverName || activeSubgrid?.name || 'My Server'}
                                                 onChangeText={setServerName}
                                                 placeholderTextColor={colors.textSubtle}
                                             />
@@ -4635,7 +4643,7 @@ const CreditUnionAdminScreen = () => {
                                                     <Text style={styles.settingsLabel}>Server Name</Text>
                                                     <TextInput
                                                         style={styles.settingsInput}
-                                                        value={serverName || activeSubgrid?.name || 'RBFCU'}
+                                                        value={serverName || activeSubgrid?.name || 'Server'}
                                                         onChangeText={setServerName}
                                                         placeholderTextColor={colors.textSubtle}
                                                     />
@@ -4660,7 +4668,7 @@ const CreditUnionAdminScreen = () => {
                                                 </View>
                                             </View>
                                             <View style={styles.serverPreviewInfo}>
-                                                <Text style={styles.serverPreviewName}>{serverName || activeSubgrid?.name || 'RBFCU Server'}</Text>
+                                                <Text style={styles.serverPreviewName}>{serverName || activeSubgrid?.name || 'My Server'}</Text>
                                                 <View style={styles.serverPreviewStats}>
                                                     <View style={styles.serverPreviewOnline} />
                                                     <Text style={styles.serverPreviewStatText}>1 Online</Text>

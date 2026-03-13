@@ -38,8 +38,14 @@ export default function CreditUnionServerPage() {
             .catch(() => {});
     }, []);
 
-    // Determine loading state
-    const loading = !isAuthChecked || userQuery.isLoading || (!!tenantId && subgridsQuery.isLoading) || (!!firstSubgridId && myRoleQuery.isLoading);
+    // Determine loading state - also wait for tenantId to resolve
+    const [tenantResolved, setTenantResolved] = useState(!!getTenantId());
+
+    useEffect(() => {
+        if (tenantId) setTenantResolved(true);
+    }, [tenantId]);
+
+    const loading = !isAuthChecked || userQuery.isLoading || !tenantResolved || (!!tenantId && subgridsQuery.isLoading) || (!!firstSubgridId && myRoleQuery.isLoading);
 
     // Determine access
     const hasAccess = useMemo(() => {
