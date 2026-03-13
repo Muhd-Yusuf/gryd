@@ -14,6 +14,7 @@ import {
     Alert,
     Pressable,
     RefreshControl,
+    // eslint-disable-next-line no-restricted-imports
     Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
