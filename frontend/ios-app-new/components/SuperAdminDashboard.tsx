@@ -932,7 +932,7 @@ const SuperAdminDashboard = () => {
             {/* Logo */}
             <View style={styles.logoContainer}>
                 <View style={styles.logoIcon}>
-                    <Image source={require('../../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
+                    <Image source={require('../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
                 </View>
                 <Text style={styles.logoText}>THE GRYD</Text>
             </View>
@@ -990,7 +990,7 @@ const SuperAdminDashboard = () => {
                 <View style={styles.mobileHeaderRow}>
                     <View style={styles.mobileLogoContainer}>
                         <View style={styles.mobileLogoIcon}>
-                            <Image source={require('../../assets/icon.png')} style={{ width: 24, height: 24, borderRadius: 4 }} />
+                            <Image source={require('../assets/icon.png')} style={{ width: 24, height: 24, borderRadius: 4 }} />
                         </View>
                         <Text style={styles.mobileLogoText}>THE GRYD</Text>
                     </View>

@@ -45,7 +45,7 @@ const OnboardingLayout = ({
 
     const TheGrydLogo = ({ color }: { color: string }) => (
         <View style={styles.logoRow}>
-            <Image source={require('../../assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />
+            <Image source={require('../assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />
             <Text style={[styles.brandName, { color }]}>THE GRYD</Text>
         </View>
     );

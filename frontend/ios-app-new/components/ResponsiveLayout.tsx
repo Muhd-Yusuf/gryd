@@ -32,7 +32,7 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
     const styles = useMemo(() => createStyles(colors), [colors]);
 
     const TheGrydLogoSmall = () => (
-        <Image source={require('../../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
+        <Image source={require('../assets/icon.png')} style={{ width: 28, height: 28, borderRadius: 6 }} />
     );
 
     return (
