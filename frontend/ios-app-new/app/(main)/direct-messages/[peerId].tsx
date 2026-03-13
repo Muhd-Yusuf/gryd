@@ -667,6 +667,16 @@ const DirectMessageChatScreen = () => {
         };
     }, [isConnected, derivedUserId, serverUserId, storedUserId, peerId, joinRoom, leaveRoom, subscribe]);
 
+    // Refetch messages when WebSocket reconnects (catches messages missed while disconnected)
+    const prevConnectedRef = useRef(isConnected);
+    useEffect(() => {
+        if (isConnected && !prevConnectedRef.current) {
+            console.log('[DM Chat] WebSocket reconnected, refetching messages');
+            directMessagesQuery.refetch();
+        }
+        prevConnectedRef.current = isConnected;
+    }, [isConnected]);
+
     const handleSend = async () => {
         if ((!draft.trim() && pendingAttachments.length === 0) || !subgridId || !peerId || !currentUserId) return;
         const body = draft.trim();
