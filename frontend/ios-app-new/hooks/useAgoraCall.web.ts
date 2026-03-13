@@ -81,6 +81,8 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const [localVideoTrack, setLocalVideoTrack] = useState<ICameraVideoTrack | null>(null);
     const [client, setClient] = useState<IAgoraRTCClient | null>(null);
 
+    const currentCallRef = useRef<CallSession | null>(null);
+    currentCallRef.current = currentCall;
     const clientRef = useRef<IAgoraRTCClient | null>(null);
     const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
     const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null);
@@ -191,11 +193,11 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         }
     }, []);
 
-    // Handle token refresh
+    // Handle token refresh (uses ref to avoid stale closure in retry setTimeout)
     const handleTokenRefresh = useCallback(async (retries = 2) => {
-        if (!currentCall || !clientRef.current) return;
+        if (!currentCallRef.current || !clientRef.current) return;
         try {
-            const response = await refreshCallToken(currentCall.channelName);
+            const response = await refreshCallToken(currentCallRef.current.channelName);
             if (response.success) {
                 await clientRef.current.renewToken(response.data.token);
             }
@@ -205,7 +207,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 setTimeout(() => handleTokenRefresh(retries - 1), 2000);
             }
         }
-    }, [currentCall]);
+    }, []);
 
     // Create local tracks
     const createLocalTracks = useCallback(async (type: CallType) => {
@@ -525,8 +527,9 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     useEffect(() => {
         if (callState === 'ended') {
             const callId = currentCall?.callId;
-            // Leave channel
+            // Remove event listeners and leave channel
             if (clientRef.current) {
+                clientRef.current.removeAllListeners();
                 clientRef.current.leave().catch(() => {});
             }
             // Clean up local tracks

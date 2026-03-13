@@ -912,7 +912,6 @@ const TenantCommunityScreen = () => {
             return;
         }
         const body = channelDraft.trim();
-        setChannelDraft('');
 
         try {
             // Upload attachments first if any
@@ -941,6 +940,8 @@ const TenantCommunityScreen = () => {
                 subgridId: activeSubgridId,
                 channelId: activeChannelId,
             });
+            // Clear draft only after successful send
+            setChannelDraft('');
         } catch (err: any) {
             setError(err.message || 'Failed to send message.');
             setUploading(false);
@@ -1035,10 +1036,11 @@ const TenantCommunityScreen = () => {
                         }
                     } catch (uploadErr: any) {
                         console.error('Failed to upload voice note:', uploadErr);
+                        setError('Failed to send voice message. Please try again.');
+                    } finally {
+                        stream.getTracks().forEach((track) => track.stop());
+                        activeAudioStreamRef.current = null;
                     }
-
-                    stream.getTracks().forEach((track) => track.stop());
-                    activeAudioStreamRef.current = null;
                 };
                 mediaRecorderRef.current = recorder;
                 recorder.start();

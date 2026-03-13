@@ -62,6 +62,7 @@ export const useLeaveVoiceChannel = () => {
         },
         onSuccess: (_, { channelId }) => {
             queryClient.invalidateQueries({ queryKey: ['calls', 'voiceChannel', channelId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.calls.voiceChannelParticipants(channelId) });
         },
     });
 };
@@ -76,6 +77,7 @@ export const useWaveToSpeak = () => {
         },
         onSuccess: (_, channelId) => {
             queryClient.invalidateQueries({ queryKey: ['calls', 'voiceChannel', channelId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.calls.voiceChannelParticipants(channelId) });
         },
     });
 };
@@ -90,6 +92,7 @@ export const useCancelWave = () => {
         },
         onSuccess: (_, channelId) => {
             queryClient.invalidateQueries({ queryKey: ['calls', 'voiceChannel', channelId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.calls.voiceChannelParticipants(channelId) });
         },
     });
 };
@@ -104,6 +107,7 @@ export const useGrantSpeaker = () => {
         },
         onSuccess: (_, { channelId }) => {
             queryClient.invalidateQueries({ queryKey: ['calls', 'voiceChannel', channelId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.calls.voiceChannelParticipants(channelId) });
         },
     });
 };
@@ -118,6 +122,7 @@ export const useRevokeSpeaker = () => {
         },
         onSuccess: (_, { channelId }) => {
             queryClient.invalidateQueries({ queryKey: ['calls', 'voiceChannel', channelId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.calls.voiceChannelParticipants(channelId) });
         },
     });
 };
@@ -132,6 +137,7 @@ export const useMuteParticipant = () => {
         },
         onSuccess: (_, { channelId }) => {
             queryClient.invalidateQueries({ queryKey: ['calls', 'voiceChannel', channelId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.calls.voiceChannelParticipants(channelId) });
         },
     });
 };

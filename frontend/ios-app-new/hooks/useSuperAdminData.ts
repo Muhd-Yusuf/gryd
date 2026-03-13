@@ -20,6 +20,7 @@ import {
     useSuspendTeamMember,
 } from './queries/useSuperAdminQueries';
 import { queryKeys } from '../lib/queryClient';
+import { getSuperAdminOverview, getSuperAdminCustomers, getSuperAdminCustomerDetails } from '../lib/api';
 
 type GrowthRange = 7 | 30 | 90;
 
@@ -211,16 +212,28 @@ export const usePrefetchSuperAdminData = () => {
         prefetchOverview: (growthDays?: number) => {
             queryClient.prefetchQuery({
                 queryKey: queryKeys.superAdmin.overview(growthDays),
+                queryFn: async () => {
+                    const response = await getSuperAdminOverview({ growthDays });
+                    return response?.data;
+                },
             });
         },
         prefetchCustomers: () => {
             queryClient.prefetchQuery({
                 queryKey: queryKeys.superAdmin.customers({ limit: 10 }),
+                queryFn: async () => {
+                    const response = await getSuperAdminCustomers({ limit: 10 });
+                    return response?.data || { customers: [], total: 0 };
+                },
             });
         },
         prefetchCustomerDetail: (customerId: string) => {
             queryClient.prefetchQuery({
                 queryKey: queryKeys.superAdmin.customerDetail(customerId),
+                queryFn: async () => {
+                    const response = await getSuperAdminCustomerDetails(customerId);
+                    return response?.data;
+                },
             });
         },
     };
