@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     StyleSheet,
     Text,
@@ -14,6 +14,7 @@ import {
     Animated,
     Alert,
     Pressable,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -54,6 +55,10 @@ import { useTheme } from '../../lib/theme';
 import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
+import { ImageViewer } from '../../components/ImageViewer';
+import { ErrorRetry } from '../../components/ErrorRetry';
+import { ChannelSkeleton, FeedSkeleton } from '../../components/SkeletonLoader';
+import { markMessageFailed } from '../../lib/messageQueue';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
@@ -252,7 +257,14 @@ const TenantCommunityScreen = () => {
     const showRightPanel = !isCompact;
     const [userId, setUserId] = useState(getUserId());
     const queryClient = useQueryClient();
-    const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
+    const { subscribe, joinRoom, leaveRoom, isConnected, startTyping, stopTyping } = useWebSocketContext();
+
+    // Typing indicator state for channels
+    const [channelTypingUsers, setChannelTypingUsers] = useState<Set<string>>(new Set());
+    const channelTypingTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+    const channelStopTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const channelIsTypingRef = useRef(false);
+
     const [tenantId, setTenantId] = useState(getTenantId());
     const [activeSubgridId, setActiveSubgridId] = useState(() => {
         const tid = getTenantId();
@@ -281,6 +293,7 @@ const TenantCommunityScreen = () => {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'post' | 'message' } | null>(null);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+    const [viewerImage, setViewerImage] = useState<string | null>(null);
     const router = useRouter();
 
     // React Query hooks for data fetching with caching
@@ -293,6 +306,23 @@ const TenantCommunityScreen = () => {
     const categoriesQuery = useCategories(activeSubgridId);
     const messagesQuery = useChannelMessages(activeSubgridId, activeChannelId);
     const dmMessagesQuery = useDirectMessages(activeSubgridId, activeDmId);
+
+    // Pull-to-refresh state
+    const [refreshing, setRefreshing] = useState(false);
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([
+                subgridsQuery.refetch(),
+                channelsQuery.refetch(),
+                postsQuery.refetch(),
+                messagesQuery.refetch(),
+                membersQuery.refetch(),
+            ]);
+        } finally {
+            setRefreshing(false);
+        }
+    }, []);
 
     // Mutations for sending messages
     const sendChannelMessage = useSendChannelMessage(activeSubgridId, activeChannelId);
@@ -487,13 +517,57 @@ const TenantCommunityScreen = () => {
             }
         });
 
+        // Subscribe to typing events for this channel
+        const unsubscribeTyping = subscribe('user_typing', (data) => {
+            const typingUserId = String(data.userId || '');
+            // Ignore own typing events
+            if (!typingUserId || typingUserId === userId) return;
+            // Only handle typing for this channel
+            if (data.roomType !== 'channel' || String(data.roomId) !== channelId) return;
+
+            if (data.isTyping) {
+                setChannelTypingUsers(prev => {
+                    const next = new Set(prev);
+                    next.add(typingUserId);
+                    return next;
+                });
+                // Auto-clear after 3 seconds
+                const existingTimeout = channelTypingTimeoutsRef.current.get(typingUserId);
+                if (existingTimeout) clearTimeout(existingTimeout);
+                channelTypingTimeoutsRef.current.set(typingUserId, setTimeout(() => {
+                    setChannelTypingUsers(prev => {
+                        const next = new Set(prev);
+                        next.delete(typingUserId);
+                        return next;
+                    });
+                    channelTypingTimeoutsRef.current.delete(typingUserId);
+                }, 3000));
+            } else {
+                setChannelTypingUsers(prev => {
+                    const next = new Set(prev);
+                    next.delete(typingUserId);
+                    return next;
+                });
+                const existingTimeout = channelTypingTimeoutsRef.current.get(typingUserId);
+                if (existingTimeout) {
+                    clearTimeout(existingTimeout);
+                    channelTypingTimeoutsRef.current.delete(typingUserId);
+                }
+            }
+        });
+
         return () => {
             leaveRoom('channel', channelId);
             unsubscribeNewMessage();
             unsubscribeMessageUpdated();
             unsubscribeMessageDeleted();
+            unsubscribeTyping();
+            // Clear all typing timeouts
+            channelTypingTimeoutsRef.current.forEach(t => clearTimeout(t));
+            channelTypingTimeoutsRef.current.clear();
+            setChannelTypingUsers(new Set());
         };
-    }, [activeChannelId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient]);
+    }, [activeChannelId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient, userId]);
 
     // Set DM peers from friends
     useEffect(() => {
@@ -907,10 +981,41 @@ const TenantCommunityScreen = () => {
         return Number.isFinite(count) ? count : 0;
     };
 
+    // Handle text change with typing emission for channels
+    const handleChannelDraftChange = useCallback((text: string) => {
+        setChannelDraft(text);
+        if (!activeChannelId) return;
+        if (!channelIsTypingRef.current && text.trim().length > 0) {
+            channelIsTypingRef.current = true;
+            startTyping('channel', activeChannelId);
+        }
+        if (channelStopTypingTimeoutRef.current) clearTimeout(channelStopTypingTimeoutRef.current);
+        if (text.trim().length > 0) {
+            channelStopTypingTimeoutRef.current = setTimeout(() => {
+                channelIsTypingRef.current = false;
+                stopTyping('channel', activeChannelId);
+            }, 2000);
+        } else {
+            channelIsTypingRef.current = false;
+            stopTyping('channel', activeChannelId);
+        }
+    }, [activeChannelId, startTyping, stopTyping]);
+
     const handleSendChannelMessage = async () => {
         if ((!channelDraft.trim() && attachments.length === 0) || !activeSubgridId || !activeChannelId) {
             return;
         }
+
+        // Stop typing on send
+        if (channelIsTypingRef.current && activeChannelId) {
+            channelIsTypingRef.current = false;
+            stopTyping('channel', activeChannelId);
+            if (channelStopTypingTimeoutRef.current) {
+                clearTimeout(channelStopTypingTimeoutRef.current);
+                channelStopTypingTimeoutRef.current = null;
+            }
+        }
+
         const body = channelDraft.trim();
 
         try {
@@ -943,6 +1048,10 @@ const TenantCommunityScreen = () => {
             // Clear draft only after successful send
             setChannelDraft('');
         } catch (err: any) {
+            // TODO: Full offline queue integration - use createOptimisticMessage() to show
+            // pending messages in UI and processQueue() on reconnect.
+            // For now, record the failure in the message queue for later retry.
+            markMessageFailed(`send_${Date.now()}`, err.message || 'Failed to send message.');
             setError(err.message || 'Failed to send message.');
             setUploading(false);
         }
@@ -1591,7 +1700,12 @@ const TenantCommunityScreen = () => {
 
                             {!!error && <Text style={styles.errorText}>{error}</Text>}
 
+                            {channelsQuery.isError && (
+                                <ErrorRetry message="Failed to load channels" onRetry={() => channelsQuery.refetch()} loading={channelsQuery.isRefetching} />
+                            )}
+
                             <ScrollView contentContainerStyle={styles.channelList}>
+                                {channelsQuery.isLoading && Array.from({ length: 5 }).map((_, i) => <ChannelSkeleton key={`ch-sk-${i}`} />)}
                                 {/* Events Button */}
                                 <TouchableOpacity
                                     style={[styles.eventsButton, showEventsView && styles.eventsButtonActive]}
@@ -1786,6 +1900,7 @@ const TenantCommunityScreen = () => {
                                 ref={feedScrollRef}
                                 contentContainerStyle={styles.feedList}
                                 showsVerticalScrollIndicator={false}
+                                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}
                             >
                                 {/* Channel Welcome Banner */}
                                 {activeChannel && (
@@ -1805,7 +1920,17 @@ const TenantCommunityScreen = () => {
                                         </Text>
                                     </View>
                                 )}
-                                {feedItems.length === 0 && !activeChannel && (
+                                {(messagesQuery.isLoading || postsQuery.isLoading) && feedItems.length === 0 && (
+                                    <FeedSkeleton count={4} />
+                                )}
+                                {(messagesQuery.isError || postsQuery.isError) && feedItems.length === 0 && (
+                                    <ErrorRetry
+                                        message="Failed to load feed"
+                                        onRetry={() => { messagesQuery.refetch(); postsQuery.refetch(); }}
+                                        loading={messagesQuery.isRefetching || postsQuery.isRefetching}
+                                    />
+                                )}
+                                {feedItems.length === 0 && !activeChannel && !messagesQuery.isLoading && !postsQuery.isLoading && !messagesQuery.isError && !postsQuery.isError && (
                                     <Text style={styles.emptyText}>No channel updates yet.</Text>
                                 )}
                                 {feedItems.map((item: any) => {
@@ -1878,21 +2003,23 @@ const TenantCommunityScreen = () => {
                                                         if (attachment.type === 'image') {
                                                             const imageUrl = attachment.uri || attachment.value;
                                                             return (
-                                                                <Image
-                                                                    key={`${item._id}-img-${idx}`}
-                                                                    source={{ uri: imageUrl }}
-                                                                    style={styles.feedImage}
-                                                                    resizeMode="cover"
-                                                                />
+                                                                <TouchableOpacity key={`${item._id}-img-${idx}`} onPress={() => setViewerImage(imageUrl)}>
+                                                                    <Image
+                                                                        source={{ uri: imageUrl }}
+                                                                        style={styles.feedImage}
+                                                                        resizeMode="cover"
+                                                                    />
+                                                                </TouchableOpacity>
                                                             );
                                                         }
                                                         if (attachment.type === 'emoji' || attachment.type === 'sticker') {
                                                             return (
-                                                                <Image
-                                                                    key={`${item._id}-emoji-${idx}`}
-                                                                    source={{ uri: attachment.uri }}
-                                                                    style={styles.feedImage}
-                                                                />
+                                                                <TouchableOpacity key={`${item._id}-emoji-${idx}`} onPress={() => setViewerImage(attachment.uri)}>
+                                                                    <Image
+                                                                        source={{ uri: attachment.uri }}
+                                                                        style={styles.feedImage}
+                                                                    />
+                                                                </TouchableOpacity>
                                                             );
                                                         }
                                                         if (attachment.type === 'file') {
@@ -1948,12 +2075,13 @@ const TenantCommunityScreen = () => {
 
                                                                                     if (isOrigImage) {
                                                                                         return (
-                                                                                            <Image
-                                                                                                key={`reshare-att-${origIdx}`}
-                                                                                                source={{ uri: origUrl }}
-                                                                                                style={styles.reshareImage}
-                                                                                                resizeMode="cover"
-                                                                                            />
+                                                                                            <TouchableOpacity key={`reshare-att-${origIdx}`} onPress={() => setViewerImage(origUrl)}>
+                                                                                                <Image
+                                                                                                    source={{ uri: origUrl }}
+                                                                                                    style={styles.reshareImage}
+                                                                                                    resizeMode="cover"
+                                                                                                />
+                                                                                            </TouchableOpacity>
                                                                                         );
                                                                                     }
                                                                                     return null;
@@ -2010,6 +2138,15 @@ const TenantCommunityScreen = () => {
                                 })}
                             </ScrollView>
 
+                            {/* Typing Indicator */}
+                            {channelTypingUsers.size > 0 && (
+                                <View style={styles.typingContainer}>
+                                    <Text style={[styles.typingText, { color: colors.textMuted }]}>
+                                        {channelTypingUsers.size === 1 ? 'Someone is typing' : `${channelTypingUsers.size} people typing`}...
+                                    </Text>
+                                </View>
+                            )}
+
                             {/* Attachment Preview */}
                             {attachments.length > 0 && (
                                 <View style={styles.attachmentPreview}>
@@ -2059,7 +2196,7 @@ const TenantCommunityScreen = () => {
                                             placeholder={`Message #${activeChannel?.name || 'general'}`}
                                             placeholderTextColor={colors.textSubtle}
                                             value={channelDraft}
-                                            onChangeText={setChannelDraft}
+                                            onChangeText={handleChannelDraftChange}
                                             style={styles.messageInput}
                                             onSubmitEditing={handleSendChannelMessage}
                                         />
@@ -2395,6 +2532,7 @@ const TenantCommunityScreen = () => {
                 </TouchableOpacity>
             </Modal>
 
+            <ImageViewer visible={!!viewerImage} imageUrl={viewerImage || ''} onClose={() => setViewerImage(null)} />
         </SafeAreaView>
     );
 };
@@ -3542,6 +3680,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         dmTime: {
             fontSize: 10,
             color: colors.textSubtle,
+        },
+        typingContainer: {
+            paddingHorizontal: 16,
+            paddingVertical: 4,
+        },
+        typingText: {
+            fontSize: 12,
+            fontStyle: 'italic' as const,
         },
     });
 
