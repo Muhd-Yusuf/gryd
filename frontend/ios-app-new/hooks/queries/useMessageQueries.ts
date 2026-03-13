@@ -28,10 +28,11 @@ export const useChannelMessages = (subgridId: string, channelId: string, params?
             return response?.data || [];
         },
         enabled: !!subgridId && !!channelId,
-        staleTime: Infinity, // Show cached data instantly - realtime updates via WebSocket
+        staleTime: 5 * 60 * 1000, // 5 minutes - show cached data, background refresh as fallback for missed WebSocket updates
         gcTime: 24 * 60 * 60 * 1000,
         refetchOnMount: false, // Don't refetch on mount - use cache + WebSocket updates
         refetchOnWindowFocus: false, // Don't refetch on window focus
+        refetchOnReconnect: 'always', // Refresh when network reconnects to catch missed messages
     });
 };
 
@@ -84,6 +85,9 @@ export const useSendChannelMessage = (subgridId: string, channelId: string) => {
                 );
             }
         },
+        onError: (error: any) => {
+            console.error('[useSendChannelMessage] Failed to send message:', error?.message || error);
+        },
     });
 };
 
@@ -124,10 +128,11 @@ export const useDirectMessages = (subgridId: string, peerId: string, params?: Me
             return response?.data || [];
         },
         enabled: !!subgridId && !!peerId,
-        staleTime: Infinity, // Show cached data instantly - realtime updates via WebSocket
+        staleTime: 5 * 60 * 1000, // 5 minutes - show cached data, background refresh as fallback for missed WebSocket updates
         gcTime: 24 * 60 * 60 * 1000,
         refetchOnMount: false, // Don't refetch on mount - use cache + WebSocket updates
         refetchOnWindowFocus: false, // Don't refetch on window focus
+        refetchOnReconnect: 'always', // Refresh when network reconnects to catch missed messages
     });
 };
 
@@ -184,6 +189,9 @@ export const useSendDirectMessage = (subgridId: string, peerId: string) => {
                 queryClient.invalidateQueries({ queryKey: queryKeys.messages.dmList(targetSubgridId) });
             }
         },
+        onError: (error: any) => {
+            console.error('[useSendDirectMessage] Failed to send message:', error?.message || error);
+        },
     });
 };
 
@@ -199,9 +207,10 @@ export const useDMList = (subgridId: string) => {
             return response?.data || [];
         },
         enabled: !!subgridId,
-        staleTime: Infinity, // Show cached data instantly
+        staleTime: 5 * 60 * 1000, // 5 minutes - fallback refresh for missed WebSocket updates
         gcTime: 24 * 60 * 60 * 1000,
         refetchOnMount: false, // Don't refetch on mount - use cache
+        refetchOnReconnect: 'always', // Refresh when network reconnects
     });
 };
 
@@ -226,7 +235,7 @@ export const useInfiniteChannelMessages = (subgridId: string, channelId: string)
             return lastPage[0]?._id;
         },
         enabled: !!subgridId && !!channelId,
-        staleTime: Infinity, // Show cached instantly
+        staleTime: 5 * 60 * 1000, // 5 minutes - fallback refresh for missed WebSocket updates
     });
 };
 
@@ -248,7 +257,7 @@ export const useInfiniteDirectMessages = (subgridId: string, peerId: string) => 
             return lastPage[0]?._id;
         },
         enabled: !!subgridId && !!peerId,
-        staleTime: Infinity, // Show cached instantly
+        staleTime: 5 * 60 * 1000, // 5 minutes - fallback refresh for missed WebSocket updates
     });
 };
 

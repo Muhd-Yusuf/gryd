@@ -40,6 +40,13 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     const connect = useCallback(async () => {
         if (socketRef.current?.connected) return;
 
+        // Clean up any existing disconnected socket before creating a new one
+        if (socketRef.current) {
+            socketRef.current.removeAllListeners();
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
+
         // Resolve user and tenant IDs
         let userId = getUserId();
         let tenantId = getTenantId();
@@ -85,9 +92,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
         socketRef.current = io(wsUrl, {
             reconnection: true,
-            reconnectionAttempts: 10,
+            reconnectionAttempts: 15,
             reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
+            reconnectionDelayMax: 30000, // Exponential backoff caps at 30 seconds
+            randomizationFactor: 0.5, // Add jitter to prevent thundering herd
             transports: ['polling', 'websocket'],
             autoConnect: true,
         });

@@ -225,6 +225,8 @@ type Message = {
     body?: string;
     createdAt?: string;
     attachments?: any[];
+    likeCount?: number;
+    userLiked?: boolean;
 };
 
 type Member = {
@@ -791,7 +793,7 @@ const CreditUnionAdminScreen = () => {
 
     // WebSocket: Join channel room and subscribe to new messages
     useEffect(() => {
-        if (!activeChannelId || !isConnected) return;
+        if (!activeChannelId || !activeSubgridId || !isConnected) return;
 
         const channelId = String(activeChannelId);
 
@@ -966,11 +968,11 @@ const CreditUnionAdminScreen = () => {
     }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
 
     // Refetch content moderation settings when entering that tab
+    const refetchContentModeration = contentModerationQuery.refetch;
     useEffect(() => {
         if (!serverSettingsModalOpen || settingsTab !== 'content-moderation' || !activeSubgridId) return;
-        contentModerationQuery.refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
+        refetchContentModeration();
+    }, [serverSettingsModalOpen, settingsTab, activeSubgridId, refetchContentModeration]);
 
     // Fetch and update member online statuses
     useEffect(() => {
@@ -1045,20 +1047,20 @@ const CreditUnionAdminScreen = () => {
     }, [notificationSettingsModalOpen]);
 
     // Refetch custom roles when roles tab is selected
+    const refetchCustomRoles = customRolesQuery.refetch;
     useEffect(() => {
         if (settingsTab === 'roles' && activeSubgridId) {
-            customRolesQuery.refetch();
+            refetchCustomRoles();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [settingsTab, activeSubgridId]);
+    }, [settingsTab, activeSubgridId, refetchCustomRoles]);
 
     // Refetch engagement settings when engagement tab is selected
+    const refetchEngagementSettings = engagementSettingsQuery.refetch;
     useEffect(() => {
         if (settingsTab === 'engagement' && activeSubgridId) {
-            engagementSettingsQuery.refetch();
+            refetchEngagementSettings();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [settingsTab, activeSubgridId]);
+    }, [settingsTab, activeSubgridId, refetchEngagementSettings]);
 
     const handleSaveNotificationSettings = async () => {
         setNotificationSettingsSaving(true);
@@ -2513,7 +2515,7 @@ const CreditUnionAdminScreen = () => {
         const items = isPost ? posts : messages;
         try {
             const item = items.find(i => i._id === itemId);
-            if ((item as any)?.userLiked) {
+            if (item?.userLiked) {
                 await unlikeItemMutation.mutateAsync({ itemId, itemType });
             } else {
                 await likeItemMutation.mutateAsync({ itemId, itemType });

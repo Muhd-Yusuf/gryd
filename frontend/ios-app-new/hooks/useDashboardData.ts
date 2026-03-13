@@ -106,8 +106,9 @@ export const useMemberDashboard = (tenantId: string, activeSubgridId: string) =>
         categoriesLoading: dashboardData.categories.isLoading,
         refetchCategories: dashboardData.categories.refetch,
 
-        // Combined state
+        // Combined state - partial loading support
         isLoading: dashboardData.isLoading || subgridsQuery.isLoading,
+        isPartiallyLoaded: subgridsQuery.isSuccess || dashboardData.channels.isSuccess || dashboardData.members.isSuccess,
         isError: dashboardData.isError || subgridsQuery.isError,
         refetchAll: () => {
             subgridsQuery.refetch();

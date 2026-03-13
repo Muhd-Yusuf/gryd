@@ -109,6 +109,8 @@ export const useWebSocket = (options: UseWebSocketOptions = {}): UseWebSocketRet
             reconnection: optionsRef.current.reconnection,
             reconnectionAttempts: optionsRef.current.reconnectionAttempts,
             reconnectionDelay: optionsRef.current.reconnectionDelay,
+            reconnectionDelayMax: 30000, // Cap exponential backoff at 30 seconds
+            randomizationFactor: 0.5, // Add jitter to prevent thundering herd
             transports: ['websocket', 'polling'],
             autoConnect: true,
         });

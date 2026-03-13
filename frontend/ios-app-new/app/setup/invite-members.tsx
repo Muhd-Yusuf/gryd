@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { completeSetup, setAuthUser } from '../../lib/api';
+import { completeSetup, setAuthUser, getApiBaseUrl } from '../../lib/api';
 
 export default function InviteMembersScreen() {
     const router = useRouter();
@@ -34,9 +34,10 @@ export default function InviteMembersScreen() {
     const [inviteCode, setInviteCode] = useState<string | null>(null);
 
     // Generate the invite URL with actual code or placeholder
+    // Derive from API base URL or window origin — avoid hardcoded domain
     const baseUrl = Platform.OS === 'web' && typeof window !== 'undefined'
         ? window.location.origin
-        : 'https://thegryd.io';
+        : getApiBaseUrl().replace(/\/api$/, '');
     const inviteUrl = inviteCode
         ? `${baseUrl}/join/${inviteCode}`
         : `${baseUrl}/join/XXXXXX`;

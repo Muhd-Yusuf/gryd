@@ -1695,7 +1695,12 @@ export default function DirectMessagesScreen() {
 
                                 {/* Messages */}
                                 <View style={styles.messagesContainer}>
-                                    {messageGroups.map((group) => (
+                                    {!currentUserId && messages.length > 0 && (
+                                        <View style={{ paddingVertical: 8, alignItems: 'center' }}>
+                                            <Text style={{ color: colors.textMuted, fontSize: 12 }}>Loading user info...</Text>
+                                        </View>
+                                    )}
+                                    {currentUserId ? messageGroups.map((group) => (
                                         <View key={group.date}>
                                             <View style={styles.dateDivider}>
                                                 <View style={styles.dateLine} />
@@ -1707,7 +1712,7 @@ export default function DirectMessagesScreen() {
                                                 const actualSenderId = msg.senderId || (msg as any).userId || (msg as any).fromUserId || (msg as any).from || '';
                                                 const senderName = getSenderName(actualSenderId);
                                                 const msgSenderId = String(actualSenderId).trim();
-                                                const myUserId = String(currentUserId || '').trim();
+                                                const myUserId = String(currentUserId).trim();
                                                 const isOwnMessage = msgSenderId === myUserId && msgSenderId !== '';
                                                 // Debug: log ID comparison to troubleshoot message alignment
                                                 console.log('[DM] isOwnMessage check - msgId:', msg._id, 'senderId:', msgSenderId, 'currentUserId:', myUserId, 'isOwn:', isOwnMessage, 'rawMsg:', JSON.stringify(msg));
@@ -1835,7 +1840,7 @@ export default function DirectMessagesScreen() {
                                                 );
                                             })}
                                         </View>
-                                    ))}
+                                    )) : null}
                                 </View>
                             </ScrollView>
 

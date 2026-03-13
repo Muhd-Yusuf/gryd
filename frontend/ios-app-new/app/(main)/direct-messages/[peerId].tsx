@@ -562,10 +562,11 @@ const DirectMessageChatScreen = () => {
     }, [localMessages.length, peerId, resetScrollState, markForInitialScroll]);
 
     // Use refs to avoid stale closures in WebSocket handlers
+    // Update synchronously on every render to eliminate timing gaps
     const currentUserIdRef = useRef(currentUserId);
+    currentUserIdRef.current = currentUserId;
     const peerIdRef = useRef(peerId);
-    useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
-    useEffect(() => { peerIdRef.current = peerId; }, [peerId]);
+    peerIdRef.current = peerId;
 
     // WebSocket subscription for real-time DM updates
     useEffect(() => {

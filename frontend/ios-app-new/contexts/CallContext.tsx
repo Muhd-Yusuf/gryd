@@ -95,6 +95,10 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
                 if (handledCallIdsRef.current.has(data.callId)) {
                     break;
                 }
+                // Skip if this call is already active (prevents race between state and ref)
+                if (activeCallIdsRef.current.has(data.callId)) {
+                    break;
+                }
                 setIncomingCall({
                     callId: data.callId,
                     callerId: data.callerId,
@@ -259,6 +263,7 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
         if (sseSetupRef.current) return;
 
         let isMounted = true;
+        let pendingCleanup: (() => void) | null = null;
         sseSetupRef.current = true;
 
         const setupSSE = async () => {
@@ -267,8 +272,10 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
                 if (isMounted) {
                     cleanupRef.current = cleanup;
                 } else {
+                    // Component unmounted during async setup - cleanup immediately
                     cleanup();
                 }
+                pendingCleanup = cleanup;
             } catch (err) {
                 console.error('[CallContext] Failed to subscribe to call events:', err);
             }
@@ -278,7 +285,10 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
 
         return () => {
             isMounted = false;
+            // Clean up both the ref-stored cleanup and any pending cleanup
             cleanupRef.current?.();
+            cleanupRef.current = null;
+            pendingCleanup?.();
             sseSetupRef.current = false;
         };
     }, [handleCallEvent]);

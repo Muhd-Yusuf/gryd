@@ -94,7 +94,7 @@ const OnboardingLayout = ({
                                 {showBack && (
                                     <TouchableOpacity
                                         style={styles.backButton}
-                                        onPress={onBack || (() => router.back())}
+                                        onPress={onBack || (() => router.canGoBack() ? router.back() : router.replace('/'))}
                                     >
                                         <ArrowLeft color={colors.textMuted} size={20} />
                                         <Text style={styles.backText}>Back</Text>

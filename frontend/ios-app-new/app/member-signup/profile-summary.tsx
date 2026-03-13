@@ -69,7 +69,7 @@ export default function ProfileSummaryScreen() {
                     avatarUrl = uploadResult.data?.url || uploadResult.url || '';
                 } catch (uploadErr) {
                     console.warn('Failed to upload profile image:', uploadErr);
-                    // Continue without avatar
+                    setError('Profile image upload failed. Your account will be created without a profile picture.');
                 }
             }
 
@@ -83,17 +83,13 @@ export default function ProfileSummaryScreen() {
                 avatarUrl,
             });
 
-            // Store auth data
+            // Store auth data and navigate once complete
             await setAuthUser(result.token, result.user);
 
-            // Show success state
+            // Show success state then navigate
             setSuccess(true);
             setLoading(false);
-
-            // Auto-navigate after a short delay
-            setTimeout(() => {
-                router.replace('/(main)');
-            }, 2000);
+            router.replace('/(main)');
         } catch (err: any) {
             setError(err.message || 'Failed to create account');
             setLoading(false);
