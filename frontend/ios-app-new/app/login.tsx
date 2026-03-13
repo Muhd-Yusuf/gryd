@@ -141,9 +141,9 @@ const LoginScreen = () => {
             await setAuthUser(result.token, result.user);
 
             // Verify auth was persisted before redirecting
-            const { getAuthUser } = await import('../lib/api');
+            const { getAuthUser, getAuthToken } = await import('../lib/api');
             const savedUser = await getAuthUser();
-            if (!savedUser?.token) {
+            if (!savedUser?.userId || !getAuthToken()) {
                 throw new Error('Failed to save authentication. Please try again.');
             }
 
