@@ -259,13 +259,13 @@ callSchema.statics.getDMCallHistory = async function(userId1, userId2, limit = 2
 callSchema.statics.getActiveCall = async function(userId) {
     // Stale threshold: calls older than 2 minutes in ringing/initiating status should be ignored
     const staleThreshold = new Date(Date.now() - 2 * 60 * 1000);
-    // Active calls older than 2 hours are stale (call ended but status wasn't updated)
-    const activeStaleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    // Active calls older than 30 minutes are likely stale (ended but not cleaned up)
+    const activeStaleThreshold = new Date(Date.now() - 30 * 60 * 1000);
 
     return this.findOne({
         'participants.userId': userId,
         $or: [
-            // Active calls are valid only if not too old (prevents permanently "busy" users)
+            // Active calls are valid only if reasonably recent
             {
                 status: 'active',
                 $or: [
@@ -303,7 +303,7 @@ callSchema.statics.isUserBusy = async function(userId) {
  */
 callSchema.statics.cleanupStaleCalls = async function(userId) {
     const staleThreshold = new Date(Date.now() - 2 * 60 * 1000);
-    const activeStaleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const activeStaleThreshold = new Date(Date.now() - 30 * 60 * 1000);
 
     // Clean up stale ringing/initiating calls (older than 2 minutes)
     const result1 = await this.updateMany(
@@ -343,6 +343,32 @@ callSchema.statics.cleanupStaleCalls = async function(userId) {
     }
 
     return totalCleaned;
+};
+
+/**
+ * Force-end all active/ringing/initiating calls for a user
+ * Used when a user initiates a new call - any existing calls are clearly stale
+ */
+callSchema.statics.forceEndActiveCalls = async function(userId) {
+    const result = await this.updateMany(
+        {
+            'participants.userId': userId,
+            status: { $in: ['active', 'initiating', 'ringing'] }
+        },
+        {
+            $set: {
+                status: 'ended',
+                endedAt: new Date(),
+                endReason: 'timeout'
+            }
+        }
+    );
+
+    if (result.modifiedCount > 0) {
+        console.log(`[Call] Force-ended ${result.modifiedCount} stale calls for caller ${userId}`);
+    }
+
+    return result.modifiedCount;
 };
 
 module.exports = mongoose.model('Call', callSchema);
