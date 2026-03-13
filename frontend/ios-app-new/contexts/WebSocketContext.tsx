@@ -92,10 +92,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
         socketRef.current = io(wsUrl, {
             reconnection: true,
-            reconnectionAttempts: 15,
+            reconnectionAttempts: Infinity, // Never stop trying to reconnect
             reconnectionDelay: 1000,
-            reconnectionDelayMax: 30000, // Exponential backoff caps at 30 seconds
-            randomizationFactor: 0.5, // Add jitter to prevent thundering herd
+            reconnectionDelayMax: 15000, // Cap at 15 seconds between attempts
+            randomizationFactor: 0.5,
             transports: ['polling', 'websocket'],
             autoConnect: true,
         });
@@ -278,6 +278,18 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         };
         const subscription = AppState.addEventListener('change', handleAppStateChange);
         return () => subscription.remove();
+    }, [connect]);
+
+    // Periodic reconnection check - ensures WebSocket recovers from any disconnection
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (!socketRef.current?.connected && AppState.currentState === 'active') {
+                console.log('[WebSocket] Periodic check: not connected, reconnecting...');
+                connect();
+            }
+        }, 30000); // Check every 30 seconds
+
+        return () => clearInterval(interval);
     }, [connect]);
 
     const value: WebSocketContextValue = {
