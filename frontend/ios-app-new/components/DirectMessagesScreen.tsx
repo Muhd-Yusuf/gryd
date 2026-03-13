@@ -424,24 +424,19 @@ export default function DirectMessagesScreen() {
         }
     }, [activeSubgridId, friends, fetchLastMessages]);
 
-    const refreshFriends = useCallback(async (subgridId: string) => {
-        // Invalidate React Query cache to refetch friends
-        queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.friends(subgridId) });
-        // Last messages will be fetched by the effect above when friends query updates
-    }, [queryClient]);
-
     // Load channels when subgrid changes (friends and members handled by React Query)
     useEffect(() => {
         if (!activeSubgridId) return;
 
-        refreshFriends(activeSubgridId);
+        // Invalidate React Query cache to refetch friends
+        queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.friends(activeSubgridId) });
 
         // Fetch channels (members now handled by React Query via membersQuery)
         communityGet(`/subgrids/${activeSubgridId}/channels`).then((channelsRes) => {
             const rawChannels = channelsRes?.data;
             setChannels(Array.isArray(rawChannels) ? rawChannels : []);
         });
-    }, [activeSubgridId, refreshFriends]);
+    }, [activeSubgridId, queryClient]);
 
     // Scroll to bottom when messages change (WhatsApp style - newest at bottom)
     const prevMessagesCountRef = useRef<number>(0);

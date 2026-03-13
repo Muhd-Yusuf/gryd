@@ -185,6 +185,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
     const disconnect = useCallback(() => {
         if (socketRef.current) {
+            socketRef.current.removeAllListeners();
             socketRef.current.disconnect();
             socketRef.current = null;
             setStatus('disconnected');
