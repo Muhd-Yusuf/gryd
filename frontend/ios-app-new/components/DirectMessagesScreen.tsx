@@ -461,7 +461,7 @@ export default function DirectMessagesScreen() {
         const uncachedPeers: string[] = [];
 
         // First, populate from message cache (instant, no API calls)
-        friendIds.slice(0, 20).forEach((friendId) => {
+        friendIds.forEach((friendId) => {
             const cached = getCachedMessages(friendId);
             if (cached && cached.length > 0) {
                 const sorted = [...cached].sort((a, b) =>

@@ -75,7 +75,7 @@ const isExpoToken = (token) => {
  * @param {string} options.channelId - Android notification channel
  * @returns {Promise<Object>} - Send result
  */
-const sendExpoNotification = async ({ to, title, body, data = {}, sound = 'default', badge, channelId }) => {
+const sendExpoNotification = async ({ to, title, body, data = {}, sound = 'default', badge, channelId, categoryId }) => {
     if (!Expo.isExpoPushToken(to)) {
         throw new Error(`Invalid Expo push token: ${to}`);
     }
@@ -88,6 +88,7 @@ const sendExpoNotification = async ({ to, title, body, data = {}, sound = 'defau
         sound,
         ...(badge !== undefined && { badge }),
         ...(channelId && { channelId }),
+        ...(categoryId && { categoryId }),
     };
 
     const chunks = expo.chunkPushNotifications([message]);

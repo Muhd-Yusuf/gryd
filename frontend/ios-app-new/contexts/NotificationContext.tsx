@@ -370,8 +370,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         };
     }, [handleNotificationResponse]);
 
-    // Auto-register token when user is logged in
+    // Auto-register token when user is logged in (with retry on failure)
     useEffect(() => {
+        let retryCount = 0;
+        let timer: ReturnType<typeof setTimeout>;
+
         const checkAndRegister = async () => {
             try {
                 const user = await getAuthUser();
@@ -379,12 +382,17 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                     await registerToken();
                 }
             } catch {
-                // Silently fail - notification registration is best-effort
+                // Retry up to 3 times with exponential backoff
+                if (retryCount < 3) {
+                    retryCount++;
+                    const delay = 2000 * Math.pow(2, retryCount); // 4s, 8s, 16s
+                    timer = setTimeout(checkAndRegister, delay);
+                }
             }
         };
 
         // Small delay to ensure auth is initialized
-        const timer = setTimeout(checkAndRegister, 1000);
+        timer = setTimeout(checkAndRegister, 1000);
         return () => clearTimeout(timer);
     }, [registerToken]);
 

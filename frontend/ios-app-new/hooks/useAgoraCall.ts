@@ -8,7 +8,7 @@
  * The native implementation uses the full Agora SDK for voice/video calls.
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
 import type { IRtcEngine } from 'react-native-agora';
 import {
@@ -143,6 +143,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const [remoteUsers, setRemoteUsers] = useState<number[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [callDuration, setCallDuration] = useState(0);
+    const [engineReady, setEngineReady] = useState(false); // triggers re-render when engine is available
 
     const engineRef = useRef<IRtcEngine | null>(null);
     const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -264,6 +265,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
             engineRef.current = engine;
             isInitializedRef.current = true;
+            setEngineReady(true); // trigger re-render so CallModal gets the engine
 
             console.log('[Agora Native] Engine initialized successfully');
             return engine;
@@ -274,21 +276,29 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         }
     }, [startDurationTimer, handleTokenRefresh]);
 
-    // Enable video for video calls
+    // Enable video for video calls (call BEFORE joinChannel)
     const enableVideo = useCallback(async (engine: IRtcEngine) => {
         try {
             engine.enableVideo();
-            // setupLocalVideo ensures the local camera feed is bound to the rendering surface
-            engine.setupLocalVideo({
-                uid: 0,
-                sourceType: 0, // VideoSourceCameraPrimary (0), NOT secondary (1)
-                renderMode: 1, // RenderModeHidden
-            });
-            engine.startPreview(0); // Explicitly pass VideoSourceCameraPrimary
             setIsVideoEnabled(true);
         } catch (err: any) {
             console.error('[Agora Native] Failed to enable video:', err);
             setIsVideoEnabled(false);
+        }
+    }, []);
+
+    // Setup local video rendering (call AFTER joinChannel)
+    const setupLocalVideoRendering = useCallback((engine: IRtcEngine) => {
+        try {
+            engine.setupLocalVideo({
+                uid: 0,
+                sourceType: 0, // VideoSourceCameraPrimary
+                renderMode: 1, // RenderModeHidden
+            });
+            engine.startPreview(0); // VideoSourceCameraPrimary
+            console.log('[Agora Native] Local video rendering setup complete');
+        } catch (err: any) {
+            console.error('[Agora Native] Failed to setup local video rendering:', err);
         }
     }, []);
 
@@ -307,6 +317,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             engineRef.current = null;
             eventHandlerRef.current = null;
             isInitializedRef.current = false;
+            setEngineReady(false);
         }
     }, []);
 
@@ -367,9 +378,14 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 autoSubscribeVideo: true,
             });
 
-            // Restart preview after joining to ensure local video renders
+            // Setup local video AFTER joining channel so the render surface binds correctly
             if (type === 'video') {
-                engine.startPreview(0); // VideoSourceCameraPrimary
+                // Small delay to ensure channel join completes before setting up video surface
+                setTimeout(() => {
+                    if (engineRef.current) {
+                        setupLocalVideoRendering(engineRef.current);
+                    }
+                }, 300);
             }
 
             setCurrentCall({
@@ -393,7 +409,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             options.onError?.(err);
             return null;
         }
-    }, [initEngine, enableVideo, cleanupEngine, options]);
+    }, [initEngine, enableVideo, setupLocalVideoRendering, cleanupEngine, options]);
 
     // Answer incoming call
     const answer = useCallback(async (callId: string, callTypeArg?: CallType) => {
@@ -449,9 +465,13 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 autoSubscribeVideo: true,
             });
 
-            // Restart preview after joining to ensure local video renders
+            // Setup local video AFTER joining channel so the render surface binds correctly
             if (type === 'video') {
-                engine.startPreview(0); // VideoSourceCameraPrimary
+                setTimeout(() => {
+                    if (engineRef.current) {
+                        setupLocalVideoRendering(engineRef.current);
+                    }
+                }, 300);
             }
 
             setCurrentCall({
@@ -476,7 +496,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             options.onError?.(err);
             return null;
         }
-    }, [initEngine, enableVideo, cleanupEngine, startDurationTimer, options]);
+    }, [initEngine, enableVideo, setupLocalVideoRendering, cleanupEngine, startDurationTimer, options]);
 
     // Decline incoming call
     const decline = useCallback(async (callId: string) => {
@@ -645,8 +665,9 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         };
     }, [cleanupEngine, stopDurationTimer]);
 
-    // Engine reference for video rendering
-    const engine = useMemo(() => engineRef.current, [currentCall, remoteUsers]);
+    // Engine reference for video rendering - engineReady state change triggers re-render
+    // so consumers get the actual engine instance (not a stale null)
+    const engine = engineReady ? engineRef.current : null;
 
     return {
         // State
@@ -671,7 +692,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         switchCamera,
 
         // Engine reference for video rendering
-        engine: engineRef.current,
+        engine,
     };
 };
 

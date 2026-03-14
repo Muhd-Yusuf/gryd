@@ -265,17 +265,19 @@ const sendPushToOfflineUser = async (userId, notificationType, notificationData)
         const notificationRoomType = notificationData?.data?.roomType;
         const notificationRoomId = notificationData?.data?.roomId;
 
-        // If we know the room context, only skip push when the user is actively in that room.
-        // Otherwise, fall back to skipping push when the user is online anywhere.
-        if (notificationRoomType && notificationRoomId) {
-            const roomUsers = websocketService.getOnlineUsersInRoom(notificationRoomType, String(notificationRoomId));
-            if (roomUsers.includes(normalizedUserId)) {
-                console.log(`[Push] User ${normalizedUserId} is active in ${notificationRoomType}:${notificationRoomId}, skipping push notification`);
-                return;
+        // For calls, ALWAYS send push notifications (calls are urgent and need to wake the device)
+        // For other notifications, only skip if the user is actively viewing the relevant room
+        if (notificationType !== 'call') {
+            if (notificationRoomType && notificationRoomId) {
+                const roomUsers = websocketService.getOnlineUsersInRoom(notificationRoomType, String(notificationRoomId));
+                if (roomUsers.includes(normalizedUserId)) {
+                    console.log(`[Push] User ${normalizedUserId} is active in ${notificationRoomType}:${notificationRoomId}, skipping push notification`);
+                    return;
+                }
             }
-        } else if (websocketService.isUserOnline(normalizedUserId)) {
-            console.log(`[Push] User ${normalizedUserId} is online, skipping push notification`);
-            return;
+            // Note: We no longer skip push just because user is "online" via WebSocket.
+            // WebSocket connected doesn't mean the user is actively viewing the app -
+            // they could have the app in background or phone locked.
         }
 
         // Send to all registered tokens
