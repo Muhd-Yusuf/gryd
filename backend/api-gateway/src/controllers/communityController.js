@@ -3980,7 +3980,8 @@ exports.removeFriend = async (req, res) => {
 
 exports.blockFriend = async (req, res) => {
     try {
-        const { subgridId, friendId } = req.params;
+        const { subgridId } = req.params;
+        const friendId = req.body.targetUserId || req.params.friendId;
         const userId = req.user?.id;
         if (!userId) {
             return res.status(401).json({ message: 'Authentication required' });

@@ -232,8 +232,8 @@ router.post('/subgrids/:subgridId/friend-requests', requireUser, loadSubgrid, re
 router.post('/subgrids/:subgridId/friend-requests/:requestId/accept', requireUser, loadSubgrid, requireSubgridRead, acceptFriendRequest);
 router.post('/subgrids/:subgridId/friend-requests/:requestId/decline', requireUser, loadSubgrid, requireSubgridRead, declineFriendRequest);
 router.delete('/subgrids/:subgridId/friends/:friendId', requireUser, loadSubgrid, requireSubgridRead, removeFriend);
-router.post('/subgrids/:subgridId/friends/:friendId/block', requireUser, loadSubgrid, requireSubgridRead, blockFriend);
-router.delete('/subgrids/:subgridId/friends/:friendId/block', requireUser, loadSubgrid, requireSubgridRead, unblockFriend);
+router.post('/subgrids/:subgridId/blocks', requireUser, loadSubgrid, requireSubgridRead, blockFriend);
+router.delete('/subgrids/:subgridId/blocks/:friendId', requireUser, loadSubgrid, requireSubgridRead, unblockFriend);
 
 router.get('/subgrids/:subgridId/moderation', requireUser, loadSubgrid, requireSubgridModeration, listModerationQueue);
 router.post('/subgrids/:subgridId/moderation/:flagId/action', requireUser, loadSubgrid, requireSubgridModeration, moderateFlag);
