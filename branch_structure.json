@@ -1,0 +1,27 @@
+{
+  "default_branch": "gryd",
+  "branches": [
+    "gryd",
+    "gryd-stable",
+    "local-backup/gryd",
+    "local-backup/gryd-stable",
+    "local-backup/local-backup/stash-0",
+    "origin"
+  ],
+  "parent": {
+    "gryd": null,
+    "gryd-stable": "gryd",
+    "local-backup/gryd": "gryd",
+    "local-backup/gryd-stable": "local-backup/gryd",
+    "local-backup/local-backup/stash-0": "gryd",
+    "origin": "gryd"
+  },
+  "order": [
+    "gryd",
+    "gryd-stable",
+    "local-backup/gryd",
+    "local-backup/local-backup/stash-0",
+    "origin",
+    "local-backup/gryd-stable"
+  ]
+}
