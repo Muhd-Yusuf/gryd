@@ -457,49 +457,19 @@ export default function DirectMessagesScreen() {
     const fetchLastMessages = useCallback(async (subgridId: string, friendIds: string[]) => {
         if (friendIds.length === 0) return;
 
-        const lastMsgsMap: Record<string, DirectMessage> = {};
-        const uncachedPeers: string[] = [];
-
-        // First, populate from message cache (instant, no API calls)
-        friendIds.forEach((friendId) => {
-            const cached = getCachedMessages(friendId);
-            if (cached && cached.length > 0) {
-                const sorted = [...cached].sort((a, b) =>
-                    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-                );
-                lastMsgsMap[friendId] = sorted[0] as DirectMessage;
-            } else {
-                uncachedPeers.push(friendId);
-            }
-        });
-
-        // Show cached results immediately
-        if (Object.keys(lastMsgsMap).length > 0) {
-            setLastMessages(prev => ({ ...prev, ...lastMsgsMap }));
-        }
-
-        // Only fetch from API for friends without cached messages
-        if (uncachedPeers.length > 0) {
-            try {
-                const lastMsgsPromises = uncachedPeers.map(async (friendId: string) => {
-                    try {
-                        const msgRes = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${friendId}&limit=1`);
-                        const msgs = msgRes?.data || [];
-                        return { friendId, lastMsg: msgs.length > 0 ? msgs[0] : null };
-                    } catch {
-                        return { friendId, lastMsg: null };
-                    }
-                });
-                const results = await Promise.all(lastMsgsPromises);
-                results.forEach(({ friendId, lastMsg }) => {
-                    if (lastMsg) {
-                        lastMsgsMap[friendId] = lastMsg;
-                    }
-                });
-                setLastMessages(prev => ({ ...prev, ...lastMsgsMap }));
-            } catch (error) {
-                console.error('[DirectMessages] Failed to load last messages:', error);
-            }
+        try {
+            // Use the conversations endpoint - single API call returns all last messages sorted
+            const res = await communityGet(`/subgrids/${subgridId}/direct-messages/conversations`);
+            const conversations = res?.data || [];
+            const lastMsgsMap: Record<string, DirectMessage> = {};
+            conversations.forEach((conv: any) => {
+                if (conv.peerId && conv.lastMessage) {
+                    lastMsgsMap[conv.peerId] = conv.lastMessage as DirectMessage;
+                }
+            });
+            setLastMessages(lastMsgsMap);
+        } catch (error) {
+            console.error('[DirectMessages] Failed to load last messages:', error);
         }
     }, []);
 
