@@ -21,15 +21,25 @@ import {
 Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
         const data = notification.request.content.data;
-        // Call notifications: always show as alert with sound
+        // Call notifications: always show as full-screen alert with sound
         if (data?.type === 'call') {
             return {
                 shouldShowAlert: true,
                 shouldPlaySound: true,
                 shouldSetBadge: false,
                 shouldShowBanner: true,
-                shouldShowList: false,
+                shouldShowList: true,
                 priority: Notifications.AndroidNotificationPriority.MAX,
+            };
+        }
+        // DM/message notifications: show with sound
+        if (data?.type === 'dm' || data?.type === 'message') {
+            return {
+                shouldShowAlert: true,
+                shouldPlaySound: true,
+                shouldSetBadge: true,
+                shouldShowBanner: true,
+                shouldShowList: true,
             };
         }
         return {
@@ -205,14 +215,17 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             });
 
             await Notifications.setNotificationChannelAsync('calls', {
-                name: 'Calls',
+                name: 'Incoming Calls',
+                description: 'Incoming voice and video call alerts',
                 importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 1000, 500, 1000, 500, 1000],
+                vibrationPattern: [0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000],
                 lightColor: '#22c55e',
                 sound: 'default',
                 lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
                 bypassDnd: true,
                 showBadge: false,
+                enableLights: true,
+                enableVibrate: true,
             });
 
             await Notifications.setNotificationChannelAsync('mentions', {
