@@ -196,8 +196,7 @@ export const CallModal: React.FC<CallModalProps> = ({
                                 <RtcSurfaceView
                                     style={styles.localVideo}
                                     canvas={{
-                                        uid: 0, // 0 means local user
-                                        sourceType: 0, // VideoSourceCameraPrimary (0), NOT secondary (1)
+                                        uid: 0,
                                         renderMode: RenderModeType.RenderModeHidden,
                                     }}
                                 />

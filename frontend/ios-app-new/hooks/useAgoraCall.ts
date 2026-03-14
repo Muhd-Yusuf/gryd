@@ -276,29 +276,17 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         }
     }, [startDurationTimer, handleTokenRefresh]);
 
-    // Enable video for video calls (call BEFORE joinChannel)
+    // Enable video and start local preview (call BEFORE joinChannel)
+    // Do NOT call setupLocalVideo - RtcSurfaceView handles binding internally
     const enableVideo = useCallback(async (engine: IRtcEngine) => {
         try {
             engine.enableVideo();
+            engine.startPreview();
             setIsVideoEnabled(true);
+            console.log('[Agora Native] Video enabled and preview started');
         } catch (err: any) {
             console.error('[Agora Native] Failed to enable video:', err);
             setIsVideoEnabled(false);
-        }
-    }, []);
-
-    // Setup local video rendering (call AFTER joinChannel)
-    const setupLocalVideoRendering = useCallback((engine: IRtcEngine) => {
-        try {
-            engine.setupLocalVideo({
-                uid: 0,
-                sourceType: 0, // VideoSourceCameraPrimary
-                renderMode: 1, // RenderModeHidden
-            });
-            engine.startPreview(0); // VideoSourceCameraPrimary
-            console.log('[Agora Native] Local video rendering setup complete');
-        } catch (err: any) {
-            console.error('[Agora Native] Failed to setup local video rendering:', err);
         }
     }, []);
 
@@ -378,16 +366,6 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 autoSubscribeVideo: true,
             });
 
-            // Setup local video AFTER joining channel so the render surface binds correctly
-            if (type === 'video') {
-                // Small delay to ensure channel join completes before setting up video surface
-                setTimeout(() => {
-                    if (engineRef.current) {
-                        setupLocalVideoRendering(engineRef.current);
-                    }
-                }, 300);
-            }
-
             setCurrentCall({
                 callId,
                 channelName,
@@ -409,7 +387,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             options.onError?.(err);
             return null;
         }
-    }, [initEngine, enableVideo, setupLocalVideoRendering, cleanupEngine, options]);
+    }, [initEngine, enableVideo, cleanupEngine, options]);
 
     // Answer incoming call
     const answer = useCallback(async (callId: string, callTypeArg?: CallType) => {
@@ -465,15 +443,6 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 autoSubscribeVideo: true,
             });
 
-            // Setup local video AFTER joining channel so the render surface binds correctly
-            if (type === 'video') {
-                setTimeout(() => {
-                    if (engineRef.current) {
-                        setupLocalVideoRendering(engineRef.current);
-                    }
-                }, 300);
-            }
-
             setCurrentCall({
                 callId,
                 channelName,
@@ -496,7 +465,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             options.onError?.(err);
             return null;
         }
-    }, [initEngine, enableVideo, setupLocalVideoRendering, cleanupEngine, startDurationTimer, options]);
+    }, [initEngine, enableVideo, cleanupEngine, startDurationTimer, options]);
 
     // Decline incoming call
     const decline = useCallback(async (callId: string) => {
@@ -547,8 +516,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             const newVideoEnabled = !isVideoEnabled;
             engineRef.current.muteLocalVideoStream(!newVideoEnabled);
             if (newVideoEnabled) {
-                // Restart preview when re-enabling video
-                engineRef.current.startPreview(0); // VideoSourceCameraPrimary
+                engineRef.current.startPreview();
             } else {
                 engineRef.current.stopPreview();
             }
