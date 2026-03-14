@@ -7,7 +7,8 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
-import { subscribeToCallEventsAsync } from '../lib/api';
+import { subscribeToCallEventsAsync, declineCall as apiDeclineCall, endCall as apiEndCall } from '../lib/api';
+import { setCallNotificationHandlers, NotificationData } from './NotificationContext';
 import { useWebSocketContext } from './WebSocketContext';
 
 export interface IncomingCall {
@@ -205,7 +206,6 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
         handledCallIdsRef.current.add(incomingCall.callId);
 
         try {
-            const { declineCall: apiDeclineCall } = await import('../lib/api');
             await apiDeclineCall(incomingCall.callId);
         } catch (err) {
             console.error('[CallContext] Failed to decline call:', err);
@@ -244,7 +244,6 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
         if (!activeCall) return;
 
         try {
-            const { endCall: apiEndCall } = await import('../lib/api');
             await apiEndCall(activeCall.callId);
         } catch (err) {
             console.error('[CallContext] Failed to end call:', err);
@@ -351,6 +350,43 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
 
         return () => subscription.remove();
     }, [handleCallEvent]);
+
+    // Register notification action handlers (Answer/Decline buttons on system notification)
+    useEffect(() => {
+        if (Platform.OS === 'web') return;
+
+        setCallNotificationHandlers(
+            // Answer handler
+            (data: NotificationData) => {
+                if (!data.callId || !data.callerId) return;
+                console.log('[CallContext] Answering call from notification:', data.callId);
+                // Set incoming call data so answerCall can process it
+                handleCallEvent('incoming_call', {
+                    callId: data.callId,
+                    callerId: data.callerId,
+                    callerName: data.callerName || 'Unknown',
+                    callerAvatar: data.callerAvatar,
+                    callType: data.callType || 'audio',
+                    channelName: data.channelName,
+                    token: data.token,
+                    uid: data.uid,
+                    appId: data.appId,
+                });
+                // Auto-answer after a short delay to let state update
+                setTimeout(() => answerCall(), 300);
+            },
+            // Decline handler
+            async (data: NotificationData) => {
+                if (!data.callId) return;
+                console.log('[CallContext] Declining call from notification:', data.callId);
+                try {
+                    await apiDeclineCall(data.callId);
+                } catch (err) {
+                    console.error('[CallContext] Failed to decline call from notification:', err);
+                }
+            }
+        );
+    }, [handleCallEvent, answerCall]);
 
     return (
         <CallContext.Provider value={{ incomingCall, activeCall, setActiveCall, startActiveCall, markCallConnected, answerCall, declineCall, clearIncomingCall, endCall }}>

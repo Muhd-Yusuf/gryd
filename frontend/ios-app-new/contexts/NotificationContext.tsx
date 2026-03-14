@@ -19,14 +19,50 @@ import {
 
 // Configure how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+        const data = notification.request.content.data;
+        // Call notifications: always show as alert with sound
+        if (data?.type === 'call') {
+            return {
+                shouldShowAlert: true,
+                shouldPlaySound: true,
+                shouldSetBadge: false,
+                shouldShowBanner: true,
+                shouldShowList: false,
+                priority: Notifications.AndroidNotificationPriority.MAX,
+            };
+        }
+        return {
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: true,
+            shouldShowBanner: true,
+            shouldShowList: true,
+        };
+    },
 });
+
+// Set up notification categories with action buttons
+async function setupNotificationCategories() {
+    await Notifications.setNotificationCategoryAsync('incoming_call', [
+        {
+            identifier: 'answer',
+            buttonTitle: 'Answer',
+            options: {
+                opensAppToForeground: true,
+            },
+        },
+        {
+            identifier: 'decline',
+            buttonTitle: 'Decline',
+            options: {
+                opensAppToForeground: false,
+                isDestructive: true,
+            },
+        },
+    ]);
+}
+setupNotificationCategories();
 
 export interface NotificationData {
     type: 'message' | 'dm' | 'call' | 'mention' | 'invite';
@@ -36,8 +72,27 @@ export interface NotificationData {
     senderId?: string;
     peerId?: string;
     callId?: string;
+    callerId?: string;
+    callerName?: string;
+    callerAvatar?: string;
     callType?: 'audio' | 'video';
+    channelName?: string;
+    token?: string;
+    uid?: number;
+    appId?: string;
 }
+
+// Callback for handling call actions from notification buttons
+let onCallAnswered: ((data: NotificationData) => void) | null = null;
+let onCallDeclined: ((data: NotificationData) => void) | null = null;
+
+export const setCallNotificationHandlers = (
+    answerHandler: (data: NotificationData) => void,
+    declineHandler: (data: NotificationData) => void,
+) => {
+    onCallAnswered = answerHandler;
+    onCallDeclined = declineHandler;
+};
 
 interface NotificationContextValue {
     expoPushToken: string | null;
@@ -152,9 +207,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             await Notifications.setNotificationChannelAsync('calls', {
                 name: 'Calls',
                 importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 500, 500, 500],
+                vibrationPattern: [0, 1000, 500, 1000, 500, 1000],
                 lightColor: '#22c55e',
                 sound: 'default',
+                lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+                bypassDnd: true,
+                showBadge: false,
             });
 
             await Notifications.setNotificationChannelAsync('mentions', {
@@ -244,6 +302,19 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
         if (!data?.type) return;
 
+        // Check if this is a button action (Answer/Decline)
+        const actionId = response.actionIdentifier;
+        if (data.type === 'call' && actionId && actionId !== Notifications.DEFAULT_ACTION_IDENTIFIER) {
+            if (actionId === 'answer') {
+                console.log('[Notification] Call answered via notification button');
+                onCallAnswered?.(data);
+            } else if (actionId === 'decline') {
+                console.log('[Notification] Call declined via notification button');
+                onCallDeclined?.(data);
+            }
+            return;
+        }
+
         switch (data.type) {
             case 'message':
             case 'mention':
@@ -266,7 +337,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                 break;
 
             case 'call':
-                // Call handling is done by CallContext, just bring app to foreground
+                // Call tapped (not a button action) - bring app to foreground and show call UI
+                if (data.callerId) {
+                    onCallAnswered?.(data);
+                }
                 break;
 
             case 'invite':

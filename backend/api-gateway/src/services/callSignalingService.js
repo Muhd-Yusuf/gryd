@@ -192,6 +192,7 @@ class CallSignalingService extends EventEmitter {
                                 callId,
                                 callerId,
                                 callerName,
+                                callerAvatar,
                                 callType,
                                 channelName,
                                 token,
@@ -200,6 +201,9 @@ class CallSignalingService extends EventEmitter {
                             },
                             channelId: 'calls',
                             sound: 'default',
+                            priority: 'high',
+                            categoryId: 'incoming_call',
+                            _contentAvailable: true,
                         }));
 
                         const results = await pushNotificationService.sendBulkNotifications(notifications);
