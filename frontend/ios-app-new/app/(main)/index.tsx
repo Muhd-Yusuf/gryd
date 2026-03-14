@@ -268,6 +268,9 @@ const TenantCommunityScreen = () => {
     const showCenterPanel = !isMobile;
     const showRightPanel = !isCompact;
     const [userId, setUserId] = useState(getUserId());
+    const userIdRef = useRef(userId);
+    // Keep ref in sync so callbacks always have latest userId
+    useEffect(() => { userIdRef.current = userId; }, [userId]);
     const queryClient = useQueryClient();
     const { subscribe, joinRoom, leaveRoom, isConnected, startTyping, stopTyping } = useWebSocketContext();
 
@@ -362,16 +365,14 @@ const TenantCommunityScreen = () => {
     useEffect(() => {
         if (messagesQuery.data) {
             setLocalMessages(prev => {
-                // Keep any pending/failed optimistic messages, merge with server data
-                const pendingMsgs = prev.filter(m => m._isPending || m._status === 'failed');
+                // Keep any optimistic messages (pending, sending, failed) that aren't in server data yet
+                const optimisticMsgs = prev.filter(m => isTempId(m._id) && (m._isPending || m._status === 'failed' || m._status === 'sending'));
                 const serverMsgs = messagesQuery.data || [];
-                // Remove pending msgs that now exist in server data
-                const stillPending = pendingMsgs.filter(p => !serverMsgs.some((s: any) => s._id === p._id));
-                return [...serverMsgs, ...stillPending];
+                return [...serverMsgs, ...optimisticMsgs];
             });
         }
     }, [messagesQuery.data]);
-    const messages = localMessages;
+    const messages = localMessages.length > 0 ? localMessages : (messagesQuery.data || []);
     const dmMessages = dmMessagesQuery.data || [];
 
     const handleLogout = async () => {
@@ -572,26 +573,41 @@ const TenantCommunityScreen = () => {
         };
     }, [activeChannelId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient, userId]);
 
-    // Set DM peers from friends, sorted by newest message first
-    const dmConversations = dmConversationsQuery.data || [];
-    useEffect(() => {
-        const peers = friends.filter((friendId) => friendId && friendId !== userId);
+    // Build DM peer list: conversations sorted by newest message first, then friends without conversations
+    const dmConversations: any[] = dmConversationsQuery.data || [];
+    const dmConversationMap = useMemo(() => {
+        const map = new Map<string, any>();
+        dmConversations.forEach((conv: any) => {
+            if (conv.peerId) map.set(String(conv.peerId), conv);
+        });
+        return map;
+    }, [dmConversations]);
 
-        // Sort peers: those with recent DM conversations first (newest message at top),
-        // then remaining friends without conversations at the end
-        const conversationOrder = new Map<string, number>();
-        dmConversations.forEach((conv: any, index: number) => {
-            conversationOrder.set(conv.peerId, index);
+    useEffect(() => {
+        const friendSet = new Set(friends.filter((id) => id && id !== userId));
+
+        // Start with conversation peers (already sorted by newest message from backend)
+        const sorted: string[] = [];
+        const added = new Set<string>();
+
+        // First: peers with conversations (newest message first — backend returns this order)
+        dmConversations.forEach((conv: any) => {
+            const pid = String(conv.peerId);
+            if (pid && pid !== userId && !added.has(pid)) {
+                sorted.push(pid);
+                added.add(pid);
+            }
         });
 
-        const sorted = [...peers].sort((a, b) => {
-            const aIdx = conversationOrder.has(a) ? conversationOrder.get(a)! : Infinity;
-            const bIdx = conversationOrder.has(b) ? conversationOrder.get(b)! : Infinity;
-            return aIdx - bIdx;
+        // Then: friends who have no conversations yet
+        friendSet.forEach((friendId) => {
+            if (!added.has(friendId)) {
+                sorted.push(friendId);
+                added.add(friendId);
+            }
         });
 
         setDirectMessagePeers(sorted);
-        // Only set activeDmId if needed (avoid infinite loop by using functional update)
         setActiveDmId((current) => {
             if (sorted.length > 0 && !sorted.includes(current)) {
                 return sorted[0];
@@ -1091,7 +1107,7 @@ const TenantCommunityScreen = () => {
             if (result) {
                 markMessageSent(tempId, result);
                 setLocalMessages(prev =>
-                    prev.map(m => m._id === tempId ? { ...result, _isPending: false } : m)
+                    prev.map(m => m._id === tempId ? { ...result, _isPending: false, _status: 'sent' } : m)
                 );
             }
         } catch (err: any) {
@@ -1125,7 +1141,7 @@ const TenantCommunityScreen = () => {
             if (result) {
                 markMessageSent(failedMsg._id, result);
                 setLocalMessages(prev =>
-                    prev.map(m => m._id === failedMsg._id ? { ...result, _isPending: false } : m)
+                    prev.map(m => m._id === failedMsg._id ? { ...result, _isPending: false, _status: 'sent' } : m)
                 );
             }
         } catch (err: any) {
@@ -2064,7 +2080,7 @@ const TenantCommunityScreen = () => {
                                                     </View>
                                                     <View style={styles.feedMetaRow}>
                                                         <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
-                                                        {String(item.authorId || item.senderId) === String(userId) && (
+                                                        {(userId || getUserId()) && String(item.authorId || item.senderId) === String(userId || getUserId()) && (
                                                             item._status === 'failed' ? (
                                                                 <TouchableOpacity onPress={() => handleRetryMessage(item)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                                                     <AlertCircle size={12} color="#EF4444" />
@@ -2358,14 +2374,19 @@ const TenantCommunityScreen = () => {
                             </View>
 
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarRow}>
-                                {directMessagePeers.map((peerId) => (
-                                    <UserAvatar
-                                        key={peerId}
-                                        uri={getAvatarUrl(peerId)}
-                                        name={buildName(peerId, friendUsers[peerId])}
-                                        style={styles.dmAvatar}
-                                    />
-                                ))}
+                                {directMessagePeers.map((peerId) => {
+                                    const conv = dmConversationMap.get(peerId);
+                                    const peerUser = friendUsers[peerId] || conv?.peer;
+                                    const avatarUrl = getAvatarUrl(peerId) || peerUser?.avatarUrl;
+                                    return (
+                                        <UserAvatar
+                                            key={peerId}
+                                            uri={avatarUrl}
+                                            name={buildName(peerId, peerUser)}
+                                            style={styles.dmAvatar}
+                                        />
+                                    );
+                                })}
                             </ScrollView>
 
                             <ScrollView contentContainerStyle={styles.dmList} showsVerticalScrollIndicator={false}>
@@ -2375,30 +2396,32 @@ const TenantCommunityScreen = () => {
                                 {directMessagePeers.map((peerId) => {
                                     const isActive = peerId === activeDmId;
                                     // Use conversation data for last message (available for all peers)
-                                    const conversation = dmConversations.find((c: any) => c.peerId === peerId);
-                                    const lastMessage = conversation?.lastMessage
+                                    const conv = dmConversationMap.get(peerId);
+                                    const peerUser = friendUsers[peerId] || conv?.peer;
+                                    const avatarUrl = getAvatarUrl(peerId) || peerUser?.avatarUrl;
+                                    const lastMessage = conv?.lastMessage
                                         || (isActive && dmMessages.length > 0 ? dmMessages[dmMessages.length - 1] : null);
                                     const isSentByMe = lastMessage?.senderId === userId;
                                     const previewText = lastMessage?.body
                                         ? (isSentByMe ? `You: ${lastMessage.body}` : lastMessage.body)
                                         : 'Tap to start chat';
-                                    const messageTime = conversation?.lastMessageAt || lastMessage?.createdAt;
+                                    const messageTime = conv?.lastMessageAt || lastMessage?.createdAt;
                                     return (
                                         <TouchableOpacity
                                             key={peerId}
                                             style={[styles.dmRow, isActive && styles.dmRowActive]}
                                             onPress={() => router.push({
                                                 pathname: '/(main)/direct-messages',
-                                                params: { subgridId: activeSubgridId },
+                                                params: { subgridId: activeSubgridId, peerId },
                                             })}
                                         >
                                             <UserAvatar
-                                                uri={getAvatarUrl(peerId)}
-                                                name={buildName(peerId, friendUsers[peerId])}
+                                                uri={avatarUrl}
+                                                name={buildName(peerId, peerUser)}
                                                 style={styles.dmAvatarLarge}
                                             />
                                             <View style={styles.dmInfo}>
-                                                <Text style={styles.dmName}>{buildName(peerId, friendUsers[peerId])}</Text>
+                                                <Text style={styles.dmName}>{buildName(peerId, peerUser)}</Text>
                                                 <Text style={styles.dmMeta} numberOfLines={1}>
                                                     {previewText}
                                                 </Text>
