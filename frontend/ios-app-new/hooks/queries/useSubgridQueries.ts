@@ -283,6 +283,7 @@ export const useSendFriendRequest = (subgridId: string) => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['subgrids', subgridId, 'friend-requests', 'outgoing'] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.subgrids.friends(subgridId) });
         },
     });
 };

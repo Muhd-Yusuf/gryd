@@ -1232,7 +1232,7 @@ export default function DirectMessagesScreen() {
         try {
             setAddingFriendId(recipientId);
             await sendFriendRequestMutation.mutateAsync(recipientId);
-            await refreshFriends(activeSubgridId);
+            await friendsQuery.refetch();
             setSelectedFriendId(recipientId);
         } catch (error: any) {
             console.error('Failed to add friend:', error);
