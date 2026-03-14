@@ -525,11 +525,16 @@ const CreditUnionAdminScreen = () => {
     const [messages, setMessages] = useState<Message[]>([]);
 
     // Sync messages from React Query (prefer infinite pages, fall back to regular)
+    // Preserve optimistic messages (temp IDs with pending/sending/failed status)
     useEffect(() => {
-        if (infiniteMessagesQuery.data?.pages) {
-            setMessages(infiniteMessagesQuery.data.pages.flat());
-        } else if (messagesQuery.data) {
-            setMessages(messagesQuery.data);
+        const serverMsgs = infiniteMessagesQuery.data?.pages
+            ? infiniteMessagesQuery.data.pages.flat()
+            : (messagesQuery.data || []);
+        if (serverMsgs.length > 0 || messagesQuery.data || infiniteMessagesQuery.data) {
+            setMessages(prev => {
+                const optimisticMsgs = prev.filter((m: any) => isTempId(m._id) && (m._isPending || m._status === 'failed' || m._status === 'sending'));
+                return [...serverMsgs, ...optimisticMsgs];
+            });
         }
     }, [messagesQuery.data, infiniteMessagesQuery.data]);
 
@@ -2258,7 +2263,7 @@ const CreditUnionAdminScreen = () => {
             // Replace optimistic message with real message
             const realMessage = response?.data || response?.message || response;
             setMessages(prev => prev.map(msg =>
-                msg._id === tempId ? { ...realMessage, _isPending: false } : msg
+                msg._id === tempId ? { ...realMessage, _isPending: false, _status: 'sent' } : msg
             ));
 
         } catch (err: any) {
@@ -2289,7 +2294,7 @@ const CreditUnionAdminScreen = () => {
 
             const realMessage = response?.data || response?.message || response;
             setMessages(prev => prev.map(msg =>
-                msg._id === failedMsg._id ? { ...realMessage, _isPending: false } : msg
+                msg._id === failedMsg._id ? { ...realMessage, _isPending: false, _status: 'sent' } : msg
             ));
         } catch (err: any) {
             setMessages(prev => prev.map(msg =>

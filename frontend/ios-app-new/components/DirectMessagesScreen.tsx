@@ -253,8 +253,8 @@ export default function DirectMessagesScreen() {
         }
     }, []);
 
-    // Derive currentUserId from React Query (primary) or state (fallback)
-    const currentUserId = currentUserQuery.data?.userId || currentUserIdState;
+    // Derive currentUserId from React Query (primary) or state (fallback) or synchronous getUserId
+    const currentUserId = currentUserQuery.data?.userId || currentUserIdState || getUserId();
 
     // Derive data from queries
     const subgrids = subgridsQuery.data || [];
@@ -276,9 +276,9 @@ export default function DirectMessagesScreen() {
     useEffect(() => {
         if (queryMessages.length > 0 || messagesQuery.data) {
             setLocalDmMessages(prev => {
-                const pendingMsgs = prev.filter(m => (m as any)._isPending || (m as any)._status === 'failed');
-                const stillPending = pendingMsgs.filter(p => !queryMessages.some((s: any) => s._id === p._id));
-                return [...queryMessages, ...stillPending];
+                // Keep optimistic messages (temp IDs) that are still pending/sending/failed
+                const optimisticMsgs = prev.filter(m => isTempId(m._id) && (m._isPending || m._status === 'failed' || m._status === 'sending'));
+                return [...queryMessages, ...optimisticMsgs];
             });
         }
     }, [queryMessages]);
@@ -1182,7 +1182,7 @@ export default function DirectMessagesScreen() {
             if (response) {
                 markMessageSent(tempId, response);
                 setLocalDmMessages(prev =>
-                    prev.map(m => m._id === tempId ? { ...response, _isPending: false } : m)
+                    prev.map(m => m._id === tempId ? { ...response, _isPending: false, _status: 'sent' } : m)
                 );
                 setLastMessages((prev) => ({
                     ...prev,
@@ -1245,7 +1245,7 @@ export default function DirectMessagesScreen() {
             if (result) {
                 markMessageSent(failedMsg._id, result);
                 setLocalDmMessages(prev =>
-                    prev.map(m => m._id === failedMsg._id ? { ...result, _isPending: false } : m)
+                    prev.map(m => m._id === failedMsg._id ? { ...result, _isPending: false, _status: 'sent' } : m)
                 );
             }
         } catch (err: any) {
