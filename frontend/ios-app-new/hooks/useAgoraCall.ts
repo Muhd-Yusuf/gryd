@@ -281,10 +281,10 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             // setupLocalVideo ensures the local camera feed is bound to the rendering surface
             engine.setupLocalVideo({
                 uid: 0,
-                sourceType: 1, // VideoSourceCameraPrimary
+                sourceType: 0, // VideoSourceCameraPrimary (0), NOT secondary (1)
                 renderMode: 1, // RenderModeHidden
             });
-            engine.startPreview();
+            engine.startPreview(0); // Explicitly pass VideoSourceCameraPrimary
             setIsVideoEnabled(true);
         } catch (err: any) {
             console.error('[Agora Native] Failed to enable video:', err);
@@ -369,7 +369,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
             // Restart preview after joining to ensure local video renders
             if (type === 'video') {
-                engine.startPreview();
+                engine.startPreview(0); // VideoSourceCameraPrimary
             }
 
             setCurrentCall({
@@ -451,7 +451,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
 
             // Restart preview after joining to ensure local video renders
             if (type === 'video') {
-                engine.startPreview();
+                engine.startPreview(0); // VideoSourceCameraPrimary
             }
 
             setCurrentCall({
@@ -528,7 +528,7 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             engineRef.current.muteLocalVideoStream(!newVideoEnabled);
             if (newVideoEnabled) {
                 // Restart preview when re-enabling video
-                engineRef.current.startPreview();
+                engineRef.current.startPreview(0); // VideoSourceCameraPrimary
             } else {
                 engineRef.current.stopPreview();
             }

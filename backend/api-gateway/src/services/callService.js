@@ -300,7 +300,7 @@ const declineCall = async (callId, userId) => {
 
     // Get caller ID before declining (for notification)
     const callerParticipant = call.participants.find(p => p.role === 'caller');
-    const callerId = callerParticipant?.odId?.toString();
+    const callerId = callerParticipant?.userId?.toString();
 
     await call.decline(userId);
 
