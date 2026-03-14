@@ -46,6 +46,9 @@ import {
     Flag,
     Trophy,
     User,
+    Check,
+    CheckCheck,
+    AlertCircle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -57,7 +60,7 @@ import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { ImageViewer } from '../../components/ImageViewer';
 import { ErrorRetry } from '../../components/ErrorRetry';
 import { ChannelSkeleton, FeedSkeleton } from '../../components/SkeletonLoader';
-import { markMessageFailed } from '../../lib/messageQueue';
+import { markMessageFailed, isTempId } from '../../lib/messageQueue';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
@@ -73,6 +76,7 @@ import {
     useCategories,
     useChannelMessages,
     useDirectMessages,
+    useDMList,
     useSendChannelMessage,
     useLikeItem,
     useUnlikeItem,
@@ -310,6 +314,7 @@ const TenantCommunityScreen = () => {
     const categoriesQuery = useCategories(activeSubgridId);
     const messagesQuery = useChannelMessages(activeSubgridId, activeChannelId);
     const dmMessagesQuery = useDirectMessages(activeSubgridId, activeDmId);
+    const dmConversationsQuery = useDMList(activeSubgridId);
 
     // Mutation hooks
     const likeItemMutation = useLikeItem(activeSubgridId);
@@ -332,6 +337,7 @@ const TenantCommunityScreen = () => {
                 postsQuery.refetch(),
                 messagesQuery.refetch(),
                 membersQuery.refetch(),
+                dmConversationsQuery.refetch(),
             ]);
         } finally {
             setRefreshing(false);
@@ -552,21 +558,36 @@ const TenantCommunityScreen = () => {
         };
     }, [activeChannelId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient, userId]);
 
-    // Set DM peers from friends
+    // Set DM peers from friends, sorted by newest message first
+    const dmConversations = dmConversationsQuery.data || [];
     useEffect(() => {
         const peers = friends.filter((friendId) => friendId && friendId !== userId);
-        setDirectMessagePeers(peers);
+
+        // Sort peers: those with recent DM conversations first (newest message at top),
+        // then remaining friends without conversations at the end
+        const conversationOrder = new Map<string, number>();
+        dmConversations.forEach((conv: any, index: number) => {
+            conversationOrder.set(conv.peerId, index);
+        });
+
+        const sorted = [...peers].sort((a, b) => {
+            const aIdx = conversationOrder.has(a) ? conversationOrder.get(a)! : Infinity;
+            const bIdx = conversationOrder.has(b) ? conversationOrder.get(b)! : Infinity;
+            return aIdx - bIdx;
+        });
+
+        setDirectMessagePeers(sorted);
         // Only set activeDmId if needed (avoid infinite loop by using functional update)
         setActiveDmId((current) => {
-            if (peers.length > 0 && !peers.includes(current)) {
-                return peers[0];
+            if (sorted.length > 0 && !sorted.includes(current)) {
+                return sorted[0];
             }
-            if (!peers.length) {
+            if (!sorted.length) {
                 return '';
             }
             return current;
         });
-    }, [friends, userId]);
+    }, [friends, userId, dmConversations]);
 
     // WebSocket: Subscribe to DM messages - update React Query cache
     useEffect(() => {
@@ -1040,6 +1061,21 @@ const TenantCommunityScreen = () => {
             setUploading(false);
         }
     };
+
+    // Retry a failed message
+    const handleRetryMessage = useCallback(async (failedMsg: any) => {
+        if (!activeSubgridId || !activeChannelId) return;
+        hapticLight();
+        try {
+            await sendChannelMessage.mutateAsync({
+                content: failedMsg.body || '',
+                subgridId: activeSubgridId,
+                channelId: activeChannelId,
+            });
+        } catch (err: any) {
+            console.error('Retry failed:', err.message);
+        }
+    }, [activeSubgridId, activeChannelId, sendChannelMessage]);
 
     // File/Image picker handlers
     const handlePickImage = async () => {
@@ -1966,7 +2002,21 @@ const TenantCommunityScreen = () => {
                                                             </View>
                                                         )}
                                                     </View>
-                                                    <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
+                                                    <View style={styles.feedMetaRow}>
+                                                        <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
+                                                        {String(item.authorId || item.senderId) === String(userId) && (
+                                                            item._status === 'failed' ? (
+                                                                <TouchableOpacity onPress={() => handleRetryMessage(item)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                                                    <AlertCircle size={12} color="#EF4444" />
+                                                                    <Text style={{ fontSize: 10, color: '#EF4444', marginLeft: 2 }}>Retry</Text>
+                                                                </TouchableOpacity>
+                                                            ) : item._isPending || isTempId(item._id) ? (
+                                                                <Clock size={12} color={colors.textMuted} style={{ marginLeft: 4 }} />
+                                                            ) : (
+                                                                <CheckCheck size={12} color="#22C55E" style={{ marginLeft: 4 }} />
+                                                            )
+                                                        )}
+                                                    </View>
                                                 </View>
                                                 <View style={styles.feedHeaderActions}>
                                                     <TouchableOpacity
@@ -2264,13 +2314,15 @@ const TenantCommunityScreen = () => {
                                 )}
                                 {directMessagePeers.map((peerId) => {
                                     const isActive = peerId === activeDmId;
-                                    const lastMessage = isActive && dmMessages.length > 0
-                                        ? dmMessages[dmMessages.length - 1]
-                                        : null;
+                                    // Use conversation data for last message (available for all peers)
+                                    const conversation = dmConversations.find((c: any) => c.peerId === peerId);
+                                    const lastMessage = conversation?.lastMessage
+                                        || (isActive && dmMessages.length > 0 ? dmMessages[dmMessages.length - 1] : null);
                                     const isSentByMe = lastMessage?.senderId === userId;
                                     const previewText = lastMessage?.body
                                         ? (isSentByMe ? `You: ${lastMessage.body}` : lastMessage.body)
                                         : 'Tap to start chat';
+                                    const messageTime = conversation?.lastMessageAt || lastMessage?.createdAt;
                                     return (
                                         <TouchableOpacity
                                             key={peerId}
@@ -2291,7 +2343,7 @@ const TenantCommunityScreen = () => {
                                                     {previewText}
                                                 </Text>
                                             </View>
-                                            <Text style={styles.dmTime}>{formatRelativeTime(lastMessage?.createdAt)}</Text>
+                                            <Text style={styles.dmTime}>{formatRelativeTime(messageTime)}</Text>
                                         </TouchableOpacity>
                                     );
                                 })}
@@ -3046,6 +3098,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         feedMeta: {
             fontSize: 11,
             color: colors.textMuted,
+        },
+        feedMetaRow: {
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
         },
         feedText: {
             fontSize: 13,

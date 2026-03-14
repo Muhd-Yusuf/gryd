@@ -13,11 +13,12 @@ import {
     Pressable,
     useWindowDimensions,
     KeyboardAvoidingView,
+    RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X, Calendar, BadgeCheck, Megaphone, Clock, MapPin, PlayCircle, File, Flag } from 'lucide-react-native';
+import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X, Calendar, BadgeCheck, Megaphone, Clock, MapPin, PlayCircle, File, Flag, Check, CheckCheck, AlertCircle } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { communityGet, communityPost, communityDelete, getTenantId, getUserId, resolveTenantId, uploadFile, StakeholderBadge } from '../../lib/api';
@@ -192,7 +193,7 @@ const SubChannelScreen = () => {
     const initialChannelId = normalizeParam(params.channelId);
     const initialChannelName = normalizeParam(params.channelName);
     const initialShowEvents = normalizeParam(params.showEvents) === 'true';
-    const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
+    const { subscribe, joinRoom, leaveRoom, isConnected, startTyping, stopTyping } = useWebSocketContext();
     const [tenantId, setTenantId] = useState(getTenantId());
     const [showEventsView, setShowEventsView] = useState(initialShowEvents);
     const [subgridId, setSubgridId] = useState(initialSubgridId);
@@ -228,6 +229,11 @@ const SubChannelScreen = () => {
     const [comments, setComments] = useState<any[]>([]);
     const [commentText, setCommentText] = useState('');
     const [commentLoading, setCommentLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+    const typingTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+    const channelIsTypingRef = useRef(false);
+    const channelStopTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const currentUserId = getUserId();
     const mediaRecorderRef = useRef<any | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -412,13 +418,38 @@ const SubChannelScreen = () => {
             }
         });
 
+        // Subscribe to typing events
+        const unsubscribeTyping = subscribe('user_typing', (data: any) => {
+            const typingUserId = String(data.userId || '');
+            if (!typingUserId || typingUserId === currentUserId) return;
+            if (data.roomType !== 'channel' || String(data.roomId) !== channelId) return;
+
+            if (data.isTyping) {
+                setTypingUsers(prev => { const next = new Set(prev); next.add(typingUserId); return next; });
+                const existing = typingTimeoutsRef.current.get(typingUserId);
+                if (existing) clearTimeout(existing);
+                typingTimeoutsRef.current.set(typingUserId, setTimeout(() => {
+                    setTypingUsers(prev => { const next = new Set(prev); next.delete(typingUserId); return next; });
+                    typingTimeoutsRef.current.delete(typingUserId);
+                }, 3000));
+            } else {
+                setTypingUsers(prev => { const next = new Set(prev); next.delete(typingUserId); return next; });
+                const existing = typingTimeoutsRef.current.get(typingUserId);
+                if (existing) { clearTimeout(existing); typingTimeoutsRef.current.delete(typingUserId); }
+            }
+        });
+
         return () => {
             leaveRoom('channel', channelId);
             unsubscribeNewMessage();
             unsubscribeMessageUpdated();
             unsubscribeMessageDeleted();
+            unsubscribeTyping();
+            typingTimeoutsRef.current.forEach(t => clearTimeout(t));
+            typingTimeoutsRef.current.clear();
+            setTypingUsers(new Set());
         };
-    }, [channelId, isConnected, subscribe, joinRoom, leaveRoom]);
+    }, [channelId, isConnected, subscribe, joinRoom, leaveRoom, currentUserId]);
 
     // WebSocket: Join subgrid room for post updates
     useEffect(() => {
@@ -731,6 +762,15 @@ const SubChannelScreen = () => {
         if ((!draft.trim() && attachments.length === 0) || !subgridId || !channelId || !currentUserId) {
             return;
         }
+        // Stop typing on send
+        if (channelIsTypingRef.current && channelId) {
+            channelIsTypingRef.current = false;
+            stopTyping('channel', channelId);
+            if (channelStopTypingTimeoutRef.current) {
+                clearTimeout(channelStopTypingTimeoutRef.current);
+                channelStopTypingTimeoutRef.current = null;
+            }
+        }
         hapticLight();
         const body = draft.trim();
 
@@ -865,6 +905,44 @@ const SubChannelScreen = () => {
             setError(err.message || 'Failed to send attachment.');
         }
     };
+
+    // Retry a failed message
+    const handleRetryMessage = useCallback(async (failedMsg: any) => {
+        if (!subgridId || !channelId || !currentUserId) return;
+        hapticLight();
+
+        // Mark as sending again
+        setLocalMessages((prev) =>
+            prev.map((m) =>
+                m._id === failedMsg._id ? { ...m, _status: 'sending', _isPending: true } as any : m
+            )
+        );
+
+        try {
+            const sendResult = await communityPost(`/subgrids/${subgridId}/messages`, {
+                channelId,
+                body: failedMsg.body || '',
+                attachments: failedMsg.attachments?.filter((a: any) => !a._isLocal) || undefined,
+            });
+
+            if (sendResult?.data) {
+                markMessageSent(failedMsg._id, sendResult.data);
+                setLocalMessages((prev) => {
+                    const filtered = prev.filter((m) => m._id !== failedMsg._id && m._id !== sendResult.data._id);
+                    return [...filtered, sendResult.data];
+                });
+            }
+        } catch (err: any) {
+            markMessageFailed(failedMsg._id, err.message);
+            setLocalMessages((prev) =>
+                prev.map((m) =>
+                    m._id === failedMsg._id
+                        ? { ...m, _status: 'failed', _error: err.message } as any
+                        : m
+                )
+            );
+        }
+    }, [subgridId, channelId, currentUserId]);
 
     const formatRecordingTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -1361,6 +1439,44 @@ const SubChannelScreen = () => {
         }
     };
 
+    // Pull-to-refresh
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([
+                postsQuery.refetch(),
+                messagesQuery.refetch(),
+                membersQuery.refetch(),
+                eventsQuery.refetch(),
+            ]);
+        } finally {
+            setRefreshing(false);
+        }
+    }, [postsQuery.refetch, messagesQuery.refetch, membersQuery.refetch, eventsQuery.refetch]);
+
+    // Typing handler for text input
+    const handleDraftChange = useCallback((text: string) => {
+        setDraft(text);
+        if (channelId) saveDraft(`channel_${channelId}`, text);
+        if (!channelId) return;
+        // Start typing
+        if (!channelIsTypingRef.current && text.trim().length > 0) {
+            channelIsTypingRef.current = true;
+            startTyping('channel', channelId);
+        }
+        // Reset stop-typing timeout
+        if (channelStopTypingTimeoutRef.current) clearTimeout(channelStopTypingTimeoutRef.current);
+        if (text.trim().length > 0) {
+            channelStopTypingTimeoutRef.current = setTimeout(() => {
+                channelIsTypingRef.current = false;
+                stopTyping('channel', channelId);
+            }, 2000);
+        } else {
+            channelIsTypingRef.current = false;
+            stopTyping('channel', channelId);
+        }
+    }, [channelId, startTyping, stopTyping]);
+
     return (
         <SafeAreaView style={styles.safe}>
             <View pointerEvents="none" style={styles.gridBackground} />
@@ -1480,6 +1596,7 @@ const SubChannelScreen = () => {
                         extraScrollHeight={Platform.OS === 'ios' ? 20 : 0}
                         onContentSizeChange={handleContentSizeChange}
                         onLayout={handleScrollViewLayout}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}
                     >
                         {feedItems.length === 0 && (
                             <Text style={styles.emptyText}>No channel updates yet.</Text>
@@ -1523,7 +1640,21 @@ const SubChannelScreen = () => {
                                                 </View>
                                             )}
                                         </View>
-                                        <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
+                                        <View style={styles.feedMetaRow}>
+                                            <Text style={styles.feedMeta}>{formatTime(item.createdAt)}</Text>
+                                            {String(item.authorId || item.senderId) === String(currentUserId) && (
+                                                item._status === 'failed' ? (
+                                                    <TouchableOpacity onPress={() => handleRetryMessage(item)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                                        <AlertCircle size={12} color="#EF4444" />
+                                                        <Text style={{ fontSize: 10, color: '#EF4444', marginLeft: 2 }}>Retry</Text>
+                                                    </TouchableOpacity>
+                                                ) : item._isPending || isTempId(item._id) ? (
+                                                    <Clock size={12} color={colors.textMuted} style={{ marginLeft: 4 }} />
+                                                ) : (
+                                                    <CheckCheck size={12} color="#22C55E" style={{ marginLeft: 4 }} />
+                                                )
+                                            )}
+                                        </View>
                                     </View>
                                     <View style={styles.menuContainer}>
                                         <TouchableOpacity
@@ -1681,6 +1812,15 @@ const SubChannelScreen = () => {
 
                     {!!recordingError && <Text style={styles.errorText}>{recordingError}</Text>}
 
+                    {/* Typing Indicator */}
+                    {typingUsers.size > 0 && (
+                        <View style={styles.typingContainer}>
+                            <Text style={[styles.typingText, { color: colors.textMuted }]}>
+                                {typingUsers.size === 1 ? `${getDisplayName([...typingUsers][0])} is typing` : `${typingUsers.size} people typing`}...
+                            </Text>
+                        </View>
+                    )}
+
                     {/* Attachment Preview */}
                     {attachments.length > 0 && (
                         <View style={styles.attachmentPreview}>
@@ -1741,10 +1881,7 @@ const SubChannelScreen = () => {
                                 )}
                                 <TextInput
                                     value={draft}
-                                    onChangeText={(text) => {
-                                        setDraft(text);
-                                        if (channelId) saveDraft(`channel_${channelId}`, text);
-                                    }}
+                                    onChangeText={handleDraftChange}
                                     placeholder="Type message"
                                     placeholderTextColor={colors.textSubtle}
                                     style={styles.composerInput}
@@ -2976,6 +3113,18 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
         pickerImage: {
             width: 28,
             height: 28,
+        },
+        typingContainer: {
+            paddingHorizontal: 16,
+            paddingVertical: 4,
+        },
+        typingText: {
+            fontSize: 12,
+            fontStyle: 'italic' as const,
+        },
+        feedMetaRow: {
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
         },
     });
 

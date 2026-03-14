@@ -17,12 +17,6 @@ export const hapticMedium = () => {
     }
 };
 
-export const hapticHeavy = () => {
-    if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
-};
-
 export const hapticSuccess = () => {
     if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -32,12 +26,6 @@ export const hapticSuccess = () => {
 export const hapticError = () => {
     if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-};
-
-export const hapticWarning = () => {
-    if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
 };
 

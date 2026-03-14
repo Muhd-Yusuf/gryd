@@ -88,6 +88,8 @@ import {
     CalendarPlus,
     File,
     XCircle,
+    CheckCheck,
+    AlertCircle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
@@ -103,6 +105,7 @@ import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { generateTempId, isTempId } from '../lib/messageQueue';
 import { useQueryClient } from '@tanstack/react-query';
 import { useScrollToBottom } from '../hooks';
+import { hapticLight, hapticSuccess, hapticError, hapticMedium } from '../lib/haptics';
 import {
     useSubgrids,
     useChannels,
@@ -111,6 +114,7 @@ import {
     useCategories,
     useEvents,
     useChannelMessages,
+    useInfiniteChannelMessages,
     useContentModerationSettings,
     useUpdateContentModeration,
     useAddProhibitedWords,
@@ -390,7 +394,7 @@ const CreditUnionAdminScreen = () => {
     const styles = useMemo(() => createStyles(colors, bottomInset, topInset), [colors, bottomInset, topInset]);
     const [mobileShowContent, setMobileShowContent] = useState(false);
     const [mobileShowSettingsContent, setMobileShowSettingsContent] = useState(false);
-    const { subscribe, joinRoom, leaveRoom, isConnected } = useWebSocketContext();
+    const { subscribe, joinRoom, leaveRoom, isConnected, startTyping, stopTyping } = useWebSocketContext();
 
     const handleLogout = async () => {
         try {
@@ -417,6 +421,7 @@ const CreditUnionAdminScreen = () => {
     const categoriesQuery = useCategories(activeSubgridId);
     const eventsQuery = useEvents(activeSubgridId);
     const messagesQuery = useChannelMessages(activeSubgridId, activeChannelId);
+    const infiniteMessagesQuery = useInfiniteChannelMessages(activeSubgridId, activeChannelId);
 
     // Pull-to-refresh state
     const [refreshing, setRefreshing] = useState(false);
@@ -519,12 +524,14 @@ const CreditUnionAdminScreen = () => {
     // Messages need local state for WebSocket real-time updates
     const [messages, setMessages] = useState<Message[]>([]);
 
-    // Sync messages from React Query when they change
+    // Sync messages from React Query (prefer infinite pages, fall back to regular)
     useEffect(() => {
-        if (messagesQuery.data) {
+        if (infiniteMessagesQuery.data?.pages) {
+            setMessages(infiniteMessagesQuery.data.pages.flat());
+        } else if (messagesQuery.data) {
             setMessages(messagesQuery.data);
         }
-    }, [messagesQuery.data]);
+    }, [messagesQuery.data, infiniteMessagesQuery.data]);
 
     // Custom Roles UI State (data comes from customRolesQuery)
     const loadingRoles = customRolesQuery.isLoading;
@@ -553,6 +560,12 @@ const CreditUnionAdminScreen = () => {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const prevFeedItemsCountRef = useRef<number>(0);
+
+    // Typing indicator state
+    const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+    const typingTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+    const channelIsTypingRef = useRef(false);
+    const channelStopTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Centralized scroll management
     const {
@@ -868,13 +881,39 @@ const CreditUnionAdminScreen = () => {
             }
         });
 
+        // Subscribe to typing events
+        const unsubscribeTyping = subscribe('user_typing', (data: any) => {
+            const typingUserId = String(data.userId || '');
+            if (!typingUserId || typingUserId === userId) return;
+            if (data.roomType !== 'channel' || String(data.roomId) !== channelId) return;
+
+            if (data.isTyping) {
+                setTypingUsers(prev => { const next = new Set(prev); next.add(typingUserId); return next; });
+                const existing = typingTimeoutsRef.current.get(typingUserId);
+                if (existing) clearTimeout(existing);
+                typingTimeoutsRef.current.set(typingUserId, setTimeout(() => {
+                    setTypingUsers(prev => { const next = new Set(prev); next.delete(typingUserId); return next; });
+                    typingTimeoutsRef.current.delete(typingUserId);
+                }, 3000));
+            } else {
+                setTypingUsers(prev => { const next = new Set(prev); next.delete(typingUserId); return next; });
+                const existing = typingTimeoutsRef.current.get(typingUserId);
+                if (existing) { clearTimeout(existing); typingTimeoutsRef.current.delete(typingUserId); }
+            }
+        });
+
         return () => {
             leaveRoom('channel', channelId);
             unsubscribeNewMessage();
             unsubscribeMessageUpdated();
             unsubscribeMessageDeleted();
+            unsubscribeTyping();
+            // Clear typing state on channel change
+            setTypingUsers(new Set());
+            typingTimeoutsRef.current.forEach(t => clearTimeout(t));
+            typingTimeoutsRef.current.clear();
         };
-    }, [activeChannelId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient]);
+    }, [activeChannelId, activeSubgridId, isConnected, subscribe, joinRoom, leaveRoom, queryClient, userId]);
 
     // WebSocket: Join subgrid room for channel/post/member updates
     useEffect(() => {
@@ -2110,8 +2149,39 @@ const CreditUnionAdminScreen = () => {
         }
     };
 
+    // Handle draft change with typing indicator emission
+    const handleDraftChange = useCallback((text: string) => {
+        setMessageDraft(text);
+        if (!activeChannelId || !activeSubgridId) return;
+
+        if (text.trim() && !channelIsTypingRef.current) {
+            channelIsTypingRef.current = true;
+            startTyping('channel', activeChannelId);
+        }
+
+        // Reset stop-typing debounce
+        if (channelStopTypingTimeoutRef.current) clearTimeout(channelStopTypingTimeoutRef.current);
+        if (text.trim()) {
+            channelStopTypingTimeoutRef.current = setTimeout(() => {
+                channelIsTypingRef.current = false;
+                stopTyping('channel', activeChannelId);
+            }, 2000);
+        } else {
+            channelIsTypingRef.current = false;
+            stopTyping('channel', activeChannelId);
+        }
+    }, [activeChannelId, activeSubgridId, startTyping, stopTyping]);
+
     const handleSendMessage = async () => {
         if ((!messageDraft.trim() && attachments.length === 0) || !activeSubgridId || !activeChannelId) return;
+
+        // Stop typing indicator on send
+        if (channelIsTypingRef.current) {
+            channelIsTypingRef.current = false;
+            stopTyping('channel', activeChannelId);
+            if (channelStopTypingTimeoutRef.current) { clearTimeout(channelStopTypingTimeoutRef.current); channelStopTypingTimeoutRef.current = null; }
+        }
+        hapticLight();
 
         const tempId = generateTempId();
         const messageBody = messageDraft.trim();
@@ -2199,6 +2269,34 @@ const CreditUnionAdminScreen = () => {
             ));
         }
     };
+
+    // Retry a failed message
+    const handleRetryMessage = useCallback(async (failedMsg: any) => {
+        if (!activeSubgridId || !activeChannelId) return;
+        hapticLight();
+
+        // Mark as sending again
+        setMessages(prev => prev.map(msg =>
+            msg._id === failedMsg._id ? { ...msg, _status: 'sending', _isPending: true } : msg
+        ));
+
+        try {
+            const response = await communityPost(`/subgrids/${activeSubgridId}/messages`, {
+                channelId: activeChannelId,
+                body: failedMsg.body || '',
+                attachments: failedMsg.attachments?.filter((a: any) => a.value && !a.value.startsWith('file://') && !a.value.startsWith('content://')) || undefined,
+            });
+
+            const realMessage = response?.data || response?.message || response;
+            setMessages(prev => prev.map(msg =>
+                msg._id === failedMsg._id ? { ...realMessage, _isPending: false } : msg
+            ));
+        } catch (err: any) {
+            setMessages(prev => prev.map(msg =>
+                msg._id === failedMsg._id ? { ...msg, _isPending: true, _status: 'failed' } : msg
+            ));
+        }
+    }, [activeSubgridId, activeChannelId]);
 
     // Copy invite code to clipboard
     const handleCopyInviteLink = async () => {
@@ -3407,6 +3505,7 @@ const CreditUnionAdminScreen = () => {
                                 contentContainerStyle={styles.feedContent}
                                 showsVerticalScrollIndicator={false}
                                 keyboardShouldPersistTaps="handled"
+                                keyboardDismissMode="on-drag"
                                 bounces={true}
                                 scrollEnabled={true}
                                 nestedScrollEnabled={true}
@@ -3425,6 +3524,19 @@ const CreditUnionAdminScreen = () => {
                                 )}
                                 {messagesQuery.isError && feedItems.length === 0 && (
                                     <ErrorRetry message="Failed to load messages" onRetry={() => messagesQuery.refetch()} loading={messagesQuery.isRefetching} />
+                                )}
+                                {infiniteMessagesQuery.hasNextPage && (
+                                    <TouchableOpacity
+                                        onPress={() => infiniteMessagesQuery.fetchNextPage()}
+                                        disabled={infiniteMessagesQuery.isFetchingNextPage}
+                                        style={{ alignItems: 'center', paddingVertical: 12 }}
+                                    >
+                                        {infiniteMessagesQuery.isFetchingNextPage ? (
+                                            <ActivityIndicator size="small" color={colors.primary} />
+                                        ) : (
+                                            <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>Load earlier messages</Text>
+                                        )}
+                                    </TouchableOpacity>
                                 )}
                                 {feedItems.length === 0 && feedSearchQuery.trim() && (
                                     <View style={styles.welcomeCard}>
@@ -3506,7 +3618,21 @@ const CreditUnionAdminScreen = () => {
                                                                 <Text style={[styles.roleBadgeText, { color: authorMember.customRole.color }]}>{authorMember.customRole.name}</Text>
                                                             </View>
                                                         )}
-                                                        <Text style={styles.postDate}>{formatDate(item.createdAt)}</Text>
+                                                        <View style={styles.feedMetaRow}>
+                                                            <Text style={styles.postDate}>{formatDate(item.createdAt)}</Text>
+                                                            {String(item.senderId || item.authorId) === String(userId) && (
+                                                                item._status === 'failed' ? (
+                                                                    <TouchableOpacity onPress={() => handleRetryMessage(item)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                                                        <AlertCircle size={12} color="#EF4444" />
+                                                                        <Text style={{ fontSize: 10, color: '#EF4444', marginLeft: 2 }}>Retry</Text>
+                                                                    </TouchableOpacity>
+                                                                ) : item._isPending || isTempId(item._id) ? (
+                                                                    <Clock size={12} color={colors.textMuted} style={{ marginLeft: 4 }} />
+                                                                ) : (
+                                                                    <CheckCheck size={12} color="#22C55E" style={{ marginLeft: 4 }} />
+                                                                )
+                                                            )}
+                                                        </View>
                                                     </View>
                                                     {getMemberCompany(authorMember) && (
                                                         <Text style={styles.postCompany}>{getMemberCompany(authorMember)}</Text>
@@ -3693,6 +3819,21 @@ const CreditUnionAdminScreen = () => {
                                 })}
                             </ScrollView>
 
+                            {/* Typing Indicator */}
+                            {typingUsers.size > 0 && (
+                                <View style={styles.typingContainer}>
+                                    <Text style={[styles.typingText, { color: colors.textMuted }]}>
+                                        {typingUsers.size === 1
+                                            ? `${(() => {
+                                                const tid = [...typingUsers][0];
+                                                const m = members.find((mb: any) => String(mb.userId || mb.user?._id || mb._id) === tid);
+                                                return m ? getMemberName(m) : 'Someone';
+                                            })()} is typing`
+                                            : `${typingUsers.size} people typing`}...
+                                    </Text>
+                                </View>
+                            )}
+
                             {/* Attachment Preview */}
                             {attachments.length > 0 && (
                                 <View style={styles.attachmentPreview}>
@@ -3744,7 +3885,7 @@ const CreditUnionAdminScreen = () => {
                                             placeholder={`Message #${activeChannel?.name || 'general'}`}
                                             placeholderTextColor={colors.textSubtle}
                                             value={messageDraft}
-                                            onChangeText={setMessageDraft}
+                                            onChangeText={handleDraftChange}
                                             multiline
                                         />
                                         <View style={styles.messageInputActions}>
@@ -7809,6 +7950,18 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         postDate: {
             fontSize: 13,
             color: colors.textSubtle,
+        },
+        feedMetaRow: {
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
+        },
+        typingContainer: {
+            paddingHorizontal: 16,
+            paddingVertical: 6,
+        },
+        typingText: {
+            fontSize: 12,
+            fontStyle: 'italic' as const,
         },
         postCompany: {
             fontSize: 12,
