@@ -480,6 +480,28 @@ export default function DirectMessagesScreen() {
         }
     }, [activeSubgridId, friends, fetchLastMessages]);
 
+    // Global listener for ALL incoming DMs - keeps friend list sorted in real-time
+    useEffect(() => {
+        if (!isConnected || !currentUserId) return;
+
+        const unsub = subscribe('new_message', (data: any) => {
+            if (data.message && data.roomType === 'dm') {
+                const msgSenderId = String(data.message?.senderId || '');
+                const msgRecipientId = String(data.message?.recipientId || '');
+                const myUserId = String(currentUserId);
+                const otherUserId = msgSenderId === myUserId ? msgRecipientId : msgSenderId;
+                if (otherUserId) {
+                    setLastMessages((prev) => ({
+                        ...prev,
+                        [otherUserId]: data.message,
+                    }));
+                }
+            }
+        });
+
+        return unsub;
+    }, [isConnected, currentUserId, subscribe]);
+
     // Load channels when subgrid changes (friends and members handled by React Query)
     useEffect(() => {
         if (!activeSubgridId) return;
