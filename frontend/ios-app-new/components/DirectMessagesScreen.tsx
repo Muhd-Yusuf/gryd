@@ -80,7 +80,7 @@ import { useAgoraCall } from '../hooks';
 import { useCallContext } from '../contexts/CallContext';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticError, hapticSelection } from '../lib/haptics';
-import { isTempId } from '../lib/messageQueue';
+import { generateTempId, isTempId, markMessageSent, markMessageFailed } from '../lib/messageQueue';
 // Import CallModal directly - Metro will resolve to .web.tsx on web platform
 import CallModal from './CallModal';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
@@ -269,7 +269,20 @@ export default function DirectMessagesScreen() {
         }
         return null;
     }, [infiniteMessagesQuery.data]);
-    const messages = infiniteMessages || messagesQuery.data || [];
+    const queryMessages = infiniteMessages || messagesQuery.data || [];
+
+    // Local messages state for optimistic updates (pending/failed status)
+    const [localDmMessages, setLocalDmMessages] = useState<any[]>([]);
+    useEffect(() => {
+        if (queryMessages.length > 0 || messagesQuery.data) {
+            setLocalDmMessages(prev => {
+                const pendingMsgs = prev.filter(m => (m as any)._isPending || (m as any)._status === 'failed');
+                const stillPending = pendingMsgs.filter(p => !queryMessages.some((s: any) => s._id === p._id));
+                return [...queryMessages, ...stillPending];
+            });
+        }
+    }, [queryMessages]);
+    const messages = localDmMessages.length > 0 ? localDmMessages : queryMessages;
 
     // Debug: Log currentUserId source for troubleshooting
     useEffect(() => {
@@ -1104,14 +1117,40 @@ export default function DirectMessagesScreen() {
         }
 
         const body = newMessage.trim();
+        const tempId = generateTempId();
+        const currentAttachments = [...attachments];
+
+        // Create optimistic message for instant display
+        const optimisticMessage = {
+            _id: tempId,
+            senderId: currentUserId,
+            recipientId: selectedFriendId,
+            body,
+            kind: 'text',
+            attachments: currentAttachments.map(att => ({
+                type: att.type?.startsWith('image/') ? 'image' : 'file',
+                value: att.uri,
+                label: att.name,
+            })),
+            createdAt: new Date().toISOString(),
+            _isPending: true,
+            _status: 'sending',
+        };
+
+        // Add to UI immediately and clear input
+        setLocalDmMessages(prev => [...prev, optimisticMessage]);
         setNewMessage('');
+        setAttachments([]);
+
+        // Scroll to bottom
+        setTimeout(() => { scrollViewRef.current?.scrollToEnd({ animated: true }); }, 100);
 
         try {
             // Upload attachments first if any
             const uploadedAttachments: Attachment[] = [];
-            if (attachments.length > 0) {
+            if (currentAttachments.length > 0) {
                 setUploading(true);
-                for (const file of attachments) {
+                for (const file of currentAttachments) {
                     try {
                         const result = await uploadFile(file, { type: 'attachment', subgridId: activeSubgridId });
                         if (result?.success && result?.data) {
@@ -1126,12 +1165,10 @@ export default function DirectMessagesScreen() {
                         console.error('Failed to upload attachment:', uploadErr.message);
                     }
                 }
-                setAttachments([]);
                 setUploading(false);
             }
 
-            // Use React Query mutation to send message (handles cache update automatically)
-            // Pass subgridId and peerId explicitly to ensure correct values are used
+            // Send via React Query mutation
             const response = await sendDmMutation.mutateAsync({
                 content: body,
                 mediaUrls: uploadedAttachments.length > 0
@@ -1141,19 +1178,25 @@ export default function DirectMessagesScreen() {
                 peerId: selectedFriendId,
             });
 
-            // Update lastMessages for conversation list sorting (WhatsApp-like)
+            // Replace optimistic message with real one
             if (response) {
+                markMessageSent(tempId, response);
+                setLocalDmMessages(prev =>
+                    prev.map(m => m._id === tempId ? { ...response, _isPending: false } : m)
+                );
                 setLastMessages((prev) => ({
                     ...prev,
                     [selectedFriendId]: response,
                 }));
             }
-            // Scroll to bottom to show newest message (WhatsApp style)
-            setTimeout(() => {
-                scrollViewRef.current?.scrollToEnd({ animated: true });
-            }, 100);
-        } catch (error) {
-            console.error('Failed to send message:', error);
+        } catch (error: any) {
+            // Mark message as failed but keep visible for retry
+            markMessageFailed(tempId, error?.message || 'Failed to send');
+            setLocalDmMessages(prev =>
+                prev.map(m =>
+                    m._id === tempId ? { ...m, _isPending: true, _status: 'failed', _error: error?.message } : m
+                )
+            );
             setUploading(false);
         }
     };
@@ -1187,14 +1230,30 @@ export default function DirectMessagesScreen() {
     const handleRetryMessage = useCallback(async (failedMsg: any) => {
         if (!activeSubgridId || !selectedFriendId) return;
         hapticLight();
+
+        // Mark as sending again
+        setLocalDmMessages(prev =>
+            prev.map(m => m._id === failedMsg._id ? { ...m, _status: 'sending', _isPending: true } : m)
+        );
+
         try {
-            await sendDmMutation.mutateAsync({
+            const result = await sendDmMutation.mutateAsync({
                 content: failedMsg.body || '',
                 subgridId: activeSubgridId,
                 peerId: selectedFriendId,
             });
+            if (result) {
+                markMessageSent(failedMsg._id, result);
+                setLocalDmMessages(prev =>
+                    prev.map(m => m._id === failedMsg._id ? { ...result, _isPending: false } : m)
+                );
+            }
         } catch (err: any) {
-            console.error('Retry failed:', err.message);
+            setLocalDmMessages(prev =>
+                prev.map(m =>
+                    m._id === failedMsg._id ? { ...m, _status: 'failed', _isPending: true } : m
+                )
+            );
         }
     }, [activeSubgridId, selectedFriendId, sendDmMutation]);
 

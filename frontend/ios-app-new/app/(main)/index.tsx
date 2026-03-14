@@ -60,7 +60,7 @@ import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { ImageViewer } from '../../components/ImageViewer';
 import { ErrorRetry } from '../../components/ErrorRetry';
 import { ChannelSkeleton, FeedSkeleton } from '../../components/SkeletonLoader';
-import { markMessageFailed, isTempId } from '../../lib/messageQueue';
+import { generateTempId, markMessageFailed, markMessageSent, isTempId } from '../../lib/messageQueue';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
@@ -357,7 +357,21 @@ const TenantCommunityScreen = () => {
     const friendUsers = useMemo(() => friendsData?.users || {}, [friendsData?.users]);
     const events = eventsQuery.data || [];
     const categories = categoriesQuery.data || [];
-    const messages = messagesQuery.data || [];
+    // Local messages state for optimistic updates (pending/failed status)
+    const [localMessages, setLocalMessages] = useState<any[]>([]);
+    useEffect(() => {
+        if (messagesQuery.data) {
+            setLocalMessages(prev => {
+                // Keep any pending/failed optimistic messages, merge with server data
+                const pendingMsgs = prev.filter(m => m._isPending || m._status === 'failed');
+                const serverMsgs = messagesQuery.data || [];
+                // Remove pending msgs that now exist in server data
+                const stillPending = pendingMsgs.filter(p => !serverMsgs.some((s: any) => s._id === p._id));
+                return [...serverMsgs, ...stillPending];
+            });
+        }
+    }, [messagesQuery.data]);
+    const messages = localMessages;
     const dmMessages = dmMessagesQuery.data || [];
 
     const handleLogout = async () => {
@@ -1022,13 +1036,37 @@ const TenantCommunityScreen = () => {
         }
 
         const body = channelDraft.trim();
+        const tempId = generateTempId();
+        const currentAttachments = [...attachments];
+
+        // Create optimistic message for instant display
+        const optimisticMessage = {
+            _id: tempId,
+            senderId: userId,
+            authorId: userId,
+            channelId: activeChannelId,
+            body,
+            attachments: currentAttachments.map(att => ({
+                type: att.type?.startsWith('image/') ? 'image' : 'file',
+                value: att.uri,
+            })),
+            createdAt: new Date().toISOString(),
+            kind: 'text',
+            _isPending: true,
+            _status: 'sending',
+        };
+
+        // Add to UI immediately and clear draft
+        setLocalMessages(prev => [...prev, optimisticMessage]);
+        setChannelDraft('');
+        setAttachments([]);
 
         try {
             // Upload attachments first if any
             const uploadedAttachments: string[] = [];
-            if (attachments.length > 0) {
+            if (currentAttachments.length > 0) {
                 setUploading(true);
-                for (const file of attachments) {
+                for (const file of currentAttachments) {
                     try {
                         const result = await uploadFile(file, { type: 'attachment', subgridId: activeSubgridId });
                         if (result?.success && result?.data) {
@@ -1038,26 +1076,32 @@ const TenantCommunityScreen = () => {
                         console.error('Failed to upload attachment:', uploadErr.message);
                     }
                 }
-                setAttachments([]);
                 setUploading(false);
             }
 
-            // Use React Query mutation to send message and update cache
-            // Pass subgridId and channelId explicitly to ensure correct values are used
-            await sendChannelMessage.mutateAsync({
+            // Send via React Query mutation
+            const result = await sendChannelMessage.mutateAsync({
                 content: body,
                 mediaUrls: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
                 subgridId: activeSubgridId,
                 channelId: activeChannelId,
             });
-            // Clear draft only after successful send
-            setChannelDraft('');
+
+            // Replace optimistic message with real one
+            if (result) {
+                markMessageSent(tempId, result);
+                setLocalMessages(prev =>
+                    prev.map(m => m._id === tempId ? { ...result, _isPending: false } : m)
+                );
+            }
         } catch (err: any) {
-            // TODO: Full offline queue integration - use createOptimisticMessage() to show
-            // pending messages in UI and processQueue() on reconnect.
-            // For now, record the failure in the message queue for later retry.
-            markMessageFailed(`send_${Date.now()}`, err.message || 'Failed to send message.');
-            setError(err.message || 'Failed to send message.');
+            // Mark message as failed but keep visible for retry
+            markMessageFailed(tempId, err.message || 'Failed to send message.');
+            setLocalMessages(prev =>
+                prev.map(m =>
+                    m._id === tempId ? { ...m, _isPending: true, _status: 'failed', _error: err.message } : m
+                )
+            );
             setUploading(false);
         }
     };
@@ -1066,14 +1110,30 @@ const TenantCommunityScreen = () => {
     const handleRetryMessage = useCallback(async (failedMsg: any) => {
         if (!activeSubgridId || !activeChannelId) return;
         hapticLight();
+
+        // Mark as sending again
+        setLocalMessages(prev =>
+            prev.map(m => m._id === failedMsg._id ? { ...m, _status: 'sending', _isPending: true } : m)
+        );
+
         try {
-            await sendChannelMessage.mutateAsync({
+            const result = await sendChannelMessage.mutateAsync({
                 content: failedMsg.body || '',
                 subgridId: activeSubgridId,
                 channelId: activeChannelId,
             });
+            if (result) {
+                markMessageSent(failedMsg._id, result);
+                setLocalMessages(prev =>
+                    prev.map(m => m._id === failedMsg._id ? { ...result, _isPending: false } : m)
+                );
+            }
         } catch (err: any) {
-            console.error('Retry failed:', err.message);
+            setLocalMessages(prev =>
+                prev.map(m =>
+                    m._id === failedMsg._id ? { ...m, _status: 'failed', _isPending: true } : m
+                )
+            );
         }
     }, [activeSubgridId, activeChannelId, sendChannelMessage]);
 
