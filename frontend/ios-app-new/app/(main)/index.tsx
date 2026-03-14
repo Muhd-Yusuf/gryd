@@ -1811,7 +1811,10 @@ const TenantCommunityScreen = () => {
                                 <ErrorRetry message="Failed to load channels" onRetry={() => channelsQuery.refetch()} loading={channelsQuery.isRefetching} />
                             )}
 
-                            <ScrollView contentContainerStyle={styles.channelList}>
+                            <ScrollView
+                                contentContainerStyle={styles.channelList}
+                                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#6C5CE7" />}
+                            >
                                 {channelsQuery.isLoading && Array.from({ length: 5 }).map((_, i) => <ChannelSkeleton key={`ch-sk-${i}`} />)}
                                 {/* Events Button */}
                                 <TouchableOpacity
