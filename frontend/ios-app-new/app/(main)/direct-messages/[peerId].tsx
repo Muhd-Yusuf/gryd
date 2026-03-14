@@ -555,11 +555,11 @@ const DirectMessageChatScreen = () => {
             lastPeerIdRef.current = peerId;
         }
 
-        // Mark for initial scroll when messages load
-        if (localMessages.length > 0) {
+        // Mark for initial scroll when messages load (from query or WebSocket)
+        if (messages.length > 0) {
             markForInitialScroll();
         }
-    }, [localMessages.length, peerId, resetScrollState, markForInitialScroll]);
+    }, [messages.length, peerId, resetScrollState, markForInitialScroll]);
 
     // Use refs to avoid stale closures in WebSocket handlers
     // Update synchronously on every render to eliminate timing gaps
