@@ -218,6 +218,10 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
             eventHandlerRef.current = {
                 onJoinChannelSuccess: (connection: any, elapsed: number) => {
                     console.log('[Agora Native] Joined channel:', connection.channelId, 'uid:', connection.localUid);
+                    // Re-start preview after joining channel to ensure local video surface stays bound
+                    if (engineRef.current) {
+                        try { engineRef.current.startPreview(); } catch (_) {}
+                    }
                 },
                 onUserJoined: (connection: any, remoteUid: number, elapsed: number) => {
                     console.log('[Agora Native] Remote user joined:', remoteUid);
@@ -225,6 +229,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                         if (prev.includes(remoteUid)) return prev;
                         return [...prev, remoteUid];
                     });
+                    // Re-start preview since the remote RtcSurfaceView mounting can disrupt local surface
+                    if (engineRef.current) {
+                        setTimeout(() => {
+                            try { engineRef.current?.startPreview(); } catch (_) {}
+                        }, 200);
+                    }
                     // Transition to connected when remote user joins
                     if (callStateRef.current === 'ringing' || callStateRef.current === 'connecting') {
                         setCallState('connected');

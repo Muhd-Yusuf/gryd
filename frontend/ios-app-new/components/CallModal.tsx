@@ -169,8 +169,8 @@ export const CallModal: React.FC<CallModalProps> = ({
                 {/* Video Call Layout */}
                 {isVideoCall ? (
                     <View style={styles.videoContainer}>
-                        {/* Remote Video */}
-                        {RtcSurfaceView && RenderModeType && remoteUsers.length > 0 && engine ? (
+                        {/* Remote Video - always render both, toggle visibility to prevent remount */}
+                        {RtcSurfaceView && RenderModeType && remoteUsers.length > 0 && engine && (
                             <RtcSurfaceView
                                 style={styles.remoteVideo}
                                 canvas={{
@@ -178,7 +178,8 @@ export const CallModal: React.FC<CallModalProps> = ({
                                     renderMode: RenderModeType.RenderModeFit,
                                 }}
                             />
-                        ) : (
+                        )}
+                        {(!RtcSurfaceView || !RenderModeType || remoteUsers.length === 0 || !engine) && (
                             <View style={styles.videoPlaceholder}>
                                 <UserAvatar
                                     uri={peerAvatar}
@@ -190,25 +191,25 @@ export const CallModal: React.FC<CallModalProps> = ({
                             </View>
                         )}
 
-                        {/* Local Video Preview */}
-                        {RtcSurfaceView && RenderModeType && engine && isVideoEnabled ? (
-                            <View style={styles.localVideoContainer}>
-                                <RtcSurfaceView
-                                    style={styles.localVideo}
-                                    canvas={{
-                                        uid: 0,
-                                        renderMode: RenderModeType.RenderModeHidden,
-                                    }}
-                                />
-                                <TouchableOpacity style={styles.switchCameraButton} onPress={onSwitchCamera}>
-                                    <SwitchCamera size={18} color="#FFFFFF" />
-                                </TouchableOpacity>
-                            </View>
-                        ) : (
-                            <View style={[styles.localVideoContainer, styles.localVideoDisabled]}>
+                        {/* Local Video Preview - always mounted to prevent surface loss */}
+                        <View style={[styles.localVideoContainer, (!isVideoEnabled && styles.localVideoDisabled)]}>
+                            {RtcSurfaceView && RenderModeType && engine && isVideoEnabled ? (
+                                <>
+                                    <RtcSurfaceView
+                                        style={styles.localVideo}
+                                        canvas={{
+                                            uid: 0,
+                                            renderMode: RenderModeType.RenderModeHidden,
+                                        }}
+                                    />
+                                    <TouchableOpacity style={styles.switchCameraButton} onPress={onSwitchCamera}>
+                                        <SwitchCamera size={18} color="#FFFFFF" />
+                                    </TouchableOpacity>
+                                </>
+                            ) : (
                                 <VideoOff size={32} color="#FFFFFF" />
-                            </View>
-                        )}
+                            )}
+                        </View>
 
                         {/* Duration overlay */}
                         {isConnected && (
