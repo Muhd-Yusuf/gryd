@@ -424,20 +424,42 @@ const DirectMessagesScreen = () => {
         if (!friendIds.length) return;
 
         const lastMsgs: Record<string, Message | null> = {};
+        const uncachedPeers: string[] = [];
 
-        // Fetch last message for each friend in parallel (limit to avoid too many requests)
-        const fetchPromises = friendIds.slice(0, 20).map(async (peerId) => {
-            try {
-                const response = await communityGet(`/subgrids/${activeSubgridId}/direct-messages?peerId=${peerId}&limit=1`);
-                const msgs = response?.data || [];
-                lastMsgs[peerId] = msgs.length > 0 ? msgs[0] : null;
-            } catch {
-                lastMsgs[peerId] = null;
+        // First, populate from message cache (instant, no API calls)
+        friendIds.slice(0, 20).forEach((peerId) => {
+            const cached = getCachedMessages(peerId);
+            if (cached && cached.length > 0) {
+                // Get the most recent message from cache
+                const sorted = [...cached].sort((a, b) =>
+                    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+                );
+                lastMsgs[peerId] = sorted[0] as Message;
+            } else {
+                uncachedPeers.push(peerId);
             }
         });
 
-        await Promise.all(fetchPromises);
-        setLastMessages(lastMsgs);
+        // Show cached results immediately for instant rendering
+        if (Object.keys(lastMsgs).length > 0) {
+            setLastMessages(prev => ({ ...prev, ...lastMsgs }));
+        }
+
+        // Only fetch from API for friends without cached messages
+        if (uncachedPeers.length > 0) {
+            const fetchPromises = uncachedPeers.map(async (peerId) => {
+                try {
+                    const response = await communityGet(`/subgrids/${activeSubgridId}/direct-messages?peerId=${peerId}&limit=1`);
+                    const msgs = response?.data || [];
+                    lastMsgs[peerId] = msgs.length > 0 ? msgs[0] : null;
+                } catch {
+                    lastMsgs[peerId] = null;
+                }
+            });
+
+            await Promise.all(fetchPromises);
+            setLastMessages(prev => ({ ...prev, ...lastMsgs }));
+        }
     };
 
     // Fetch last messages when friends list changes

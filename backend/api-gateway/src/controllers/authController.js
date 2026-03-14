@@ -594,7 +594,7 @@ exports.verifyOtp = async (req, res) => {
         }
 
         // Verify OTP
-        if (storedData.otp !== otp) {
+        if (String(storedData.otp) !== String(otp).trim()) {
             storedData.attempts += 1;
             otpStore.set(normalizedEmail, storedData);
             return res.status(400).json({ message: 'Invalid verification code' });
@@ -797,14 +797,16 @@ exports.loginOtpVerify = async (req, res) => {
             return res.status(400).json({ message: 'Too many failed attempts. Please request a new code.' });
         }
 
-        if (storedData.otp !== otp) {
+        if (String(storedData.otp) !== String(otp).trim()) {
             storedData.attempts += 1;
             otpStore.set(normalizedEmail, storedData);
+            console.log(`[OTP Login] Invalid code for ${normalizedEmail}: got "${otp}", expected "${storedData.otp}"`);
             return res.status(400).json({ message: 'Invalid verification code' });
         }
 
         // OTP is valid
         otpStore.delete(normalizedEmail);
+        console.log(`[OTP Login] Verified successfully for ${normalizedEmail}`);
 
         // Find user
         const user = await User.findOne({ email: normalizedEmail });

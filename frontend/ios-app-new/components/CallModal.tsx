@@ -197,6 +197,7 @@ export const CallModal: React.FC<CallModalProps> = ({
                                     style={styles.localVideo}
                                     canvas={{
                                         uid: 0, // 0 means local user
+                                        sourceType: 1, // VideoSourceCameraPrimary
                                         renderMode: RenderModeType.RenderModeHidden,
                                     }}
                                 />

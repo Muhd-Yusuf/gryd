@@ -739,13 +739,9 @@ const subscribeToCallEvents = async (req, res) => {
     }
 };
 
-// In-memory voice channel participant tracking
-// Format: { channelId: Map<agoraUid, { userId, agoraUid, joinedAt, role, isMuted, isHandRaised }> }
-const voiceChannelParticipants = new Map();
-
-// Voice channel state tracking (host, speakers list, wave requests)
-// Format: { channelId: { hostId, speakers: Set<userId>, waveRequests: Map<userId, timestamp> } }
-const voiceChannelState = new Map();
+// Voice channel participant and state tracking - persisted in MongoDB
+const VoiceChannelParticipant = require('../models/VoiceChannelParticipant');
+const VoiceChannelState = require('../models/VoiceChannelState');
 
 /**
  * Join a voice channel (track participant)
@@ -760,38 +756,24 @@ const joinVoiceChannel = async (req, res) => {
             return res.status(400).json({ success: false, error: 'channelId and agoraUid are required' });
         }
 
-        // Initialize channel if not exists
-        if (!voiceChannelParticipants.has(channelId)) {
-            voiceChannelParticipants.set(channelId, new Map());
-        }
-
         // Initialize channel state if not exists
-        if (!voiceChannelState.has(channelId)) {
-            voiceChannelState.set(channelId, {
-                hostId: null,
-                speakers: new Set(),
-                waveRequests: new Map(),
-            });
+        let channelState = await VoiceChannelState.findOne({ channelId });
+        if (!channelState) {
+            channelState = await VoiceChannelState.create({ channelId, hostId: null, speakers: [], waveRequests: [] });
         }
 
-        // Get channel state and participant map
-        const channelState = voiceChannelState.get(channelId);
-        const channelMap = voiceChannelParticipants.get(channelId);
-
-        // IMPORTANT: Remove any existing entries for this user (handles reconnects with new agoraUid)
-        let existingRole = null;
-        for (const [existingUid, participant] of channelMap.entries()) {
-            if (participant.userId === userId) {
-                existingRole = participant.role;
-                console.log(`[VoiceChannel] Removing stale entry for user ${userId} with old agoraUid ${existingUid}, role was: ${existingRole}`);
-                channelMap.delete(existingUid);
-                // Also clean up from speakers set if they were a speaker
-                channelState.speakers.delete(userId);
-            }
+        // Remove any existing entries for this user (handles reconnects with new agoraUid)
+        const existingParticipant = await VoiceChannelParticipant.findOneAndDelete({ channelId, userId });
+        let existingRole = existingParticipant?.role || null;
+        if (existingParticipant) {
+            console.log(`[VoiceChannel] Removing stale entry for user ${userId} with old agoraUid ${existingParticipant.agoraUid}, role was: ${existingRole}`);
+            // Remove from speakers array
+            channelState.speakers = channelState.speakers.filter(s => s !== userId);
         }
 
-        // Now check if this is the first participant (after cleanup)
-        const isFirstParticipant = channelMap.size === 0;
+        // Count remaining participants
+        const participantCount = await VoiceChannelParticipant.countDocuments({ channelId });
+        const isFirstParticipant = participantCount === 0;
 
         // Check if user is a subgrid admin (they auto-become speakers)
         let isAdmin = false;
@@ -804,93 +786,67 @@ const joinVoiceChannel = async (req, res) => {
             console.log(`[VoiceChannel] No subgridId provided for user ${userId}, cannot determine admin status`);
         }
 
-        // Determine role: host, speaker (admin), or listener
-        // Priority:
-        // 1. If user was previously the host and is rejoining -> become host again
-        // 2. If no host exists and user is admin -> become host
-        // 3. If no host exists and first participant -> become host
-        // 4. If host exists and user is admin -> become speaker
-        // 5. Otherwise -> listener
+        // Determine role
         let role = 'listener';
 
-        // Check if host actually exists in participants (may have left without cleanup)
+        // Check if host actually exists in participants
         let hostStillInChannel = false;
         if (channelState.hostId) {
-            // Check if host is in the remaining participants (after our cleanup)
-            for (const [, participant] of channelMap.entries()) {
-                if (participant.userId === channelState.hostId) {
-                    hostStillInChannel = true;
-                    break;
-                }
-            }
-            // If host left but wasn't cleaned up, reset hostId
+            const hostParticipant = await VoiceChannelParticipant.findOne({ channelId, userId: channelState.hostId });
+            hostStillInChannel = !!hostParticipant;
             if (!hostStillInChannel) {
                 console.log(`[VoiceChannel] Previous host ${channelState.hostId} no longer in channel, resetting`);
                 channelState.hostId = null;
             }
         }
 
-        // Special case: if this user WAS the host and is rejoining, restore host role
         const wasHost = existingRole === 'host' || channelState.hostId === userId;
-
         const hasHost = channelState.hostId !== null && hostStillInChannel;
 
-        // CU Admin (subgrid_admin) should ALWAYS be the host
-        // If admin joins, they take over host role from any non-admin
         if (isAdmin) {
-            // Admin ALWAYS becomes host - this is the CU Admin
             role = 'host';
-
-            // If there was a previous non-admin host, demote them to speaker
             if (hasHost && channelState.hostId !== userId) {
                 const previousHostId = channelState.hostId;
-                // Find and update the previous host's role
-                for (const [, participant] of channelMap.entries()) {
-                    if (participant.userId === previousHostId) {
-                        participant.role = 'speaker';
-                        console.log(`[VoiceChannel] Demoted previous host ${previousHostId} to speaker`);
-                        break;
-                    }
-                }
+                await VoiceChannelParticipant.updateOne({ channelId, userId: previousHostId }, { role: 'speaker' });
+                console.log(`[VoiceChannel] Demoted previous host ${previousHostId} to speaker`);
             }
-
             channelState.hostId = userId;
-            channelState.speakers.add(userId);
-            console.log(`[VoiceChannel] Admin ${userId} became HOST (admin always gets host)`);
+            if (!channelState.speakers.includes(userId)) channelState.speakers.push(userId);
+            console.log(`[VoiceChannel] Admin ${userId} became HOST`);
         } else if (wasHost) {
-            // Non-admin user was previously host and is rejoining - restore host role only if no admin is present
             role = 'host';
             channelState.hostId = userId;
-            channelState.speakers.add(userId);
+            if (!channelState.speakers.includes(userId)) channelState.speakers.push(userId);
             console.log(`[VoiceChannel] Restored host role for returning user ${userId}`);
         } else if (!hasHost && isFirstParticipant) {
-            // First non-admin participant becomes host if no host (temporary until admin joins)
             role = 'host';
             channelState.hostId = userId;
-            channelState.speakers.add(userId);
-            console.log(`[VoiceChannel] First participant ${userId} became temporary host (until admin joins)`);
+            if (!channelState.speakers.includes(userId)) channelState.speakers.push(userId);
+            console.log(`[VoiceChannel] First participant ${userId} became temporary host`);
         } else {
-            // Regular member joins when host exists - they become listener
-            console.log(`[VoiceChannel] User ${userId} became listener (hasHost: ${hasHost}, isAdmin: ${isAdmin}, isFirst: ${isFirstParticipant})`);
+            console.log(`[VoiceChannel] User ${userId} became listener`);
         }
 
-        // Add participant with extended data
-        channelMap.set(agoraUid, {
+        // Save channel state
+        await channelState.save();
+
+        // Add participant to MongoDB
+        await VoiceChannelParticipant.create({
+            channelId,
             userId,
             agoraUid,
             subgridId: subgridId || null,
-            joinedAt: new Date(),
             role,
-            isMuted: role === 'listener', // Listeners start muted
+            isMuted: role === 'listener',
             isHandRaised: false,
         });
 
-        console.log(`[VoiceChannel] User ${userId} joined channel ${channelId} with agoraUid ${agoraUid}, role: ${role}`);
-        console.log(`[VoiceChannel] Channel state: hostId=${channelState.hostId}, speakers=${Array.from(channelState.speakers).join(',')}, participantCount=${channelMap.size}`);
+        const newCount = await VoiceChannelParticipant.countDocuments({ channelId });
+        console.log(`[VoiceChannel] User ${userId} joined channel ${channelId} with agoraUid ${agoraUid}, role: ${role}, participants: ${newCount}`);
 
         res.json({
             success: true,
-            data: { channelId, agoraUid, participantCount: channelMap.size, role },
+            data: { channelId, agoraUid, participantCount: newCount, role },
         });
     } catch (error) {
         console.error('Join voice channel error:', error);
@@ -911,51 +867,47 @@ const leaveVoiceChannel = async (req, res) => {
             return res.status(400).json({ success: false, error: 'channelId is required' });
         }
 
-        const channelMap = voiceChannelParticipants.get(channelId);
-        const channelState = voiceChannelState.get(channelId);
+        // Remove participant from MongoDB
+        if (agoraUid) {
+            await VoiceChannelParticipant.deleteOne({ channelId, agoraUid });
+        } else {
+            await VoiceChannelParticipant.deleteOne({ channelId, userId });
+        }
 
-        if (channelMap) {
-            // Remove by agoraUid if provided, otherwise by userId
-            if (agoraUid) {
-                channelMap.delete(agoraUid);
-            } else {
-                // Find and remove by userId
-                for (const [uid, participant] of channelMap.entries()) {
-                    if (participant.userId === userId) {
-                        channelMap.delete(uid);
-                        break;
+        // Update channel state
+        const channelState = await VoiceChannelState.findOne({ channelId });
+        if (channelState) {
+            channelState.speakers = channelState.speakers.filter(s => s !== userId);
+            channelState.waveRequests = channelState.waveRequests.filter(w => w.userId !== userId);
+
+            // If host leaves, assign new host
+            const remainingCount = await VoiceChannelParticipant.countDocuments({ channelId });
+            if (channelState.hostId === userId && remainingCount > 0) {
+                const nextParticipant = await VoiceChannelParticipant.findOne({ channelId });
+                if (nextParticipant) {
+                    channelState.hostId = nextParticipant.userId;
+                    if (!channelState.speakers.includes(nextParticipant.userId)) {
+                        channelState.speakers.push(nextParticipant.userId);
                     }
-                }
-            }
-
-            // Clean up channel state
-            if (channelState) {
-                channelState.speakers.delete(userId);
-                channelState.waveRequests.delete(userId);
-
-                // If host leaves, assign new host to first speaker or first participant
-                if (channelState.hostId === userId && channelMap.size > 0) {
-                    const firstParticipant = channelMap.values().next().value;
-                    if (firstParticipant) {
-                        channelState.hostId = firstParticipant.userId;
-                        channelState.speakers.add(firstParticipant.userId);
-                        firstParticipant.role = 'host';
-                    }
+                    nextParticipant.role = 'host';
+                    await nextParticipant.save();
                 }
             }
 
             // Clean up empty channels
-            if (channelMap.size === 0) {
-                voiceChannelParticipants.delete(channelId);
-                voiceChannelState.delete(channelId);
+            if (remainingCount === 0) {
+                await VoiceChannelState.deleteOne({ channelId });
+            } else {
+                await channelState.save();
             }
         }
 
-        console.log(`[VoiceChannel] User ${userId} left channel ${channelId}`);
+        const participantCount = await VoiceChannelParticipant.countDocuments({ channelId });
+        console.log(`[VoiceChannel] User ${userId} left channel ${channelId}, remaining: ${participantCount}`);
 
         res.json({
             success: true,
-            data: { channelId, participantCount: channelMap?.size || 0 },
+            data: { channelId, participantCount },
         });
     } catch (error) {
         console.error('Leave voice channel error:', error);
@@ -972,16 +924,15 @@ const getVoiceChannelParticipants = async (req, res) => {
         const { channelId } = req.params;
         const { subgridId } = req.query;
 
-        const channelMap = voiceChannelParticipants.get(channelId);
-        if (!channelMap || channelMap.size === 0) {
-            return res.json({ success: true, data: { participants: [] } });
+        const participantArray = await VoiceChannelParticipant.find({ channelId }).lean();
+        if (!participantArray || participantArray.length === 0) {
+            return res.json({ success: true, data: { participants: [], hostId: null, speakerIds: [], waveRequests: [] } });
         }
 
         // Get user details for all participants
         const User = require('../models/User');
         const SubgridMembership = require('../models/SubgridMembership');
 
-        const participantArray = Array.from(channelMap.values());
         const userIds = participantArray.map(p => p.userId);
 
         const users = await User.find({ _id: { $in: userIds } })
@@ -1001,8 +952,10 @@ const getVoiceChannelParticipants = async (req, res) => {
             });
         }
 
-        // Get channel state for speaker/listener info
-        const channelState = voiceChannelState.get(channelId);
+        // Get channel state
+        const channelState = await VoiceChannelState.findOne({ channelId }).lean();
+        const speakersSet = new Set(channelState?.speakers || []);
+        const waveRequestUserIds = new Set((channelState?.waveRequests || []).map(w => w.userId));
 
         // Build response with user details
         const participants = participantArray.map(p => {
@@ -1010,9 +963,9 @@ const getVoiceChannelParticipants = async (req, res) => {
             const membership = membershipMap.get(p.userId);
             const badge = membership?.stakeholderBadge || user?.stakeholderBadge || null;
             const memberRole = membership?.role || user?.role || 'member';
-            const isSpeaker = channelState?.speakers?.has(p.userId) || false;
+            const isSpeaker = speakersSet.has(p.userId);
             const isHost = channelState?.hostId === p.userId;
-            const hasHandRaised = channelState?.waveRequests?.has(p.userId) || false;
+            const hasHandRaised = waveRequestUserIds.has(p.userId);
 
             return {
                 agoraUid: p.agoraUid,
@@ -1039,12 +992,12 @@ const getVoiceChannelParticipants = async (req, res) => {
         // Get wave requests with user details
         const waveRequests = [];
         if (channelState?.waveRequests) {
-            for (const [waveUserId, timestamp] of channelState.waveRequests.entries()) {
-                const user = userMap.get(waveUserId);
+            for (const wr of channelState.waveRequests) {
+                const user = userMap.get(wr.userId);
                 if (user) {
                     waveRequests.push({
-                        userId: waveUserId,
-                        timestamp,
+                        userId: wr.userId,
+                        timestamp: wr.requestedAt,
                         displayName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
                         avatarUrl: user.avatarUrl,
                     });
@@ -1057,7 +1010,7 @@ const getVoiceChannelParticipants = async (req, res) => {
             data: {
                 participants,
                 hostId: channelState?.hostId || null,
-                speakerIds: channelState?.speakers ? Array.from(channelState.speakers) : [],
+                speakerIds: channelState?.speakers || [],
                 waveRequests,
             },
         });
@@ -1080,27 +1033,31 @@ const waveToSpeak = async (req, res) => {
             return res.status(400).json({ success: false, error: 'channelId is required' });
         }
 
-        const channelState = voiceChannelState.get(channelId);
+        const channelState = await VoiceChannelState.findOne({ channelId });
         if (!channelState) {
             return res.status(404).json({ success: false, error: 'Voice channel not found' });
         }
 
         // If already a speaker, no need to wave
-        if (channelState.speakers.has(userId)) {
+        if (channelState.speakers.includes(userId)) {
             return res.json({
                 success: true,
                 data: { message: 'You are already a speaker', alreadySpeaker: true },
             });
         }
 
-        // Add wave request with timestamp
-        channelState.waveRequests.set(userId, new Date());
+        // Add wave request
+        const alreadyWaving = channelState.waveRequests.some(w => w.userId === userId);
+        if (!alreadyWaving) {
+            channelState.waveRequests.push({ userId, requestedAt: new Date() });
+            await channelState.save();
+        }
 
         console.log(`[VoiceChannel] User ${userId} raised hand in channel ${channelId}`);
 
         res.json({
             success: true,
-            data: { channelId, waveRequestCount: channelState.waveRequests.size },
+            data: { channelId, waveRequestCount: channelState.waveRequests.length },
         });
     } catch (error) {
         console.error('Wave to speak error:', error);
@@ -1121,10 +1078,10 @@ const cancelWave = async (req, res) => {
             return res.status(400).json({ success: false, error: 'channelId is required' });
         }
 
-        const channelState = voiceChannelState.get(channelId);
-        if (channelState) {
-            channelState.waveRequests.delete(userId);
-        }
+        await VoiceChannelState.updateOne(
+            { channelId },
+            { $pull: { waveRequests: { userId } } }
+        );
 
         console.log(`[VoiceChannel] User ${userId} lowered hand in channel ${channelId}`);
 
@@ -1151,7 +1108,7 @@ const grantSpeaker = async (req, res) => {
             return res.status(400).json({ success: false, error: 'channelId and targetUserId are required' });
         }
 
-        const channelState = voiceChannelState.get(channelId);
+        const channelState = await VoiceChannelState.findOne({ channelId });
         if (!channelState) {
             return res.status(404).json({ success: false, error: 'Voice channel not found' });
         }
@@ -1162,20 +1119,17 @@ const grantSpeaker = async (req, res) => {
         }
 
         // Add target user as speaker
-        channelState.speakers.add(targetUserId);
-        channelState.waveRequests.delete(targetUserId);
+        if (!channelState.speakers.includes(targetUserId)) {
+            channelState.speakers.push(targetUserId);
+        }
+        channelState.waveRequests = channelState.waveRequests.filter(w => w.userId !== targetUserId);
+        await channelState.save();
 
         // Update participant record
-        const channelMap = voiceChannelParticipants.get(channelId);
-        if (channelMap) {
-            for (const [agoraUid, participant] of channelMap.entries()) {
-                if (participant.userId === targetUserId) {
-                    participant.role = 'speaker';
-                    participant.isMuted = false;
-                    break;
-                }
-            }
-        }
+        await VoiceChannelParticipant.updateOne(
+            { channelId, userId: targetUserId },
+            { role: 'speaker', isMuted: false }
+        );
 
         console.log(`[VoiceChannel] User ${targetUserId} granted speaker by ${userId} in channel ${channelId}`);
 
@@ -1202,7 +1156,7 @@ const revokeSpeaker = async (req, res) => {
             return res.status(400).json({ success: false, error: 'channelId and targetUserId are required' });
         }
 
-        const channelState = voiceChannelState.get(channelId);
+        const channelState = await VoiceChannelState.findOne({ channelId });
         if (!channelState) {
             return res.status(404).json({ success: false, error: 'Voice channel not found' });
         }
@@ -1218,19 +1172,14 @@ const revokeSpeaker = async (req, res) => {
         }
 
         // Remove target user from speakers
-        channelState.speakers.delete(targetUserId);
+        channelState.speakers = channelState.speakers.filter(s => s !== targetUserId);
+        await channelState.save();
 
         // Update participant record
-        const channelMap = voiceChannelParticipants.get(channelId);
-        if (channelMap) {
-            for (const [agoraUid, participant] of channelMap.entries()) {
-                if (participant.userId === targetUserId) {
-                    participant.role = 'listener';
-                    participant.isMuted = true;
-                    break;
-                }
-            }
-        }
+        await VoiceChannelParticipant.updateOne(
+            { channelId, userId: targetUserId },
+            { role: 'listener', isMuted: true }
+        );
 
         console.log(`[VoiceChannel] User ${targetUserId} revoked speaker by ${userId} in channel ${channelId}`);
 
@@ -1257,7 +1206,7 @@ const muteParticipant = async (req, res) => {
             return res.status(400).json({ success: false, error: 'channelId, targetUserId, and mute are required' });
         }
 
-        const channelState = voiceChannelState.get(channelId);
+        const channelState = await VoiceChannelState.findOne({ channelId });
         if (!channelState) {
             return res.status(404).json({ success: false, error: 'Voice channel not found' });
         }
@@ -1268,15 +1217,10 @@ const muteParticipant = async (req, res) => {
         }
 
         // Update participant mute state
-        const channelMap = voiceChannelParticipants.get(channelId);
-        if (channelMap) {
-            for (const [agoraUid, participant] of channelMap.entries()) {
-                if (participant.userId === targetUserId) {
-                    participant.isMuted = mute;
-                    break;
-                }
-            }
-        }
+        await VoiceChannelParticipant.updateOne(
+            { channelId, userId: targetUserId },
+            { isMuted: mute }
+        );
 
         console.log(`[VoiceChannel] User ${targetUserId} ${mute ? 'muted' : 'unmuted'} by ${userId} in channel ${channelId}`);
 
@@ -1303,15 +1247,10 @@ const updateMuteState = async (req, res) => {
             return res.status(400).json({ success: false, error: 'channelId and isMuted are required' });
         }
 
-        const channelMap = voiceChannelParticipants.get(channelId);
-        if (channelMap) {
-            for (const [agoraUid, participant] of channelMap.entries()) {
-                if (participant.userId === userId) {
-                    participant.isMuted = isMuted;
-                    break;
-                }
-            }
-        }
+        await VoiceChannelParticipant.updateOne(
+            { channelId, userId },
+            { isMuted }
+        );
 
         res.json({
             success: true,

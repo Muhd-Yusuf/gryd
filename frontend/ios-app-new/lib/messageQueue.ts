@@ -16,22 +16,12 @@ export type PendingMessage = {
     error?: string;
 };
 
-export type PendingUpload = {
-    tempId: string;
-    file: { uri: string; name: string; type: string };
-    subgridId: string;
-    status: 'pending' | 'uploading' | 'done' | 'failed';
-    result?: any;
-    error?: string;
-};
-
 const QUEUE_KEY = 'gryd_message_queue';
 const DRAFTS_KEY = 'gryd_dm_drafts';
 const MAX_RETRIES = 3;
 
 // In-memory queue for fast access
 let messageQueue: PendingMessage[] = [];
-let uploadQueue: PendingUpload[] = [];
 let draftsCache: Record<string, string> = {};
 let queueLoaded = false;
 
@@ -247,61 +237,6 @@ export const getDraft = (peerId: string): string => {
 export const clearDraft = (peerId: string): void => {
     delete draftsCache[peerId];
     AsyncStorage.setItem(DRAFTS_KEY, JSON.stringify(draftsCache)).catch(() => {});
-};
-
-// ============ FILE UPLOAD QUEUE ============
-
-/**
- * Queue a file for upload
- */
-export const queueUpload = (
-    file: { uri: string; name: string; type: string },
-    subgridId: string
-): string => {
-    const tempId = generateTempId();
-    uploadQueue.push({
-        tempId,
-        file,
-        subgridId,
-        status: 'pending',
-    });
-    return tempId;
-};
-
-/**
- * Mark upload as complete
- */
-export const markUploadComplete = (tempId: string, result: any): void => {
-    const upload = uploadQueue.find(u => u.tempId === tempId);
-    if (upload) {
-        upload.status = 'done';
-        upload.result = result;
-    }
-};
-
-/**
- * Mark upload as failed
- */
-export const markUploadFailed = (tempId: string, error: string): void => {
-    const upload = uploadQueue.find(u => u.tempId === tempId);
-    if (upload) {
-        upload.status = 'failed';
-        upload.error = error;
-    }
-};
-
-/**
- * Get pending uploads
- */
-export const getPendingUploads = (): PendingUpload[] => {
-    return uploadQueue.filter(u => u.status === 'pending');
-};
-
-/**
- * Clear completed uploads
- */
-export const clearCompletedUploads = (): void => {
-    uploadQueue = uploadQueue.filter(u => u.status !== 'done');
 };
 
 // Initialize on module load

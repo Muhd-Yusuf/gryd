@@ -278,6 +278,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
     const enableVideo = useCallback(async (engine: IRtcEngine) => {
         try {
             engine.enableVideo();
+            // setupLocalVideo ensures the local camera feed is bound to the rendering surface
+            engine.setupLocalVideo({
+                uid: 0,
+                sourceType: 1, // VideoSourceCameraPrimary
+                renderMode: 1, // RenderModeHidden
+            });
             engine.startPreview();
             setIsVideoEnabled(true);
         } catch (err: any) {
@@ -361,6 +367,11 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 autoSubscribeVideo: true,
             });
 
+            // Restart preview after joining to ensure local video renders
+            if (type === 'video') {
+                engine.startPreview();
+            }
+
             setCurrentCall({
                 callId,
                 channelName,
@@ -438,6 +449,11 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 autoSubscribeVideo: true,
             });
 
+            // Restart preview after joining to ensure local video renders
+            if (type === 'video') {
+                engine.startPreview();
+            }
+
             setCurrentCall({
                 callId,
                 channelName,
@@ -510,6 +526,12 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         if (engineRef.current) {
             const newVideoEnabled = !isVideoEnabled;
             engineRef.current.muteLocalVideoStream(!newVideoEnabled);
+            if (newVideoEnabled) {
+                // Restart preview when re-enabling video
+                engineRef.current.startPreview();
+            } else {
+                engineRef.current.stopPreview();
+            }
             setIsVideoEnabled(newVideoEnabled);
         }
     }, [isVideoEnabled]);

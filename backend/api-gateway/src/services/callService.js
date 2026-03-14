@@ -130,13 +130,17 @@ const generateCallToken = ({
  * @returns {Promise<Object>} Call session info
  */
 const initiateDMCall = async (callerId, calleeId, callType = 'audio', options = {}) => {
-    // First, clean up any stale calls for both users
+    // Clean up stale ringing/initiating calls for both users
     await Promise.all([
         Call.cleanupStaleCalls(callerId),
         Call.cleanupStaleCalls(calleeId)
     ]);
 
-    // Check if callee is busy
+    // Force-end any active calls for the CALLER - if they're initiating a new call,
+    // they're clearly not in another call. This prevents orphaned call records from blocking.
+    await Call.forceEndActiveCalls(callerId);
+
+    // Check if callee is busy (only for callee - they might genuinely be in another call)
     const isCalleeBusy = await Call.isUserBusy(calleeId);
     if (isCalleeBusy) {
         const callId = crypto.randomBytes(8).toString('hex');
@@ -145,16 +149,6 @@ const initiateDMCall = async (callerId, calleeId, callType = 'audio', options = 
             success: false,
             error: 'user_busy',
             message: 'User is currently in another call',
-        };
-    }
-
-    // Check if caller is already in a call
-    const isCallerBusy = await Call.isUserBusy(callerId);
-    if (isCallerBusy) {
-        return {
-            success: false,
-            error: 'already_in_call',
-            message: 'You are already in a call',
         };
     }
 

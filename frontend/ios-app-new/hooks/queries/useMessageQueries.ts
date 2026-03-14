@@ -130,7 +130,7 @@ export const useDirectMessages = (subgridId: string, peerId: string, params?: Me
         enabled: !!subgridId && !!peerId,
         staleTime: 5 * 60 * 1000, // 5 minutes - show cached data, background refresh as fallback for missed WebSocket updates
         gcTime: 24 * 60 * 60 * 1000,
-        refetchOnMount: true, // Refetch on mount to show latest messages when navigating to DMs
+        refetchOnMount: false, // Show cached data instantly - WebSocket handles real-time updates
         refetchOnWindowFocus: false, // Don't refetch on window focus
         refetchOnReconnect: 'always', // Refresh when network reconnects to catch missed messages
     });

@@ -15,6 +15,7 @@ import {
     useWindowDimensions,
     KeyboardAvoidingView,
     RefreshControl,
+    ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,6 +51,9 @@ import {
     ArrowDownLeft,
     PhoneIncoming,
     PhoneOutgoing,
+    CheckCheck,
+    AlertCircle,
+    Clock,
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -70,11 +74,13 @@ import {
 } from '../lib/api';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { Attachment, twemojiUrl } from '../lib/chatMedia';
+import { getCachedMessages } from '../lib/userCache';
 import UserAvatar from './UserAvatar';
 import { useAgoraCall } from '../hooks';
 import { useCallContext } from '../contexts/CallContext';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticError, hapticSelection } from '../lib/haptics';
+import { isTempId } from '../lib/messageQueue';
 // Import CallModal directly - Metro will resolve to .web.tsx on web platform
 import CallModal from './CallModal';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
@@ -87,6 +93,7 @@ import {
     useFriends,
     useMembers,
     useDirectMessages,
+    useInfiniteDirectMessages,
     useSendDirectMessage,
     useCurrentUser,
     useSendFriendRequest,
@@ -225,6 +232,7 @@ export default function DirectMessagesScreen() {
     const friendsQuery = useFriends(activeSubgridId || '');
     const membersQuery = useMembers(activeSubgridId || '');
     const messagesQuery = useDirectMessages(activeSubgridId || '', selectedFriendId || '');
+    const infiniteMessagesQuery = useInfiniteDirectMessages(activeSubgridId || '', selectedFriendId || '');
     const sendDmMutation = useSendDirectMessage(activeSubgridId || '', selectedFriendId || '');
     const sendFriendRequestMutation = useSendFriendRequest(activeSubgridId || '');
     const removeFriendMutation = useRemoveFriend(activeSubgridId || '');
@@ -254,7 +262,14 @@ export default function DirectMessagesScreen() {
     const friends = friendsData.friends || [];
     const friendUsers = friendsData.users || {};
     const members = membersQuery.data || [];
-    const messages = messagesQuery.data || [];
+    // Use infinite query pages if available, otherwise fall back to regular query
+    const infiniteMessages = useMemo(() => {
+        if (infiniteMessagesQuery.data?.pages) {
+            return infiniteMessagesQuery.data.pages.flat();
+        }
+        return null;
+    }, [infiniteMessagesQuery.data]);
+    const messages = infiniteMessages || messagesQuery.data || [];
 
     // Debug: Log currentUserId source for troubleshooting
     useEffect(() => {
@@ -429,26 +444,49 @@ export default function DirectMessagesScreen() {
     const fetchLastMessages = useCallback(async (subgridId: string, friendIds: string[]) => {
         if (friendIds.length === 0) return;
 
-        try {
-            const lastMsgsPromises = friendIds.slice(0, 20).map(async (friendId: string) => {
-                try {
-                    const msgRes = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${friendId}&limit=1`);
-                    const msgs = msgRes?.data || [];
-                    return { friendId, lastMsg: msgs.length > 0 ? msgs[0] : null };
-                } catch {
-                    return { friendId, lastMsg: null };
-                }
-            });
-            const results = await Promise.all(lastMsgsPromises);
-            const lastMsgsMap: Record<string, DirectMessage> = {};
-            results.forEach(({ friendId, lastMsg }) => {
-                if (lastMsg) {
-                    lastMsgsMap[friendId] = lastMsg;
-                }
-            });
-            setLastMessages(lastMsgsMap);
-        } catch (error) {
-            console.error('[DirectMessages] Failed to load last messages:', error);
+        const lastMsgsMap: Record<string, DirectMessage> = {};
+        const uncachedPeers: string[] = [];
+
+        // First, populate from message cache (instant, no API calls)
+        friendIds.slice(0, 20).forEach((friendId) => {
+            const cached = getCachedMessages(friendId);
+            if (cached && cached.length > 0) {
+                const sorted = [...cached].sort((a, b) =>
+                    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+                );
+                lastMsgsMap[friendId] = sorted[0] as DirectMessage;
+            } else {
+                uncachedPeers.push(friendId);
+            }
+        });
+
+        // Show cached results immediately
+        if (Object.keys(lastMsgsMap).length > 0) {
+            setLastMessages(prev => ({ ...prev, ...lastMsgsMap }));
+        }
+
+        // Only fetch from API for friends without cached messages
+        if (uncachedPeers.length > 0) {
+            try {
+                const lastMsgsPromises = uncachedPeers.map(async (friendId: string) => {
+                    try {
+                        const msgRes = await communityGet(`/subgrids/${subgridId}/direct-messages?peerId=${friendId}&limit=1`);
+                        const msgs = msgRes?.data || [];
+                        return { friendId, lastMsg: msgs.length > 0 ? msgs[0] : null };
+                    } catch {
+                        return { friendId, lastMsg: null };
+                    }
+                });
+                const results = await Promise.all(lastMsgsPromises);
+                results.forEach(({ friendId, lastMsg }) => {
+                    if (lastMsg) {
+                        lastMsgsMap[friendId] = lastMsg;
+                    }
+                });
+                setLastMessages(prev => ({ ...prev, ...lastMsgsMap }));
+            } catch (error) {
+                console.error('[DirectMessages] Failed to load last messages:', error);
+            }
         }
     }, []);
 
@@ -1145,6 +1183,21 @@ export default function DirectMessagesScreen() {
         }
     };
 
+    // Retry a failed DM
+    const handleRetryMessage = useCallback(async (failedMsg: any) => {
+        if (!activeSubgridId || !selectedFriendId) return;
+        hapticLight();
+        try {
+            await sendDmMutation.mutateAsync({
+                content: failedMsg.body || '',
+                subgridId: activeSubgridId,
+                peerId: selectedFriendId,
+            });
+        } catch (err: any) {
+            console.error('Retry failed:', err.message);
+        }
+    }, [activeSubgridId, selectedFriendId, sendDmMutation]);
+
     const handleAddFriend = async (recipientId: string) => {
         if (!activeSubgridId || !recipientId) return;
         try {
@@ -1829,6 +1882,19 @@ export default function DirectMessagesScreen() {
                                             <Text style={{ color: colors.textMuted, fontSize: 12 }}>Loading user info...</Text>
                                         </View>
                                     )}
+                                    {infiniteMessagesQuery.hasNextPage && (
+                                        <TouchableOpacity
+                                            onPress={() => infiniteMessagesQuery.fetchNextPage()}
+                                            disabled={infiniteMessagesQuery.isFetchingNextPage}
+                                            style={{ alignItems: 'center', paddingVertical: 12 }}
+                                        >
+                                            {infiniteMessagesQuery.isFetchingNextPage ? (
+                                                <ActivityIndicator size="small" color={colors.primary} />
+                                            ) : (
+                                                <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>Load earlier messages</Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    )}
                                     {currentUserId ? messageGroups.map((group) => (
                                         <View key={group.date}>
                                             <View style={styles.dateDivider}>
@@ -1967,7 +2033,21 @@ export default function DirectMessagesScreen() {
                                                                 }
                                                                 return null;
                                                             })}
-                                                            <Text style={[styles.messageTimeStamp, isOwnMessage && styles.messageTimeStampSelf]}>{formatTimeOnly(msg.createdAt)}</Text>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: isOwnMessage ? 'flex-end' : 'flex-start' }}>
+                                                                <Text style={[styles.messageTimeStamp, isOwnMessage && styles.messageTimeStampSelf]}>{formatTimeOnly(msg.createdAt)}</Text>
+                                                                {isOwnMessage && (
+                                                                    (msg as any)._status === 'failed' ? (
+                                                                        <TouchableOpacity onPress={() => handleRetryMessage(msg)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                                                            <AlertCircle size={10} color="#EF4444" />
+                                                                            <Text style={{ fontSize: 9, color: '#EF4444', marginLeft: 2 }}>Retry</Text>
+                                                                        </TouchableOpacity>
+                                                                    ) : (msg as any)._isPending || isTempId(msg._id) ? (
+                                                                        <Clock size={10} color={colors.textMuted} style={{ marginLeft: 4 }} />
+                                                                    ) : (
+                                                                        <CheckCheck size={10} color="#22C55E" style={{ marginLeft: 4 }} />
+                                                                    )
+                                                                )}
+                                                            </View>
                                                         </View>
                                                     </TouchableOpacity>
                                                 );
