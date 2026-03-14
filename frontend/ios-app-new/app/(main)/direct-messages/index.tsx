@@ -423,42 +423,18 @@ const DirectMessagesScreen = () => {
     const fetchLastMessages = async (activeSubgridId: string, friendIds: string[]) => {
         if (!friendIds.length) return;
 
-        const lastMsgs: Record<string, Message | null> = {};
-        const uncachedPeers: string[] = [];
-
-        // First, populate from message cache (instant, no API calls)
-        friendIds.slice(0, 20).forEach((peerId) => {
-            const cached = getCachedMessages(peerId);
-            if (cached && cached.length > 0) {
-                // Get the most recent message from cache
-                const sorted = [...cached].sort((a, b) =>
-                    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-                );
-                lastMsgs[peerId] = sorted[0] as Message;
-            } else {
-                uncachedPeers.push(peerId);
-            }
-        });
-
-        // Show cached results immediately for instant rendering
-        if (Object.keys(lastMsgs).length > 0) {
-            setLastMessages(prev => ({ ...prev, ...lastMsgs }));
-        }
-
-        // Only fetch from API for friends without cached messages
-        if (uncachedPeers.length > 0) {
-            const fetchPromises = uncachedPeers.map(async (peerId) => {
-                try {
-                    const response = await communityGet(`/subgrids/${activeSubgridId}/direct-messages?peerId=${peerId}&limit=1`);
-                    const msgs = response?.data || [];
-                    lastMsgs[peerId] = msgs.length > 0 ? msgs[0] : null;
-                } catch {
-                    lastMsgs[peerId] = null;
+        try {
+            const res = await communityGet(`/subgrids/${activeSubgridId}/direct-messages/conversations`);
+            const conversations = res?.data || [];
+            const lastMsgs: Record<string, Message | null> = {};
+            conversations.forEach((conv: any) => {
+                if (conv.peerId && conv.lastMessage) {
+                    lastMsgs[conv.peerId] = conv.lastMessage as Message;
                 }
             });
-
-            await Promise.all(fetchPromises);
-            setLastMessages(prev => ({ ...prev, ...lastMsgs }));
+            setLastMessages(lastMsgs);
+        } catch (error) {
+            console.error('[DirectMessages] Failed to load last messages:', error);
         }
     };
 
@@ -468,6 +444,28 @@ const DirectMessagesScreen = () => {
             fetchLastMessages(subgridId, friends);
         }
     }, [subgridId, friends]);
+
+    // Global listener for ALL incoming DMs - keeps friend list sorted in real-time
+    useEffect(() => {
+        if (!isConnected || !userId) return;
+
+        const unsub = subscribe('new_message', (data: any) => {
+            if (data.message && data.roomType === 'dm') {
+                const msgSenderId = String(data.message?.senderId || '');
+                const msgRecipientId = String(data.message?.recipientId || '');
+                const myUserId = String(userId);
+                const otherUserId = msgSenderId === myUserId ? msgRecipientId : msgSenderId;
+                if (otherUserId) {
+                    setLastMessages((prev) => ({
+                        ...prev,
+                        [otherUserId]: data.message,
+                    }));
+                }
+            }
+        });
+
+        return unsub;
+    }, [isConnected, userId, subscribe]);
 
     // Load draft when switching conversations
     useEffect(() => {
