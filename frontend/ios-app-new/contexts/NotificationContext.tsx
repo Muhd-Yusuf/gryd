@@ -2,6 +2,9 @@
  * Notification Context
  * Handles push notification setup, permissions, and token registration
  * Works for all user roles: super admin, CU admin, and members
+ *
+ * Call notifications use a dedicated channel with MAX importance and system ringtone.
+ * The 'calls' channel must be deleted and recreated if settings change (Android caches channels).
  */
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
@@ -21,7 +24,6 @@ import {
 Notifications.setNotificationHandler({
     handleNotification: async (notification) => {
         const data = notification.request.content.data;
-        // Call notifications: always show as full-screen alert with sound
         if (data?.type === 'call') {
             return {
                 shouldShowAlert: true,
@@ -30,16 +32,6 @@ Notifications.setNotificationHandler({
                 shouldShowBanner: true,
                 shouldShowList: true,
                 priority: Notifications.AndroidNotificationPriority.MAX,
-            };
-        }
-        // DM/message notifications: show with sound
-        if (data?.type === 'dm' || data?.type === 'message') {
-            return {
-                shouldShowAlert: true,
-                shouldPlaySound: true,
-                shouldSetBadge: true,
-                shouldShowBanner: true,
-                shouldShowList: true,
             };
         }
         return {
@@ -58,21 +50,80 @@ async function setupNotificationCategories() {
         {
             identifier: 'answer',
             buttonTitle: 'Answer',
-            options: {
-                opensAppToForeground: true,
-            },
+            options: { opensAppToForeground: true },
         },
         {
             identifier: 'decline',
             buttonTitle: 'Decline',
-            options: {
-                opensAppToForeground: false,
-                isDestructive: true,
-            },
+            options: { opensAppToForeground: false, isDestructive: true },
         },
     ]);
 }
 setupNotificationCategories();
+
+/**
+ * Delete and recreate notification channels to pick up new settings.
+ * Android caches channel config after first creation — the only way
+ * to change importance/sound/vibration is to delete + recreate.
+ */
+async function setupAndroidChannels() {
+    if (Platform.OS !== 'android') return;
+
+    // Delete old channels so updated settings take effect
+    const channelIds = ['calls', 'messages', 'mentions', 'invites'];
+    for (const id of channelIds) {
+        try {
+            await Notifications.deleteNotificationChannelAsync(id);
+        } catch (_) {}
+    }
+
+    // Calls channel — MAX importance, system ringtone, heads-up, lock screen
+    await Notifications.setNotificationChannelAsync('calls', {
+        name: 'Incoming Calls',
+        description: 'Incoming voice and video call alerts with ringtone',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: 'default', // uses system default notification sound
+        vibrationPattern: [0, 500, 200, 500, 200, 500, 200, 500],
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        bypassDnd: true,
+        showBadge: false,
+        enableLights: true,
+        lightColor: '#22c55e',
+        enableVibrate: true,
+    });
+
+    // Messages channel
+    await Notifications.setNotificationChannelAsync('messages', {
+        name: 'Messages',
+        description: 'Direct messages and channel messages',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#22c55e',
+        enableLights: true,
+        enableVibrate: true,
+    });
+
+    // Mentions channel
+    await Notifications.setNotificationChannelAsync('mentions', {
+        name: 'Mentions',
+        description: 'When someone mentions you',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#f59e0b',
+        enableLights: true,
+        enableVibrate: true,
+    });
+
+    // Invites channel
+    await Notifications.setNotificationChannelAsync('invites', {
+        name: 'Invitations',
+        description: 'Community and group invitations',
+        importance: Notifications.AndroidImportance.DEFAULT,
+        sound: 'default',
+    });
+}
 
 export interface NotificationData {
     type: 'message' | 'dm' | 'call' | 'mention' | 'invite';
@@ -135,47 +186,33 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      * Get the Expo push token for this device
      */
     const getExpoPushToken = async (): Promise<string | null> => {
-        // Push notifications require a physical device (not simulator)
-        if (!Device.isDevice) {
-            return null;
-        }
+        if (!Device.isDevice) return null;
 
         try {
-            // Get project ID for Expo - check multiple sources
             const projectId =
                 Constants.expoConfig?.extra?.eas?.projectId ||
                 Constants.easConfig?.projectId ||
                 Constants.expoConfig?.extra?.expoProjectId;
 
-            // Check if projectId is a placeholder
             if (!projectId || projectId === 'your-project-id-here') {
-                // In Expo Go, try without projectId (uses the Expo Go's project)
                 if (__DEV__) {
                     try {
                         const tokenData = await Notifications.getExpoPushTokenAsync();
                         return tokenData.data;
-                    } catch {
-                        return null;
-                    }
+                    } catch { return null; }
                 }
                 return null;
             }
 
-            // Try with projectId first
             try {
-                const tokenData = await Notifications.getExpoPushTokenAsync({
-                    projectId,
-                });
+                const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
                 return tokenData.data;
             } catch (projectIdError: any) {
-                // In development, try without projectId as a fallback
                 if (__DEV__) {
                     try {
                         const tokenData = await Notifications.getExpoPushTokenAsync();
                         return tokenData.data;
-                    } catch {
-                        // Silently fail in dev mode
-                    }
+                    } catch {}
                 }
                 throw projectIdError;
             }
@@ -185,63 +222,30 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     };
 
     /**
-     * Request notification permissions
+     * Request notification permissions and set up Android channels
      */
     const requestPermissions = useCallback(async (): Promise<boolean> => {
-        // Check current permission status
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
 
-        // Request permissions if not already granted
         if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
+            const { status } = await Notifications.requestPermissionsAsync({
+                android: {
+                    allowAlert: true,
+                    allowBadge: true,
+                    allowSound: true,
+                    allowAnnouncements: true,
+                },
+            });
             finalStatus = status;
         }
 
         setPermissionStatus(finalStatus);
 
-        if (finalStatus !== 'granted') {
-            return false;
-        }
+        if (finalStatus !== 'granted') return false;
 
-        // Set up Android notification channel
-        if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync('messages', {
-                name: 'Messages',
-                importance: Notifications.AndroidImportance.HIGH,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#22c55e',
-                sound: 'default',
-            });
-
-            await Notifications.setNotificationChannelAsync('calls', {
-                name: 'Incoming Calls',
-                description: 'Incoming voice and video call alerts',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000],
-                lightColor: '#22c55e',
-                sound: 'default',
-                lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-                bypassDnd: true,
-                showBadge: false,
-                enableLights: true,
-                enableVibrate: true,
-            });
-
-            await Notifications.setNotificationChannelAsync('mentions', {
-                name: 'Mentions',
-                importance: Notifications.AndroidImportance.HIGH,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#f59e0b',
-                sound: 'default',
-            });
-
-            await Notifications.setNotificationChannelAsync('invites', {
-                name: 'Invitations',
-                importance: Notifications.AndroidImportance.DEFAULT,
-                sound: 'default',
-            });
-        }
+        // Set up Android notification channels (deletes + recreates to pick up changes)
+        await setupAndroidChannels();
 
         return true;
     }, []);
@@ -250,41 +254,30 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      * Register the push token with the backend
      */
     const registerToken = useCallback(async (): Promise<void> => {
-        // Push notifications via Expo are not supported on web
         if (Platform.OS === 'web') return;
-
-        // Prevent concurrent registration calls
         if (isRegisteringRef.current) return;
         isRegisteringRef.current = true;
 
         try {
             const userId = getUserId();
-            if (!userId) {
-                return;
-            }
+            if (!userId) return;
 
-            // Check if we have permission
             const hasPermission = await requestPermissions();
-            if (!hasPermission) {
-                return;
-            }
+            if (!hasPermission) return;
 
-            // Get push token
             const token = await getExpoPushToken();
-            if (!token) {
-                return;
-            }
+            if (!token) return;
 
             setExpoPushToken(token);
 
-            // Register with backend
-            const platform = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
+            const platform = Platform.OS === 'ios' ? 'ios' : 'android';
             const deviceId = Device.deviceName || undefined;
 
             await registerPushToken(token, platform, deviceId);
             setIsRegistered(true);
-        } catch {
-            // Silently fail - token registration is best-effort
+            console.log('[Notification] Token registered successfully');
+        } catch (err: any) {
+            console.error('[Notification] Token registration failed:', err?.message);
         } finally {
             isRegisteringRef.current = false;
         }
@@ -294,17 +287,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      * Unregister the push token from the backend
      */
     const unregisterToken = useCallback(async (): Promise<void> => {
-        if (!expoPushToken) {
-            return;
-        }
-
+        if (!expoPushToken) return;
         try {
             await unregisterPushToken(expoPushToken);
             setIsRegistered(false);
             setExpoPushToken(null);
-        } catch {
-            // Silently fail - token unregistration is best-effort
-        }
+        } catch {}
     }, [expoPushToken]);
 
     /**
@@ -312,17 +300,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      */
     const handleNotificationResponse = useCallback((response: Notifications.NotificationResponse) => {
         const data = response.notification.request.content.data as NotificationData;
-
         if (!data?.type) return;
 
         // Check if this is a button action (Answer/Decline)
         const actionId = response.actionIdentifier;
         if (data.type === 'call' && actionId && actionId !== Notifications.DEFAULT_ACTION_IDENTIFIER) {
             if (actionId === 'answer') {
-                console.log('[Notification] Call answered via notification button');
                 onCallAnswered?.(data);
             } else if (actionId === 'decline') {
-                console.log('[Notification] Call declined via notification button');
                 onCallDeclined?.(data);
             }
             return;
@@ -331,14 +316,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         switch (data.type) {
             case 'message':
             case 'mention':
-                // Navigate to channel
                 if (data.subgridId && data.channelId) {
                     router.push(`/(main)/sub-channel?subgridId=${data.subgridId}&channelId=${data.channelId}`);
                 }
                 break;
 
             case 'dm':
-                // Navigate to DM
                 {
                     const peerId = data.senderId ?? data.peerId;
                     if (!peerId) break;
@@ -350,14 +333,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                 break;
 
             case 'call':
-                // Call tapped (not a button action) - bring app to foreground and show call UI
                 if (data.callerId) {
                     onCallAnswered?.(data);
                 }
                 break;
 
             case 'invite':
-                // Navigate to notifications/invites screen
                 router.push('/(main)/notifications');
                 break;
         }
@@ -365,25 +346,19 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     // Set up notification listeners on mount
     useEffect(() => {
-        // Listen for notifications received while app is foregrounded
         notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
             setNotification(notification);
         });
 
-        // Listen for user interaction with notifications
         responseListener.current = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
 
         return () => {
-            if (notificationListener.current) {
-                notificationListener.current.remove();
-            }
-            if (responseListener.current) {
-                responseListener.current.remove();
-            }
+            notificationListener.current?.remove();
+            responseListener.current?.remove();
         };
     }, [handleNotificationResponse]);
 
-    // Auto-register token when user is logged in (with retry on failure)
+    // Auto-register token when user is logged in (with retry)
     useEffect(() => {
         let retryCount = 0;
         let timer: ReturnType<typeof setTimeout>;
@@ -395,16 +370,13 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                     await registerToken();
                 }
             } catch {
-                // Retry up to 3 times with exponential backoff
                 if (retryCount < 3) {
                     retryCount++;
-                    const delay = 2000 * Math.pow(2, retryCount); // 4s, 8s, 16s
-                    timer = setTimeout(checkAndRegister, delay);
+                    timer = setTimeout(checkAndRegister, 2000 * Math.pow(2, retryCount));
                 }
             }
         };
 
-        // Small delay to ensure auth is initialized
         timer = setTimeout(checkAndRegister, 1000);
         return () => clearTimeout(timer);
     }, [registerToken]);

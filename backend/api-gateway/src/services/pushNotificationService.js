@@ -75,7 +75,7 @@ const isExpoToken = (token) => {
  * @param {string} options.channelId - Android notification channel
  * @returns {Promise<Object>} - Send result
  */
-const sendExpoNotification = async ({ to, title, body, data = {}, sound = 'default', badge, channelId, categoryId }) => {
+const sendExpoNotification = async ({ to, title, body, data = {}, sound = 'default', badge, channelId, categoryId, priority }) => {
     if (!Expo.isExpoPushToken(to)) {
         throw new Error(`Invalid Expo push token: ${to}`);
     }
@@ -86,6 +86,7 @@ const sendExpoNotification = async ({ to, title, body, data = {}, sound = 'defau
         body,
         data,
         sound,
+        priority: priority || 'default',
         ...(badge !== undefined && { badge }),
         ...(channelId && { channelId }),
         ...(categoryId && { categoryId }),
@@ -188,8 +189,10 @@ const sendBulkNotifications = async (notifications) => {
                 body: notification.body,
                 data: notification.data || {},
                 sound: notification.sound || 'default',
+                priority: notification.priority || 'default',
                 ...(notification.badge !== undefined && { badge: notification.badge }),
                 ...(notification.channelId && { channelId: notification.channelId }),
+                ...(notification.categoryId && { categoryId: notification.categoryId }),
             });
         } else {
             fcmMessages.push(notification);
@@ -316,6 +319,8 @@ const sendCallNotification = async ({ pushToken, callerName, callType, data }) =
         },
         channelId: 'calls',
         sound: 'default',
+        categoryId: 'incoming_call',
+        priority: 'high',
     });
 };
 
