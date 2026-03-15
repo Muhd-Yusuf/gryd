@@ -2,13 +2,13 @@
  * Call Modal Component - Native Implementation
  * Full-screen modal for voice/video calls with real video rendering
  *
- * This file is used for NATIVE builds (APK/IPA) where react-native-agora is available.
- * For web platform, Metro automatically loads CallModal.web.tsx instead.
+ * Uses RtcSurfaceView for remote video (full-screen, no z-order issues)
+ * Uses RtcTextureView for local self-view (TextureView has no z-order issues on Android)
  *
- * Uses react-native-agora's RtcSurfaceView for video display.
+ * Android SurfaceView renders on a separate layer and ignores View hierarchy z-ordering.
+ * Two overlapping SurfaceViews will fight for rendering priority. TextureView doesn't
+ * have this problem - it renders as a regular View and respects z-ordering.
  */
-
-console.log('[CallModal] Loading NATIVE implementation (CallModal.tsx)');
 
 import React, { useMemo } from 'react';
 import {
@@ -17,7 +17,6 @@ import {
     Text,
     Modal,
     TouchableOpacity,
-    Dimensions,
     Platform,
 } from 'react-native';
 import { Phone, Video, VideoOff, Mic, MicOff, PhoneOff, Volume2, VolumeX, SwitchCamera } from 'lucide-react-native';
@@ -25,29 +24,21 @@ import { useTheme } from '../lib/theme';
 import { CallState, CallType, IncomingCall, CallSession } from '../hooks';
 import UserAvatar from './UserAvatar';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+type AgoraModule = typeof import('react-native-agora');
 
-type AgoraUiModule = typeof import('react-native-agora');
+let cachedModule: AgoraModule | null | undefined;
 
-let cachedAgoraUiModule: AgoraUiModule | null | undefined;
-
-const getAgoraUiModule = (): AgoraUiModule | null => {
-    if (cachedAgoraUiModule !== undefined) {
-        return cachedAgoraUiModule;
-    }
-
+const getAgora = (): AgoraModule | null => {
+    if (cachedModule !== undefined) return cachedModule;
     try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const mod: AgoraUiModule = require('react-native-agora');
-
-        // Touch exports to eagerly surface the common "not linked" Proxy error.
+        const mod: AgoraModule = require('react-native-agora');
         void mod.RtcSurfaceView;
+        void mod.RtcTextureView;
         void mod.RenderModeType;
-
-        cachedAgoraUiModule = mod;
-        return cachedAgoraUiModule;
+        cachedModule = mod;
+        return mod;
     } catch {
-        cachedAgoraUiModule = null;
+        cachedModule = null;
         return null;
     }
 };
@@ -67,7 +58,7 @@ interface CallModalProps {
     peerName: string;
     peerAvatar?: string;
     selfAvatar?: string;
-    engine: any; // IRtcEngine from react-native-agora
+    engine: any;
     onAnswer: () => void;
     onDecline: () => void;
     onHangup: () => void;
@@ -109,15 +100,18 @@ export const CallModal: React.FC<CallModalProps> = ({
 }) => {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
-    const agoraUi = useMemo(() => getAgoraUiModule(), []);
-    const RtcSurfaceView = agoraUi?.RtcSurfaceView as any;
-    const RenderModeType = agoraUi?.RenderModeType as any;
+    const agora = useMemo(() => getAgora(), []);
+
+    const RtcSurfaceView = agora?.RtcSurfaceView as any;
+    const RtcTextureView = agora?.RtcTextureView as any;
+    const RenderModeType = agora?.RenderModeType as any;
 
     const isIncoming = !!incomingCall && callState === 'idle';
     const isConnecting = callState === 'initiating' || callState === 'ringing' || callState === 'connecting';
     const isConnected = callState === 'connected';
     const isVideoCall = callType === 'video';
-    const incomingAvatar = incomingCall?.callerAvatar || peerAvatar || null;
+    const hasRemoteVideo = remoteUsers.length > 0 && engine;
+    const hasAgora = RtcSurfaceView && RtcTextureView && RenderModeType;
 
     const getStatusText = () => {
         if (error) return error;
@@ -131,13 +125,16 @@ export const CallModal: React.FC<CallModalProps> = ({
         }
     };
 
-    // Render incoming call UI
+    // Incoming call UI
     if (isIncoming) {
+        const incomingAvatar = incomingCall?.callerAvatar || peerAvatar || null;
         return (
             <Modal visible={visible} animationType="slide" statusBarTranslucent>
                 <View style={styles.incomingContainer}>
                     <View style={styles.incomingContent}>
-                        <Text style={styles.incomingLabel}>Incoming {incomingCall?.callType === 'video' ? 'Video' : 'Voice'} Call</Text>
+                        <Text style={styles.incomingLabel}>
+                            Incoming {incomingCall?.callType === 'video' ? 'Video' : 'Voice'} Call
+                        </Text>
                         <UserAvatar
                             uri={incomingAvatar}
                             name={incomingCall?.callerName || peerName}
@@ -162,132 +159,112 @@ export const CallModal: React.FC<CallModalProps> = ({
         );
     }
 
-    // Render active call UI
+    // Active call UI
     return (
         <Modal visible={visible} animationType="fade" statusBarTranslucent>
             <View style={styles.container}>
-                {/* Video Call Layout */}
                 {isVideoCall ? (
                     <View style={styles.videoContainer}>
-                        {/* Remote Video - wrapped in stable container so child indices never shift */}
-                        <View style={{ flex: 1 }}>
-                            {RtcSurfaceView && RenderModeType && remoteUsers.length > 0 && engine ? (
-                                <RtcSurfaceView
-                                    style={styles.remoteVideo}
-                                    canvas={{
-                                        uid: remoteUsers[0],
-                                        renderMode: RenderModeType.RenderModeFit,
-                                    }}
+                        {/* REMOTE VIDEO (full-screen) - uses SurfaceView for best performance */}
+                        {hasAgora && hasRemoteVideo ? (
+                            <RtcSurfaceView
+                                style={StyleSheet.absoluteFill}
+                                canvas={{
+                                    uid: remoteUsers[0],
+                                    renderMode: RenderModeType.RenderModeFit,
+                                }}
+                            />
+                        ) : (
+                            <View style={styles.videoPlaceholder}>
+                                <UserAvatar
+                                    uri={peerAvatar}
+                                    name={peerName}
+                                    style={styles.videoPlaceholderAvatar}
                                 />
-                            ) : (
-                                <View style={styles.videoPlaceholder}>
-                                    <UserAvatar
-                                        uri={peerAvatar}
-                                        name={peerName}
-                                        style={styles.videoPlaceholderAvatar}
-                                    />
-                                    <Text style={styles.videoPlaceholderName}>{peerName}</Text>
-                                    {isConnecting && <Text style={styles.connectingText}>{getStatusText()}</Text>}
-                                </View>
-                            )}
-                        </View>
+                                <Text style={styles.videoPlaceholderName}>{peerName}</Text>
+                                {isConnecting && <Text style={styles.connectingText}>{getStatusText()}</Text>}
+                            </View>
+                        )}
 
-                        {/* Local Video Preview - always child index 1, never shifts */}
-                        <View style={[styles.localVideoContainer, (!isVideoEnabled && styles.localVideoDisabled)]}>
-                            {RtcSurfaceView && RenderModeType && engine && isVideoEnabled ? (
+                        {/* LOCAL SELF-VIEW (small overlay) - uses TextureView to avoid z-order conflicts */}
+                        <View style={styles.localVideoContainer}>
+                            {hasAgora && engine && isVideoEnabled ? (
                                 <>
-                                    <RtcSurfaceView
+                                    <RtcTextureView
                                         style={styles.localVideo}
                                         canvas={{
                                             uid: 0,
                                             renderMode: RenderModeType.RenderModeHidden,
                                         }}
                                     />
-                                    <TouchableOpacity style={styles.switchCameraButton} onPress={onSwitchCamera}>
-                                        <SwitchCamera size={18} color="#FFFFFF" />
+                                    <TouchableOpacity style={styles.switchCameraBtn} onPress={onSwitchCamera}>
+                                        <SwitchCamera size={16} color="#FFFFFF" />
                                     </TouchableOpacity>
                                 </>
                             ) : (
-                                <VideoOff size={32} color="#FFFFFF" />
+                                <View style={styles.localVideoOff}>
+                                    <VideoOff size={28} color="#FFFFFF" />
+                                </View>
                             )}
                         </View>
 
-                        {/* Duration overlay */}
-                        <View style={[styles.durationOverlay, { display: isConnected ? 'flex' : 'none' }]}>
-                            <Text style={styles.durationText}>{formatDuration(callDuration)}</Text>
-                        </View>
+                        {/* Duration */}
+                        {isConnected && (
+                            <View style={styles.durationOverlay}>
+                                <Text style={styles.durationText}>{formatDuration(callDuration)}</Text>
+                            </View>
+                        )}
                     </View>
                 ) : (
                     /* Audio Call Layout */
                     <View style={styles.audioContainer}>
                         <View style={styles.audioContent}>
-                            <UserAvatar
-                                uri={peerAvatar}
-                                name={peerName}
-                                style={styles.audioAvatar}
-                            />
+                            <UserAvatar uri={peerAvatar} name={peerName} style={styles.audioAvatar} />
                             <Text style={styles.audioName}>{peerName}</Text>
                             <Text style={styles.audioStatus}>{getStatusText()}</Text>
                         </View>
                     </View>
                 )}
 
-                {/* Error display */}
+                {/* Error */}
                 {error && (
                     <View style={styles.errorContainer}>
                         <Text style={styles.errorText}>{error}</Text>
                     </View>
                 )}
 
-                {/* Call controls */}
+                {/* Controls */}
                 <View style={styles.controlsContainer}>
                     <View style={styles.controls}>
-                        {/* Mute button */}
                         <TouchableOpacity
                             style={[styles.controlButton, isMuted && styles.controlButtonActive]}
                             onPress={onToggleMute}
                         >
-                            {isMuted ? (
-                                <MicOff size={28} color="#EF4444" />
-                            ) : (
-                                <Mic size={28} color="#FFFFFF" />
-                            )}
+                            {isMuted ? <MicOff size={28} color="#EF4444" /> : <Mic size={28} color="#FFFFFF" />}
                         </TouchableOpacity>
 
-                        {/* Video toggle (only for video calls) */}
                         {isVideoCall && (
                             <TouchableOpacity
                                 style={[styles.controlButton, !isVideoEnabled && styles.controlButtonActive]}
                                 onPress={onToggleVideo}
                             >
-                                {isVideoEnabled ? (
-                                    <Video size={28} color="#FFFFFF" />
-                                ) : (
-                                    <VideoOff size={28} color="#EF4444" />
-                                )}
+                                {isVideoEnabled ? <Video size={28} color="#FFFFFF" /> : <VideoOff size={28} color="#EF4444" />}
                             </TouchableOpacity>
                         )}
 
-                        {/* End call button */}
                         <TouchableOpacity style={styles.endCallButton} onPress={onHangup}>
                             <PhoneOff size={32} color="#FFFFFF" />
                         </TouchableOpacity>
 
-                        {/* Speaker button (audio calls) */}
                         {!isVideoCall && (
                             <TouchableOpacity
                                 style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
                                 onPress={onToggleSpeaker}
                             >
-                                {isSpeakerOn ? (
-                                    <Volume2 size={28} color="#FFFFFF" />
-                                ) : (
-                                    <VolumeX size={28} color="#FFFFFF" />
-                                )}
+                                {isSpeakerOn ? <Volume2 size={28} color="#FFFFFF" /> : <VolumeX size={28} color="#FFFFFF" />}
                             </TouchableOpacity>
                         )}
 
-                        {/* Switch camera (video calls) */}
                         {isVideoCall && (
                             <TouchableOpacity style={styles.controlButton} onPress={onSwitchCamera}>
                                 <SwitchCamera size={28} color="#FFFFFF" />
@@ -304,10 +281,10 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: '#000000',
         },
 
-        // Incoming call styles
+        // Incoming call
         incomingContainer: {
             flex: 1,
             backgroundColor: colors.appBg,
@@ -356,13 +333,10 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             justifyContent: 'center',
         },
 
-        // Video call styles
+        // Video call
         videoContainer: {
             flex: 1,
             backgroundColor: '#000000',
-        },
-        remoteVideo: {
-            flex: 1,
         },
         videoPlaceholder: {
             flex: 1,
@@ -388,6 +362,8 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             fontSize: 16,
             color: colors.textMuted,
         },
+
+        // Local self-view - elevated above remote SurfaceView
         localVideoContainer: {
             position: 'absolute',
             top: Platform.OS === 'ios' ? 60 : 40,
@@ -396,45 +372,51 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             height: 160,
             borderRadius: 12,
             overflow: 'hidden',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: '#1a1a1a',
             borderWidth: 2,
-            borderColor: colors.border,
+            borderColor: 'rgba(255,255,255,0.3)',
+            elevation: 10, // Android: ensure above SurfaceView
+            zIndex: 10,
         },
         localVideo: {
             flex: 1,
         },
-        localVideoDisabled: {
+        localVideoOff: {
+            flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
+            backgroundColor: '#1a1a1a',
         },
-        switchCameraButton: {
+        switchCameraBtn: {
             position: 'absolute',
-            bottom: 8,
-            right: 8,
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: 'rgba(0,0,0,0.5)',
+            bottom: 6,
+            right: 6,
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: 'rgba(0,0,0,0.6)',
             alignItems: 'center',
             justifyContent: 'center',
         },
+
         durationOverlay: {
             position: 'absolute',
             top: Platform.OS === 'ios' ? 60 : 40,
             left: 20,
             paddingHorizontal: 16,
             paddingVertical: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: 'rgba(0,0,0,0.6)',
             borderRadius: 20,
+            zIndex: 10,
         },
         durationText: {
             fontSize: 16,
             fontWeight: '600',
-            color: colors.text,
+            color: '#FFFFFF',
             fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
         },
 
-        // Audio call styles
+        // Audio call
         audioContainer: {
             flex: 1,
             backgroundColor: colors.appBg,
@@ -463,7 +445,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             color: colors.textMuted,
         },
 
-        // Error styles
+        // Error
         errorContainer: {
             position: 'absolute',
             top: Platform.OS === 'ios' ? 100 : 80,
@@ -472,6 +454,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             padding: 12,
             backgroundColor: 'rgba(239, 68, 68, 0.9)',
             borderRadius: 12,
+            zIndex: 20,
         },
         errorText: {
             fontSize: 14,
@@ -479,7 +462,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             textAlign: 'center',
         },
 
-        // Controls styles
+        // Controls
         controlsContainer: {
             position: 'absolute',
             bottom: 0,
@@ -488,6 +471,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             paddingBottom: Platform.OS === 'ios' ? 40 : 30,
             paddingTop: 20,
             backgroundColor: 'rgba(0,0,0,0.6)',
+            zIndex: 20,
         },
         controls: {
             flexDirection: 'row',
@@ -499,12 +483,12 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             width: 56,
             height: 56,
             borderRadius: 28,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: 'rgba(255,255,255,0.2)',
             alignItems: 'center',
             justifyContent: 'center',
         },
         controlButtonActive: {
-            backgroundColor: colors.surface,
+            backgroundColor: 'rgba(255,255,255,0.35)',
         },
         endCallButton: {
             width: 72,
