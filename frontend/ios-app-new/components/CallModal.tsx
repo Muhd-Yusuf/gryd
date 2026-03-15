@@ -169,29 +169,30 @@ export const CallModal: React.FC<CallModalProps> = ({
                 {/* Video Call Layout */}
                 {isVideoCall ? (
                     <View style={styles.videoContainer}>
-                        {/* Remote Video - always render both, toggle visibility to prevent remount */}
-                        {RtcSurfaceView && RenderModeType && remoteUsers.length > 0 && engine && (
-                            <RtcSurfaceView
-                                style={styles.remoteVideo}
-                                canvas={{
-                                    uid: remoteUsers[0],
-                                    renderMode: RenderModeType.RenderModeFit,
-                                }}
-                            />
-                        )}
-                        {(!RtcSurfaceView || !RenderModeType || remoteUsers.length === 0 || !engine) && (
-                            <View style={styles.videoPlaceholder}>
-                                <UserAvatar
-                                    uri={peerAvatar}
-                                    name={peerName}
-                                    style={styles.videoPlaceholderAvatar}
+                        {/* Remote Video - wrapped in stable container so child indices never shift */}
+                        <View style={{ flex: 1 }}>
+                            {RtcSurfaceView && RenderModeType && remoteUsers.length > 0 && engine ? (
+                                <RtcSurfaceView
+                                    style={styles.remoteVideo}
+                                    canvas={{
+                                        uid: remoteUsers[0],
+                                        renderMode: RenderModeType.RenderModeFit,
+                                    }}
                                 />
-                                <Text style={styles.videoPlaceholderName}>{peerName}</Text>
-                                {isConnecting && <Text style={styles.connectingText}>{getStatusText()}</Text>}
-                            </View>
-                        )}
+                            ) : (
+                                <View style={styles.videoPlaceholder}>
+                                    <UserAvatar
+                                        uri={peerAvatar}
+                                        name={peerName}
+                                        style={styles.videoPlaceholderAvatar}
+                                    />
+                                    <Text style={styles.videoPlaceholderName}>{peerName}</Text>
+                                    {isConnecting && <Text style={styles.connectingText}>{getStatusText()}</Text>}
+                                </View>
+                            )}
+                        </View>
 
-                        {/* Local Video Preview - always mounted to prevent surface loss */}
+                        {/* Local Video Preview - always child index 1, never shifts */}
                         <View style={[styles.localVideoContainer, (!isVideoEnabled && styles.localVideoDisabled)]}>
                             {RtcSurfaceView && RenderModeType && engine && isVideoEnabled ? (
                                 <>
@@ -212,11 +213,9 @@ export const CallModal: React.FC<CallModalProps> = ({
                         </View>
 
                         {/* Duration overlay */}
-                        {isConnected && (
-                            <View style={styles.durationOverlay}>
-                                <Text style={styles.durationText}>{formatDuration(callDuration)}</Text>
-                            </View>
-                        )}
+                        <View style={[styles.durationOverlay, { display: isConnected ? 'flex' : 'none' }]}>
+                            <Text style={styles.durationText}>{formatDuration(callDuration)}</Text>
+                        </View>
                     </View>
                 ) : (
                     /* Audio Call Layout */

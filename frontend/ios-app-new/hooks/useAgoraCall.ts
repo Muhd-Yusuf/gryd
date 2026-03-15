@@ -214,31 +214,10 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                 channelProfile: agora.ChannelProfileType.ChannelProfileCommunication,
             });
 
-            // Helper: rebind local video surface after channel join or remote user change
-            const rebindLocalVideo = (delay = 0) => {
-                const doRebind = () => {
-                    const eng = engineRef.current;
-                    if (!eng) return;
-                    try {
-                        eng.setupLocalVideo({
-                            uid: 0,
-                            sourceType: 0, // VideoSourceCameraPrimary
-                            renderMode: 1, // RenderModeHidden
-                        });
-                        eng.startPreview();
-                        console.log('[Agora Native] Local video rebound');
-                    } catch (_) {}
-                };
-                if (delay > 0) setTimeout(doRebind, delay);
-                else doRebind();
-            };
-
             // Create event handler object
             eventHandlerRef.current = {
                 onJoinChannelSuccess: (connection: any, elapsed: number) => {
                     console.log('[Agora Native] Joined channel:', connection.channelId, 'uid:', connection.localUid);
-                    // After joining channel, rebind local video so self-view renders in-channel
-                    rebindLocalVideo(300);
                 },
                 onUserJoined: (connection: any, remoteUid: number, elapsed: number) => {
                     console.log('[Agora Native] Remote user joined:', remoteUid);
@@ -246,8 +225,6 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
                         if (prev.includes(remoteUid)) return prev;
                         return [...prev, remoteUid];
                     });
-                    // Rebind local video after remote surface mounts (can disrupt local surface)
-                    rebindLocalVideo(500);
                     // Transition to connected when remote user joins
                     if (callStateRef.current === 'ringing' || callStateRef.current === 'connecting') {
                         setCallState('connected');
