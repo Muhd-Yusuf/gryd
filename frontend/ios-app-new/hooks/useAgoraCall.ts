@@ -540,6 +540,27 @@ export const useAgoraCall = (options: UseAgoraCallOptions = {}) => {
         }
     }, []);
 
+    // Rebind local video after remote user joins
+    // This runs AFTER React's render cycle (after remote RtcSurfaceView has mounted)
+    // which is the correct time to re-setup the local video surface
+    useEffect(() => {
+        if (remoteUsers.length > 0 && engineRef.current && callType === 'video') {
+            const timers = [200, 500, 1000].map(delay =>
+                setTimeout(() => {
+                    const eng = engineRef.current;
+                    if (eng) {
+                        try {
+                            eng.setupLocalVideo({ uid: 0, sourceType: 0, renderMode: 1 });
+                            eng.startPreview();
+                            console.log(`[Agora Native] Local video rebound after ${delay}ms`);
+                        } catch (_) {}
+                    }
+                }, delay)
+            );
+            return () => timers.forEach(clearTimeout);
+        }
+    }, [remoteUsers.length, callType]);
+
     // Cleanup when call ends
     useEffect(() => {
         if (callState === 'ended') {
