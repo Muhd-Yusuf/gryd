@@ -7,6 +7,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import { Audio } from 'expo-av';
 import { subscribeToCallEventsAsync, declineCall as apiDeclineCall, endCall as apiEndCall } from '../lib/api';
 import { setCallNotificationHandlers, NotificationData } from './NotificationContext';
 import { useWebSocketContext } from './WebSocketContext';
@@ -72,6 +73,7 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
     const activeCallRef = useRef<ActiveCall | null>(null);
     const routerRef = useRef(router);
     const sseSetupRef = useRef(false);
+    const ringtoneRef = useRef<Audio.Sound | null>(null);
     const { subscribe } = useWebSocketContext();
     // Track handled call IDs to prevent showing the same incoming call multiple times
     // (can happen due to multiple SSE connections from hot-reload)
@@ -87,6 +89,47 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
     useEffect(() => {
         routerRef.current = router;
     }, [router]);
+
+    // Play ringtone when incoming call arrives, stop when answered/declined
+    useEffect(() => {
+        if (!incomingCall || Platform.OS === 'web') return;
+
+        let sound: Audio.Sound | null = null;
+
+        const playRingtone = async () => {
+            try {
+                // Set audio mode for ringtone playback
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: true,
+                    shouldDuckAndroid: false,
+                    playThroughEarpieceAndroid: false,
+                });
+
+                // Use system notification sound as ringtone
+                const { sound: ringtone } = await Audio.Sound.createAsync(
+                    require('../assets/ringtone.wav'),
+                    { isLooping: true, volume: 1.0, shouldPlay: true }
+                );
+                sound = ringtone;
+                ringtoneRef.current = ringtone;
+            } catch (err) {
+                console.warn('[CallContext] Failed to play ringtone:', err);
+            }
+        };
+
+        playRingtone();
+
+        // Stop ringtone on cleanup (call answered, declined, or cleared)
+        return () => {
+            if (sound) {
+                sound.stopAsync().catch(() => {});
+                sound.unloadAsync().catch(() => {});
+            }
+            ringtoneRef.current = null;
+        };
+    }, [incomingCall]);
 
     // Stable callback that uses refs instead of dependencies
     const handleCallEvent = useCallback((event: string, data: any) => {
