@@ -830,7 +830,7 @@ export default function TopContributorsScreen() {
                         <Text style={styles.navTabText}>Messages</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.navTab, styles.navTabActive]}>
-                        <Text style={[styles.navTabText, styles.navTabTextActive]}>Top Contributors</Text>
+                        <Text style={[styles.navTabText, styles.navTabTextActive]}>Leaderboard</Text>
                     </TouchableOpacity>
                 </ScrollView>
             </View>
@@ -906,7 +906,7 @@ export default function TopContributorsScreen() {
                                     <Text style={styles.mobileTopBarTitle} numberOfLines={1}>
                                         {activeSubgrid?.name || 'Server'}
                                     </Text>
-                                    <Text style={styles.mobileServerSubtitle}>Top Contributors</Text>
+                                    <Text style={styles.mobileServerSubtitle}>Leaderboard</Text>
                                 </View>
                             </View>
                             {/* Mobile Navigation Tabs */}
@@ -918,13 +918,13 @@ export default function TopContributorsScreen() {
                                     <Text style={styles.mobileNavTabText}>Messages</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.mobileNavTabActive}>
-                                    <Text style={styles.mobileNavTabTextActive}>Top Contributors</Text>
+                                    <Text style={styles.mobileNavTabTextActive}>Leaderboard</Text>
                                 </TouchableOpacity>
                             </ScrollView>
                         </View>
                     )}
                     <View style={styles.sidebarHeader}>
-                        <Text style={styles.sidebarTitle}>Top Contributors</Text>
+                        <Text style={styles.sidebarTitle}>Leaderboard</Text>
                     </View>
                     <ScrollView style={styles.contributorsList}>
                         {(contributors || []).map((stats) => {

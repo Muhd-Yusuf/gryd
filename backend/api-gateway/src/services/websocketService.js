@@ -6,6 +6,7 @@
 
 const { Server } = require('socket.io');
 const EventEmitter = require('events');
+const jwt = require('jsonwebtoken');
 
 class WebSocketService extends EventEmitter {
     constructor() {
@@ -71,14 +72,27 @@ class WebSocketService extends EventEmitter {
     /**
      * Authenticate user and associate socket with userId
      */
-    handleAuthenticate(socket, { userId, tenantId }) {
-        if (!userId) {
-            socket.emit('auth_error', { message: 'User ID required' });
+    handleAuthenticate(socket, { token, userId, tenantId }) {
+        let normalizedUserId;
+
+        // JWT token verification required
+        if (token) {
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                if (!decoded.userId) {
+                    socket.emit('auth_error', { message: 'Invalid token payload' });
+                    return;
+                }
+                normalizedUserId = String(decoded.userId);
+            } catch (err) {
+                socket.emit('auth_error', { message: 'Invalid or expired token' });
+                return;
+            }
+        } else {
+            socket.emit('auth_error', { message: 'Authentication token required' });
             return;
         }
 
-        // Normalize userId to string to ensure consistent lookups
-        const normalizedUserId = String(userId);
         const normalizedTenantId = tenantId ? String(tenantId) : null;
 
         // Store user-socket mapping

@@ -322,3 +322,42 @@ export const useNotificationPreferences = () => {
         staleTime: Infinity, // Show cached instantly
     });
 };
+
+// ==================
+// PRIVACY SETTINGS
+// ==================
+
+export const usePrivacySettings = () => {
+    return useQuery({
+        queryKey: ['privacy-settings'],
+        queryFn: async () => {
+            const response = await communityGet('/users/me/privacy');
+            return response?.data || {
+                profileVisibility: 'hidden',
+                allowDMsFrom: 'friends_only',
+                allowFriendRequestsFrom: 'everyone',
+                showOnlineStatus: true,
+            };
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+};
+
+export const useUpdatePrivacySettings = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (settings: {
+            profileVisibility?: string;
+            allowDMsFrom?: string;
+            allowFriendRequestsFrom?: string;
+            showOnlineStatus?: boolean;
+        }) => {
+            const response = await communityPatch('/users/me/privacy', settings);
+            return response?.data;
+        },
+        onSuccess: (data) => {
+            queryClient.setQueryData(['privacy-settings'], data);
+        },
+    });
+};

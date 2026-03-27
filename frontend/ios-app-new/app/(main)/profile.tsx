@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Sun, Moon, Camera, X, Check, AtSign, User, UserCircle, Mail, BadgeCheck, Building2, Users, LogOut, Edit2 } from 'lucide-react-native';
+import { ArrowLeft, Sun, Moon, Camera, X, Check, AtSign, User, UserCircle, Mail, BadgeCheck, Building2, Users, LogOut, Edit2, Shield, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
@@ -640,6 +640,25 @@ const ProfileScreen = () => {
                             </View>
                         </View>
                     )}
+
+                    {/* Privacy & Safety Section */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Settings</Text>
+                        <View style={styles.infoCard}>
+                            <TouchableOpacity
+                                style={styles.infoRow}
+                                onPress={() => router.push('/(main)/privacy-settings')}
+                                activeOpacity={0.7}
+                            >
+                                <Shield size={20} color={colors.primary} />
+                                <View style={styles.infoContent}>
+                                    <Text style={styles.infoLabel}>Privacy & Safety</Text>
+                                    <Text style={styles.infoValue}>Control who can see your profile</Text>
+                                </View>
+                                <ChevronRight size={18} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
                     {/* Logout Section */}
                     <View style={styles.section}>

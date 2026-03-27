@@ -13,23 +13,22 @@ const {
     addPaymentMethod,
 } = require('../controllers/billingController');
 const { attachUserContext, requireUser } = require('../middleware/authMiddleware');
-const { loadTenant, requireTenantMember } = require('../middleware/tenantAccess');
+const { loadTenant, requireTenantMember, requireTenantAdmin } = require('../middleware/tenantAccess');
 
 router.use(attachUserContext);
 
+// Read endpoints — any tenant member can view
 router.get('/tenants/:tenantId/account', requireUser, loadTenant, requireTenantMember, getBillingAccount);
-router.patch('/tenants/:tenantId/account', requireUser, loadTenant, requireTenantMember, updateBillingAccount);
-
 router.get('/tenants/:tenantId/subscription', requireUser, loadTenant, requireTenantMember, getSubscription);
-router.patch('/tenants/:tenantId/subscription', requireUser, loadTenant, requireTenantMember, updateSubscription);
-
 router.get('/tenants/:tenantId/usage', requireUser, loadTenant, requireTenantMember, listUsageEvents);
-router.post('/tenants/:tenantId/usage', requireUser, loadTenant, requireTenantMember, createUsageEvent);
-
 router.get('/tenants/:tenantId/invoices', requireUser, loadTenant, requireTenantMember, listInvoices);
-router.post('/tenants/:tenantId/invoices', requireUser, loadTenant, requireTenantMember, createInvoice);
-
 router.get('/tenants/:tenantId/payment-methods', requireUser, loadTenant, requireTenantMember, listPaymentMethods);
-router.post('/tenants/:tenantId/payment-methods', requireUser, loadTenant, requireTenantMember, addPaymentMethod);
+
+// Write endpoints — only tenant admin/owner can modify
+router.patch('/tenants/:tenantId/account', requireUser, loadTenant, requireTenantAdmin, updateBillingAccount);
+router.patch('/tenants/:tenantId/subscription', requireUser, loadTenant, requireTenantAdmin, updateSubscription);
+router.post('/tenants/:tenantId/usage', requireUser, loadTenant, requireTenantAdmin, createUsageEvent);
+router.post('/tenants/:tenantId/invoices', requireUser, loadTenant, requireTenantAdmin, createInvoice);
+router.post('/tenants/:tenantId/payment-methods', requireUser, loadTenant, requireTenantAdmin, addPaymentMethod);
 
 module.exports = router;

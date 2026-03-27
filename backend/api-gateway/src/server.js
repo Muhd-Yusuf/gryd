@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const helmet = require('helmet');
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
@@ -41,8 +42,16 @@ validateEnv();
 const app = express();
 const server = http.createServer(app);
 
+// Security headers
+app.use(helmet({
+    contentSecurityPolicy: false, // Disabled for API-only server
+    crossOriginEmbedderPolicy: false,
+}));
+
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 const corsOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
@@ -53,8 +62,8 @@ const corsOptions = {
         if (!origin) {
             return callback(null, true);
         }
-        // Always allow localhost for development
-        if (origin.match(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+        // Only allow localhost in development
+        if (!isProduction && origin.match(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
             return callback(null, true);
         }
         if (corsOrigins.length > 0 && corsOrigins.includes(origin)) {
@@ -70,13 +79,15 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
-// Debug: log all incoming requests
-app.use((req, res, next) => {
-    if (req.method !== 'OPTIONS') {
-        console.log(`[REQ] ${req.method} ${req.path} | user: ${req.headers['x-user-id'] || 'none'} | auth: ${req.headers.authorization ? 'yes' : 'no'}`);
-    }
-    next();
-});
+// Request logging — only in development, no sensitive data
+if (!isProduction) {
+    app.use((req, res, next) => {
+        if (req.method !== 'OPTIONS') {
+            console.log(`[REQ] ${req.method} ${req.path}`);
+        }
+        next();
+    });
+}
 
 app.use(metricsMiddleware);
 

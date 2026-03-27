@@ -60,7 +60,9 @@ type Member = {
         role?: string;
         stakeholderBadge?: StakeholderBadge;
         company?: string;
+        isPrivate?: boolean;
     };
+    isPrivate?: boolean;
 };
 
 const getMemberAvatarUrl = (member: Member) => {
@@ -90,6 +92,10 @@ const getMemberCompany = (member: Member): string | null => {
 
 const getMemberEmail = (member: Member): string | null => {
     return member.user?.email || member.email || null;
+};
+
+const isMemberPrivate = (member: Member): boolean => {
+    return member.isPrivate === true || member.user?.isPrivate === true;
 };
 
 const formatBadgeLabel = (badge: StakeholderBadge | string): string => {
@@ -299,7 +305,7 @@ const TopContributorsScreen = () => {
                         </View>
 
                         <View style={styles.mainPanel}>
-                            <Text style={styles.panelTitle}>Top Contributors</Text>
+                            <Text style={styles.panelTitle}>Leaderboard</Text>
 
                             {!!error && <Text style={styles.errorText}>{error}</Text>}
 
@@ -410,6 +416,14 @@ const TopContributorsScreen = () => {
 
                                 {/* About Card */}
                                 <View style={styles.aboutCard}>
+                                    {isMemberPrivate(selectedContributor.member) ? (
+                                        <View style={styles.aboutSection}>
+                                            <Text style={[styles.aboutValue, { textAlign: 'center', fontStyle: 'italic' }]}>
+                                                This member's profile is private. Send a friend request to see their details.
+                                            </Text>
+                                        </View>
+                                    ) : (
+                                    <>
                                     <View style={styles.aboutSection}>
                                         <Text style={styles.aboutLabel}>About {selectedContributor.name}</Text>
                                         <Text style={styles.aboutValue}>
@@ -438,6 +452,8 @@ const TopContributorsScreen = () => {
                                             </View>
                                             <Text style={styles.aboutValue}>{getMemberCompany(selectedContributor.member)}</Text>
                                         </View>
+                                    )}
+                                    </>
                                     )}
 
                                     <View style={styles.aboutSection}>

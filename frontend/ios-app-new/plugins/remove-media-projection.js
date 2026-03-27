@@ -1,6 +1,6 @@
-const { withAndroidManifest } = require('expo/config-plugins');
+const { withAndroidManifest, withAppBuildGradle } = require('expo/config-plugins');
 
-module.exports = function removeMediaProjection(config) {
+function withRemoveMediaProjectionManifest(config) {
     return withAndroidManifest(config, async (config) => {
         const manifest = config.modResults.manifest;
 
@@ -38,4 +38,39 @@ module.exports = function removeMediaProjection(config) {
 
         return config;
     });
+}
+
+function withExcludeScreenSharing(config) {
+    return withAppBuildGradle(config, (config) => {
+        const contents = config.modResults.contents;
+
+        // Exclude the Agora screen-sharing module that injects FOREGROUND_SERVICE_MEDIA_PROJECTION
+        // This prevents the dependency from being included in the build at all
+        if (!contents.includes('exclude group: \'io.agora.rtc\', module: \'full-screen-sharing\'')) {
+            // Add a configurations block to exclude the screen-sharing module
+            const excludeBlock = `
+configurations.all {
+    exclude group: 'io.agora.rtc', module: 'full-screen-sharing'
+}
+`;
+            // Insert after the android { } block closes — find the dependencies block
+            if (contents.includes('dependencies {')) {
+                config.modResults.contents = contents.replace(
+                    'dependencies {',
+                    excludeBlock + '\ndependencies {'
+                );
+            } else {
+                // Append at end if no dependencies block found
+                config.modResults.contents = contents + '\n' + excludeBlock;
+            }
+        }
+
+        return config;
+    });
+}
+
+module.exports = function removeMediaProjection(config) {
+    config = withRemoveMediaProjectionManifest(config);
+    config = withExcludeScreenSharing(config);
+    return config;
 };

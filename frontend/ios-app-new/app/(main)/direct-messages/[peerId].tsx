@@ -1614,7 +1614,7 @@ const DirectMessageChatScreen = () => {
                     {!!recordingError && <Text style={styles.recordingError}>{recordingError}</Text>}
                 </View>
 
-                {/* Right Sidebar - Top Contributors */}
+                {/* Right Sidebar - Leaderboard */}
                 {showContributors && (
                     <View style={styles.sidebar}>
                         <View style={styles.sidebarHeader}>
@@ -1625,7 +1625,7 @@ const DirectMessageChatScreen = () => {
                                     style={styles.sidebarLogo}
                                 />
                             </View>
-                            <Text style={styles.sidebarTitle}>Top Contributors</Text>
+                            <Text style={styles.sidebarTitle}>Leaderboard</Text>
                         </View>
                         <ScrollView style={styles.contributorsList}>
                             <Text style={styles.emptyText}>No contributors data available</Text>

@@ -29,7 +29,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.thegryd.app",
+      "package": "com.gryd.app",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "CAMERA",
@@ -91,7 +91,8 @@
         }
       ],
       "expo-asset",
-      "./plugins/remove-media-projection"
+      "./plugins/remove-media-projection",
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

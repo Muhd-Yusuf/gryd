@@ -28,6 +28,8 @@ const {
     canWriteInSubgrid,
 } = require('../services/permissionService');
 const { filterContent } = require('../services/contentFilterService');
+const PrivacySettings = require('../models/PrivacySettings');
+const { maskUsersForViewer, canSendDM, canSendFriendRequest } = require('../middleware/privacyMiddleware');
 
 const slugify = (value) => {
     return String(value || '')
@@ -37,7 +39,11 @@ const slugify = (value) => {
         .replace(/(^-|-$)/g, '');
 };
 
-const buildDbName = (slug, id) => `tenant_${slug}_${id}`;
+const buildDbName = (slug, id) => {
+    const safeSlug = String(slug).replace(/[^a-zA-Z0-9_-]/g, '');
+    const safeId = String(id).replace(/[^a-zA-Z0-9]/g, '');
+    return `tenant_${safeSlug}_${safeId}`;
+};
 
 const resolveSubgridContext = async (subgridId) => {
     if (!mongoose.Types.ObjectId.isValid(subgridId)) {
@@ -940,9 +946,17 @@ exports.listSubgridMembers = async (req, res) => {
             userMap[u._id.toString()] = u;
         });
 
+        // Apply privacy masking to users
+        const viewerUser = await User.findById(req.user?.id).lean();
+        const maskedUsers = await maskUsersForViewer(req.user?.id, viewerUser || { role: 'member' }, users, subgridId);
+        const maskedUserMap = {};
+        maskedUsers.forEach(u => {
+            maskedUserMap[String(u._id)] = u;
+        });
+
         // Merge user data into members - nest user data for frontend compatibility
         const enrichedMembers = members.map(m => {
-            const user = userMap[m.userId.toString()] || {};
+            const user = maskedUserMap[m.userId.toString()] || {};
             return {
                 ...m,
                 // Nested user object for TopContributorsScreen compatibility
@@ -958,6 +972,7 @@ exports.listSubgridMembers = async (req, res) => {
                     role: user.role || 'member',
                     stakeholderBadge: user.stakeholderBadge || null,
                     company: user.company || null,
+                    isPrivate: user.isPrivate || false,
                 },
                 // Keep flat fields for backward compatibility
                 firstName: user.firstName || '',
@@ -968,6 +983,7 @@ exports.listSubgridMembers = async (req, res) => {
                 userRole: user.role || 'member',
                 stakeholderBadge: user.stakeholderBadge || null,
                 company: user.company || null,
+                isPrivate: user.isPrivate || false,
                 // Custom role assigned by CU Admin
                 customRole: m.customRoleId || null,
             };
@@ -3371,20 +3387,22 @@ exports.listDMConversations = async (req, res) => {
             { $sort: { lastMessageAt: -1 } },
         ]);
 
-        // Enrich with user info
-        const User = require('../models/User');
+        // Enrich with user info and apply privacy masking
         const peerIds = conversations.map(c => c._id);
-        const users = await User.find({ _id: { $in: peerIds } }).select('firstName lastName avatarUrl email');
-        const userMap = {};
-        users.forEach(u => { userMap[String(u._id)] = u; });
+        const peerUsers = await User.find({ _id: { $in: peerIds } }).select('firstName lastName avatarUrl email role stakeholderBadge company');
+        const viewerUser = await User.findById(userId).lean();
+        const maskedPeers = await maskUsersForViewer(userId, viewerUser || { role: 'member' }, peerUsers, subgridId);
+        const peerMap = {};
+        maskedPeers.forEach(u => { peerMap[String(u._id)] = u; });
 
         const result = conversations.map(c => ({
             peerId: c._id,
-            peer: userMap[c._id] ? {
+            peer: peerMap[c._id] ? {
                 _id: c._id,
-                firstName: userMap[c._id].firstName,
-                lastName: userMap[c._id].lastName,
-                avatarUrl: userMap[c._id].avatarUrl,
+                firstName: peerMap[c._id].firstName,
+                lastName: peerMap[c._id].lastName,
+                avatarUrl: peerMap[c._id].avatarUrl,
+                isPrivate: peerMap[c._id].isPrivate || false,
             } : { _id: c._id, firstName: 'Unknown', lastName: 'User' },
             lastMessage: {
                 _id: c.lastMessage._id,
@@ -3520,6 +3538,12 @@ exports.createDirectMessage = async (req, res) => {
         const isFriend = await hasFriendship(subgridId, senderId, recipientId);
         if (!isFriend) {
             return res.status(403).json({ message: 'Friendship required to send messages' });
+        }
+
+        // Check recipient's DM privacy settings
+        const dmCheck = await canSendDM(senderId, recipientId, subgridId);
+        if (!dmCheck.allowed) {
+            return res.status(403).json({ message: dmCheck.reason });
         }
 
         // Apply content moderation filter
@@ -3727,6 +3751,32 @@ const mapUsersById = async (ids) => {
     }, {});
 };
 
+const mapUsersByIdWithPrivacy = async (ids, viewerUserId, subgridId) => {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean).map((id) => String(id))));
+    if (uniqueIds.length === 0) {
+        return {};
+    }
+    const users = await User.find({ _id: { $in: uniqueIds } });
+    const viewerUser = await User.findById(viewerUserId).lean();
+    const maskedUsers = await maskUsersForViewer(viewerUserId, viewerUser || { role: 'member' }, users, subgridId);
+    return maskedUsers.reduce((acc, user) => {
+        acc[String(user._id)] = {
+            id: String(user._id),
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            username: user.username,
+            avatarUrl: user.avatarUrl,
+            bannerUrl: user.bannerUrl,
+            role: user.role || 'member',
+            stakeholderBadge: user.stakeholderBadge || null,
+            company: user.company || null,
+            isPrivate: user.isPrivate || false,
+        };
+        return acc;
+    }, {});
+};
+
 exports.listFriends = async (req, res) => {
     try {
         const { subgridId } = req.params;
@@ -3737,7 +3787,7 @@ exports.listFriends = async (req, res) => {
 
         const friendships = await Friendship.find({ subgridId, userId });
         const friendIds = friendships.map((friend) => String(friend.friendId));
-        const users = await mapUsersById(friendIds);
+        const users = await mapUsersByIdWithPrivacy(friendIds, userId, subgridId);
 
         return res.status(200).json({ success: true, data: { friends: friendIds, users } });
     } catch (error) {
@@ -3772,7 +3822,7 @@ exports.listMutualFriends = async (req, res) => {
             .filter((id) => myFriendSet.has(id));
 
         const uniqueMutualIds = [...new Set(mutualIds)];
-        const users = await mapUsersById(uniqueMutualIds);
+        const users = await mapUsersByIdWithPrivacy(uniqueMutualIds, userId, subgridId);
 
         return res.status(200).json({ success: true, data: { friends: uniqueMutualIds, users } });
     } catch (error) {
@@ -3822,7 +3872,7 @@ exports.listFriendRequests = async (req, res) => {
 
         const requests = await FriendRequest.find(filter).sort({ createdAt: -1 });
         const userIds = requests.flatMap((request) => [String(request.requesterId), String(request.recipientId)]);
-        const users = await mapUsersById(userIds);
+        const users = await mapUsersByIdWithPrivacy(userIds, userId, subgridId);
 
         return res.status(200).json({
             success: true,
@@ -3859,6 +3909,13 @@ exports.createFriendRequest = async (req, res) => {
 
         if (await isBlockedPair(subgridId, requesterId, recipientId)) {
             return res.status(403).json({ message: 'Friend request blocked' });
+        }
+
+        // Check recipient's friend request privacy settings
+        const requesterUser = await User.findById(requesterId).lean();
+        const frCheck = await canSendFriendRequest(requesterUser || { role: 'member' }, recipientId);
+        if (!frCheck.allowed) {
+            return res.status(403).json({ message: frCheck.reason });
         }
 
         const existingFriendship = await Friendship.findOne({
@@ -4510,13 +4567,11 @@ exports.setOffline = async (req, res) => {
  * Allowed: post author or subgrid admin/moderator
  */
 exports.deletePost = async (req, res) => {
-    console.log('[deletePost] Called with params:', req.params);
     try {
         const { subgridId, postId } = req.params;
 
         const subgrid = await getSubgrid(req, subgridId);
         if (!subgrid) {
-            console.log('[deletePost] Subgrid not found:', subgridId);
             return res.status(404).json({ message: 'Subgrid not found' });
         }
 
@@ -4527,18 +4582,7 @@ exports.deletePost = async (req, res) => {
 
         const { Post } = await getTenantModels(subgrid);
         const post = await Post.findById(postId);
-        console.log('[deletePost] Debug:', {
-            postId,
-            subgridId,
-            userId,
-            post: post ? {
-                _id: post._id,
-                authorId: post.authorId,
-                subgridId: post.subgridId,
-            } : null,
-        });
         if (!post) {
-            console.log('[deletePost] Post not found with ID:', postId);
             return res.status(404).json({ message: 'Post not found' });
         }
 
@@ -4564,9 +4608,6 @@ exports.deletePost = async (req, res) => {
  * Allowed: message sender or subgrid admin/moderator
  */
 exports.deleteMessage = async (req, res) => {
-    console.log('[deleteMessage] Called with params:', req.params);
-    console.log('[deleteMessage] req.user:', req.user);
-    console.log('[deleteMessage] x-user-id header:', req.header('x-user-id'));
     try {
         const { subgridId, messageId } = req.params;
 
@@ -4587,25 +4628,9 @@ exports.deleteMessage = async (req, res) => {
         }
 
         const membership = await getSubgridMembership(subgrid.tenantId, subgridId, userId);
-        // Channel messages use authorId, direct messages use senderId
         const messageAuthorId = message.authorId || message.senderId;
         const isAuthor = String(messageAuthorId) === String(userId);
         const isAdminOrMod = membership && ['subgrid_admin', 'moderator'].includes(membership.role);
-
-        console.log('[deleteMessage] Debug:', {
-            messageId,
-            userId,
-            userIdType: typeof userId,
-            messageAuthorId: message.authorId,
-            messageAuthorIdType: typeof message.authorId,
-            messageSenderId: message.senderId,
-            resolvedAuthorId: messageAuthorId,
-            resolvedAuthorIdType: typeof messageAuthorId,
-            isAuthor,
-            stringComparison: `"${String(messageAuthorId)}" === "${String(userId)}"`,
-            membershipRole: membership?.role,
-            isAdminOrMod,
-        });
 
         if (!isAuthor && !isAdminOrMod) {
             return res.status(403).json({ message: 'You can only delete your own messages' });
@@ -5331,5 +5356,56 @@ exports.unbanUser = async (req, res) => {
         });
     } catch (error) {
         return res.status(500).json({ message: 'Failed to unban user' });
+    }
+};
+
+// ─── Privacy Settings ───────────────────────────────────────────────
+
+exports.getPrivacySettings = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const settings = await PrivacySettings.findOne({ userId }).lean();
+        return res.status(200).json({
+            success: true,
+            data: settings || {
+                profileVisibility: 'hidden',
+                allowDMsFrom: 'friends_only',
+                allowFriendRequestsFrom: 'everyone',
+                showOnlineStatus: true,
+            },
+        });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to get privacy settings' });
+    }
+};
+
+exports.updatePrivacySettings = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Authentication required' });
+        }
+
+        const { profileVisibility, allowDMsFrom, allowFriendRequestsFrom, showOnlineStatus } = req.body;
+
+        const updateData = {};
+        if (profileVisibility !== undefined) updateData.profileVisibility = profileVisibility;
+        if (allowDMsFrom !== undefined) updateData.allowDMsFrom = allowDMsFrom;
+        if (allowFriendRequestsFrom !== undefined) updateData.allowFriendRequestsFrom = allowFriendRequestsFrom;
+        if (showOnlineStatus !== undefined) updateData.showOnlineStatus = showOnlineStatus;
+
+        const settings = await PrivacySettings.findOneAndUpdate(
+            { userId },
+            { ...updateData, updatedAt: new Date() },
+            { upsert: true, new: true, runValidators: true }
+        ).lean();
+
+        return res.status(200).json({ success: true, data: settings });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to update privacy settings' });
     }
 };

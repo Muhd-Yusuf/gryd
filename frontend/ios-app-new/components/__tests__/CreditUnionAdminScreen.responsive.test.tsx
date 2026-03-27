@@ -239,7 +239,7 @@ const AdminLayoutReplica = ({ width }: AdminLayoutProps) => {
                         <Text>Messages</Text>
                     </TouchableOpacity>
                     <TouchableOpacity testID="tab-contributors">
-                        <Text>Top Contributors</Text>
+                        <Text>Leaderboard</Text>
                     </TouchableOpacity>
                 </ScrollView>
             </View>

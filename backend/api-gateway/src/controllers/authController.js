@@ -8,6 +8,35 @@ const SubgridMembership = require('../models/SubgridMembership');
 const Tenant = require('../models/Tenant');
 const TenantMembership = require('../models/TenantMembership');
 const { sendOtpEmail, sendStakeholderInviteEmail } = require('../services/emailService');
+const TokenBlacklist = require('../models/TokenBlacklist');
+
+// Email validation
+const isValidEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+// Sanitize string input — strip potential NoSQL injection operators
+const sanitizeInput = (value) => {
+    if (typeof value !== 'string') return '';
+    return value.replace(/[${}]/g, '').trim();
+};
+
+// Password validation — enforces minimum security requirements
+const validatePassword = (password) => {
+    if (!password || password.length < 8) {
+        return 'Password must be at least 8 characters';
+    }
+    if (!/[A-Z]/.test(password)) {
+        return 'Password must contain at least one uppercase letter';
+    }
+    if (!/[a-z]/.test(password)) {
+        return 'Password must contain at least one lowercase letter';
+    }
+    if (!/[0-9]/.test(password)) {
+        return 'Password must contain at least one number';
+    }
+    return null; // Valid
+};
 
 // In-memory OTP store (in production, use Redis)
 // Format: { email: { otp: string, expiresAt: number, attempts: number } }
@@ -24,14 +53,23 @@ const stakeholderInviteStore = new Map();
 // @access  Public
 exports.signup = async (req, res) => {
     try {
-        const { firstName, lastName, email, password, username } = req.body;
+        const firstName = sanitizeInput(req.body.firstName);
+        const lastName = sanitizeInput(req.body.lastName);
+        const email = sanitizeInput(req.body.email);
+        const password = req.body.password; // Don't sanitize password (could contain special chars)
+        const username = req.body.username ? sanitizeInput(req.body.username) : undefined;
 
         if (!firstName || !lastName || !email || !password) {
             return res.status(400).json({ message: 'All fields are required' });
         }
 
-        if (password.length < 6) {
-            return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        if (!isValidEmail(email)) {
+            return res.status(400).json({ message: 'Invalid email format' });
+        }
+
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            return res.status(400).json({ message: passwordError });
         }
 
         // Check if user exists
@@ -88,10 +126,15 @@ exports.signup = async (req, res) => {
 // @access  Public
 exports.login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = sanitizeInput(req.body.email);
+        const password = req.body.password;
 
         if (!email || !password) {
             return res.status(400).json({ message: 'Email and password are required' });
+        }
+
+        if (!isValidEmail(email)) {
+            return res.status(400).json({ message: 'Invalid email format' });
         }
 
         // Find user
@@ -133,6 +176,31 @@ exports.login = async (req, res) => {
     }
 };
 
+// @desc    Logout — blacklist current JWT token
+// @route   POST /api/auth/logout
+// @access  Private
+exports.logout = async (req, res) => {
+    try {
+        const authHeader = req.header('Authorization');
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(200).json({ message: 'Logged out' });
+        }
+        const token = authHeader.substring(7);
+        const decoded = jwt.decode(token);
+        if (decoded && decoded.exp) {
+            await TokenBlacklist.create({
+                token,
+                userId: req.user?.id || decoded.userId,
+                expiresAt: new Date(decoded.exp * 1000),
+            });
+        }
+        return res.status(200).json({ message: 'Logged out successfully' });
+    } catch (error) {
+        // Still return success — client should clear local state regardless
+        return res.status(200).json({ message: 'Logged out' });
+    }
+};
+
 // @desc    Get current user profile
 // @route   GET /api/auth/me
 // @access  Private
@@ -164,8 +232,9 @@ exports.setPassword = async (req, res) => {
     try {
         const { password, currentPassword } = req.body;
 
-        if (!password || password.length < 6) {
-            return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            return res.status(400).json({ message: passwordError });
         }
 
         const user = await User.findById(req.user?.id);
@@ -173,8 +242,11 @@ exports.setPassword = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // If user already has a password, verify current password
-        if (user.password && currentPassword) {
+        // If user already has a password, require and verify current password
+        if (user.password) {
+            if (!currentPassword) {
+                return res.status(400).json({ message: 'Current password is required' });
+            }
             const isMatch = await bcrypt.compare(currentPassword, user.password);
             if (!isMatch) {
                 return res.status(401).json({ message: 'Current password is incorrect' });
@@ -264,8 +336,9 @@ exports.signupWithCode = async (req, res) => {
             return res.status(400).json({ message: 'Invite code is required' });
         }
 
-        if (password.length < 6) {
-            return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            return res.status(400).json({ message: passwordError });
         }
 
         // Validate invite code
@@ -469,8 +542,9 @@ exports.signupSuperAdmin = async (req, res) => {
             return res.status(400).json({ message: 'All fields are required' });
         }
 
-        if (password.length < 6) {
-            return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            return res.status(400).json({ message: passwordError });
         }
 
         // Check if user exists
@@ -538,8 +612,10 @@ exports.sendOtp = async (req, res) => {
             attempts: 0,
         });
 
-        // Log OTP for development
-        console.log(`[OTP] Code for ${normalizedEmail}: ${otp}`);
+        // Log OTP only in development (never in production)
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[OTP] Code for ${normalizedEmail}: ${otp}`);
+        }
 
         // Send email via Brevo
         try {
@@ -1327,7 +1403,7 @@ exports.completeSetup = async (req, res) => {
 // @access  Private
 exports.getMySubgrids = async (req, res) => {
     try {
-        const userId = req.userId || req.headers['x-user-id'];
+        const userId = req.user?.id;
 
         if (!userId) {
             return res.status(401).json({ message: 'Not authenticated' });

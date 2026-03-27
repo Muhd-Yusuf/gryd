@@ -1634,7 +1634,7 @@ export default function DirectMessagesScreen() {
                             <Text style={[styles.navTabText, styles.navTabTextActive]}>Messages</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.navTab} onPress={() => router.push('/admin/contributors')}>
-                            <Text style={styles.navTabText}>Top Contributors</Text>
+                            <Text style={styles.navTabText}>Leaderboard</Text>
                         </TouchableOpacity>
                     </ScrollView>
                 </View>
@@ -1722,7 +1722,7 @@ export default function DirectMessagesScreen() {
                                     <Text style={styles.mobileNavTabTextActive}>Messages</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin/contributors')}>
-                                    <Text style={styles.mobileNavTabText}>Top Contributors</Text>
+                                    <Text style={styles.mobileNavTabText}>Leaderboard</Text>
                                 </TouchableOpacity>
                             </ScrollView>
                         </View>

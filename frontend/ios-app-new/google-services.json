@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "765573097771",
+    "project_id": "the-gryd",
+    "storage_bucket": "the-gryd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:765573097771:android:3b372c7ce59226346f7d6e",
+        "android_client_info": {
+          "package_name": "com.gryd.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDfATFmLiNCWpyWd3v_JLlVoZgY3axcDjE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:765573097771:android:59c36c2cfe4a33086f7d6e",
+        "android_client_info": {
+          "package_name": "com.thegryd.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDfATFmLiNCWpyWd3v_JLlVoZgY3axcDjE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

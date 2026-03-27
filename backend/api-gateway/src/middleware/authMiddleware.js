@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const TokenBlacklist = require('../models/TokenBlacklist');
 
 const attachUserContext = async (req, res, next) => {
     // Try JWT token from Authorization header first
@@ -11,7 +12,13 @@ const attachUserContext = async (req, res, next) => {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.userId;
             if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+                // Check if token has been revoked (logout)
                 if (mongoose.connection.readyState === 1) {
+                    const blacklisted = await TokenBlacklist.findOne({ token }).lean();
+                    if (blacklisted) {
+                        return next(); // Token revoked — treat as unauthenticated
+                    }
+
                     const user = await User.findById(userId);
                     if (user) {
                         req.user = {
@@ -33,54 +40,13 @@ const attachUserContext = async (req, res, next) => {
                 return next();
             }
         } catch (err) {
-            // Invalid token - fall through to legacy x-user-id header
+            // Invalid or expired JWT — proceed as unauthenticated
         }
     }
 
-    // Legacy fallback: x-user-id header (for backward compatibility during migration)
-    // TODO: Remove this fallback once all clients send JWT tokens
-    const userId = req.header('x-user-id') || req.query.userId;
-    if (!userId) {
-        return next();
-    }
-
-    try {
-        if (!mongoose.Types.ObjectId.isValid(userId)) {
-            console.error('[AuthMiddleware] Invalid ObjectId format:', userId);
-            return res.status(401).json({ message: 'Invalid user ID format' });
-        }
-
-        if (mongoose.connection.readyState !== 1) {
-            req.user = {
-                _id: userId,
-                id: userId,
-                role: 'member',
-                email: 'unknown@local',
-            };
-            return next();
-        }
-
-        const user = await User.findById(userId);
-        if (user) {
-            req.user = {
-                _id: user._id,
-                id: String(user._id),
-                role: user.role,
-                email: user.email,
-            };
-        } else {
-            req.user = {
-                _id: userId,
-                id: userId,
-                role: 'member',
-                email: 'unknown@local',
-            };
-        }
-        return next();
-    } catch (error) {
-        console.error('[AuthMiddleware] Error resolving user context:', error.message);
-        return next();
-    }
+    // No valid JWT token — continue without authentication
+    // Protected routes use requireUser middleware to enforce auth
+    return next();
 };
 
 const requireUser = (req, res, next) => {

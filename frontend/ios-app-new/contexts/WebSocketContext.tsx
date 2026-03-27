@@ -8,7 +8,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import Constants from 'expo-constants';
 import { io, Socket } from 'socket.io-client';
-import { getApiBaseUrl, getUserId, getTenantId, resolveUserId, resolveTenantId } from '../lib/api';
+import { getApiBaseUrl, getUserId, getTenantId, resolveUserId, resolveTenantId, getAuthToken } from '../lib/api';
 import { ConnectionStatus, WebSocketEvents } from '../hooks/useWebSocket';
 
 interface WebSocketContextValue {
@@ -103,7 +103,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         const socket = socketRef.current;
 
         socket.on('connect', () => {
-            socket.emit('authenticate', { userId, tenantId });
+            socket.emit('authenticate', { token: getAuthToken(), userId, tenantId });
         });
 
         socket.on('authenticated', () => {
@@ -131,7 +131,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         socket.on('reconnect', () => {
             // Re-authenticate after reconnection - the 'connect' handler will also fire
             // but we emit authenticate here as well to ensure it happens
-            socket.emit('authenticate', { userId, tenantId });
+            socket.emit('authenticate', { token: getAuthToken(), userId, tenantId });
         });
 
         socket.on('reconnect_attempt', () => {
@@ -158,21 +158,16 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
         eventTypes.forEach((eventType) => {
             socket.on(eventType, (data: any) => {
-                console.log(`[WebSocket] Event received: ${eventType}`, JSON.stringify(data, null, 2));
+                if (__DEV__) console.log(`[WebSocket] Event: ${eventType}`);
                 const handlers = listenersRef.current.get(eventType);
                 if (handlers) {
-                    console.log(`[WebSocket] Dispatching to ${handlers.size} handlers`);
                     handlers.forEach((handler) => handler(data));
-                } else {
-                    console.log(`[WebSocket] No handlers registered for ${eventType}`);
                 }
             });
         });
 
         // Also listen for 'direct_message' event (alternative event name some servers use)
         socket.on('direct_message', (data: any) => {
-            console.log('[WebSocket] direct_message event received:', JSON.stringify(data, null, 2));
-            // Forward to new_message handlers
             const handlers = listenersRef.current.get('new_message');
             if (handlers) {
                 handlers.forEach((handler) => handler({ ...data, roomType: 'dm' }));
@@ -181,8 +176,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
         // Listen for 'dm' event (another alternative)
         socket.on('dm', (data: any) => {
-            console.log('[WebSocket] dm event received:', JSON.stringify(data, null, 2));
-            // Forward to new_message handlers
             const handlers = listenersRef.current.get('new_message');
             if (handlers) {
                 handlers.forEach((handler) => handler({ ...data, roomType: 'dm' }));

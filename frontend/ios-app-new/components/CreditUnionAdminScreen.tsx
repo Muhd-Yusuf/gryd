@@ -154,6 +154,8 @@ import {
     useFlagContent,
     useModerationAction,
     useCreateSubgrid,
+    usePrivacySettings,
+    useUpdatePrivacySettings,
 } from '../hooks/queries';
 import { queryKeys } from '../lib/queryClient';
 
@@ -521,6 +523,20 @@ const CreditUnionAdminScreen = () => {
     const engagementSettings = engagementSettingsQuery.data || { joinMessage: true, uploadNotice: true, emojiReactions: true, autoEmoji: false, stickersAutocomplete: true };
     const bannedUsers = bannedUsersQuery.data || [];
     const customRoles: CustomRole[] = customRolesQuery.data || [];
+    // Privacy Settings - connected to API (must be before useEffect that references it)
+    const privacyQuery = usePrivacySettings();
+    const updatePrivacyMutation = useUpdatePrivacySettings();
+
+    // Sync privacy settings from API
+    useEffect(() => {
+        if (privacyQuery.data) {
+            setPrivacyProfileVisibility(privacyQuery.data.profileVisibility || 'hidden');
+            setPrivacyAllowDMsFrom(privacyQuery.data.allowDMsFrom || 'friends_only');
+            setPrivacyAllowFriendRequestsFrom(privacyQuery.data.allowFriendRequestsFrom || 'everyone');
+            setPrivacyShowOnlineStatus(privacyQuery.data.showOnlineStatus !== false);
+        }
+    }, [privacyQuery.data]);
+
     // Messages need local state for WebSocket real-time updates
     const [messages, setMessages] = useState<Message[]>([]);
 
@@ -668,8 +684,10 @@ const CreditUnionAdminScreen = () => {
     const [notificationSettingsSaving, setNotificationSettingsSaving] = useState(false);
 
     // Privacy Settings
-    const [allowDMs, setAllowDMs] = useState(true);
-    const [showOnlineStatus, setShowOnlineStatus] = useState(true);
+    const [privacyProfileVisibility, setPrivacyProfileVisibility] = useState<'hidden' | 'friends_only' | 'public'>('hidden');
+    const [privacyAllowDMsFrom, setPrivacyAllowDMsFrom] = useState<'nobody' | 'friends_only' | 'everyone'>('friends_only');
+    const [privacyAllowFriendRequestsFrom, setPrivacyAllowFriendRequestsFrom] = useState<'nobody' | 'members_only' | 'everyone'>('everyone');
+    const [privacyShowOnlineStatus, setPrivacyShowOnlineStatus] = useState(true);
 
     // Call State
     const [callType, setCallType] = useState<'audio' | 'video' | null>(null);
@@ -3016,7 +3034,7 @@ const CreditUnionAdminScreen = () => {
                         <Text style={styles.tabText}>Messages</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.tab} onPress={() => router.push('/admin/contributors')}>
-                        <Text style={styles.tabText}>Top Contributors</Text>
+                        <Text style={styles.tabText}>Leaderboard</Text>
                     </TouchableOpacity>
                 </ScrollView>
             </View>
@@ -3110,7 +3128,7 @@ const CreditUnionAdminScreen = () => {
                                     <Text style={styles.mobileNavTabText}>Messages</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin/contributors')}>
-                                    <Text style={styles.mobileNavTabText}>Top Contributors</Text>
+                                    <Text style={styles.mobileNavTabText}>Leaderboard</Text>
                                 </TouchableOpacity>
                             </ScrollView>
                         </View>
@@ -6436,46 +6454,105 @@ const CreditUnionAdminScreen = () => {
             {/* Privacy Settings Modal */}
             <Modal visible={privacySettingsModalOpen} transparent animationType="fade">
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                    <View style={[styles.modalContent, { maxHeight: '80%' }]}>
                         <TouchableOpacity style={styles.modalClose} onPress={() => setPrivacySettingsModalOpen(false)}>
                             <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
-                        <Text style={styles.modalTitle}>Privacy Settings</Text>
+                        <Text style={styles.modalTitle}>Privacy & Safety</Text>
 
-                        <View style={styles.toggleRow}>
-                            <View style={styles.toggleInfo}>
-                                <MessageSquare size={16} color={colors.textMuted} />
-                                <View>
-                                    <Text style={styles.toggleTitle}>Allow Direct Messages</Text>
-                                    <Text style={styles.toggleDesc}>Let members send you DMs</Text>
-                                </View>
-                            </View>
-                            <TouchableOpacity
-                                style={[styles.toggle, allowDMs && styles.toggleActive]}
-                                onPress={() => setAllowDMs(!allowDMs)}
-                            >
-                                <View style={[styles.toggleKnob, allowDMs && styles.toggleKnobActive]} />
-                            </TouchableOpacity>
-                        </View>
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {/* Profile Visibility */}
+                            <Text style={[styles.toggleTitle, { marginBottom: 8, marginTop: 4 }]}>Profile Visibility</Text>
+                            {([
+                                { value: 'hidden', label: 'Hidden', desc: 'Only friends can see your name and profile' },
+                                { value: 'friends_only', label: 'Friends Only', desc: 'Only your friends can see your profile details' },
+                                { value: 'public', label: 'Public', desc: 'Anyone in your communities can see your profile' },
+                            ] as const).map((opt) => (
+                                <TouchableOpacity key={opt.value} style={styles.toggleRow} onPress={() => {
+                                    setPrivacyProfileVisibility(opt.value);
+                                    updatePrivacyMutation.mutate({ profileVisibility: opt.value });
+                                }}>
+                                    <View style={styles.toggleInfo}>
+                                        <View>
+                                            <Text style={styles.toggleTitle}>{opt.label}</Text>
+                                            <Text style={styles.toggleDesc}>{opt.desc}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyProfileVisibility === opt.value ? colors.primary : colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                                        {privacyProfileVisibility === opt.value && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary }} />}
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
 
-                        <View style={styles.toggleRow}>
-                            <View style={styles.toggleInfo}>
-                                <Shield size={16} color={colors.textMuted} />
-                                <View>
-                                    <Text style={styles.toggleTitle}>Show Online Status</Text>
-                                    <Text style={styles.toggleDesc}>Let others see when you're online</Text>
+                            {/* Direct Messages */}
+                            <Text style={[styles.toggleTitle, { marginBottom: 8, marginTop: 16 }]}>Direct Messages</Text>
+                            {([
+                                { value: 'friends_only', label: 'Friends Only', desc: 'Only friends can message you' },
+                                { value: 'everyone', label: 'Everyone', desc: 'Anyone can message you' },
+                                { value: 'nobody', label: 'Nobody', desc: 'No one can message you' },
+                            ] as const).map((opt) => (
+                                <TouchableOpacity key={opt.value} style={styles.toggleRow} onPress={() => {
+                                    setPrivacyAllowDMsFrom(opt.value);
+                                    updatePrivacyMutation.mutate({ allowDMsFrom: opt.value });
+                                }}>
+                                    <View style={styles.toggleInfo}>
+                                        <View>
+                                            <Text style={styles.toggleTitle}>{opt.label}</Text>
+                                            <Text style={styles.toggleDesc}>{opt.desc}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyAllowDMsFrom === opt.value ? colors.primary : colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                                        {privacyAllowDMsFrom === opt.value && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary }} />}
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+
+                            {/* Friend Requests */}
+                            <Text style={[styles.toggleTitle, { marginBottom: 8, marginTop: 16 }]}>Friend Requests</Text>
+                            {([
+                                { value: 'everyone', label: 'Everyone', desc: 'Anyone can send you a friend request' },
+                                { value: 'members_only', label: 'Members Only', desc: 'Only regular members (not business partners)' },
+                                { value: 'nobody', label: 'Nobody', desc: 'No one can send you friend requests' },
+                            ] as const).map((opt) => (
+                                <TouchableOpacity key={opt.value} style={styles.toggleRow} onPress={() => {
+                                    setPrivacyAllowFriendRequestsFrom(opt.value);
+                                    updatePrivacyMutation.mutate({ allowFriendRequestsFrom: opt.value });
+                                }}>
+                                    <View style={styles.toggleInfo}>
+                                        <View>
+                                            <Text style={styles.toggleTitle}>{opt.label}</Text>
+                                            <Text style={styles.toggleDesc}>{opt.desc}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyAllowFriendRequestsFrom === opt.value ? colors.primary : colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                                        {privacyAllowFriendRequestsFrom === opt.value && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary }} />}
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+
+                            {/* Online Status */}
+                            <View style={[styles.toggleRow, { marginTop: 16 }]}>
+                                <View style={styles.toggleInfo}>
+                                    <View>
+                                        <Text style={styles.toggleTitle}>Show Online Status</Text>
+                                        <Text style={styles.toggleDesc}>Let others see when you're online</Text>
+                                    </View>
                                 </View>
+                                <TouchableOpacity
+                                    style={[styles.toggle, privacyShowOnlineStatus && styles.toggleActive]}
+                                    onPress={() => {
+                                        const newValue = !privacyShowOnlineStatus;
+                                        setPrivacyShowOnlineStatus(newValue);
+                                        updatePrivacyMutation.mutate({ showOnlineStatus: newValue });
+                                    }}
+                                >
+                                    <View style={[styles.toggleKnob, privacyShowOnlineStatus && styles.toggleKnobActive]} />
+                                </TouchableOpacity>
                             </View>
-                            <TouchableOpacity
-                                style={[styles.toggle, showOnlineStatus && styles.toggleActive]}
-                                onPress={() => setShowOnlineStatus(!showOnlineStatus)}
-                            >
-                                <View style={[styles.toggleKnob, showOnlineStatus && styles.toggleKnobActive]} />
-                            </TouchableOpacity>
-                        </View>
+                        </ScrollView>
 
                         <TouchableOpacity style={styles.fullWidthBtn} onPress={() => setPrivacySettingsModalOpen(false)}>
-                            <Text style={styles.fullWidthBtnText}>Save Settings</Text>
+                            <Text style={styles.fullWidthBtnText}>Done</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

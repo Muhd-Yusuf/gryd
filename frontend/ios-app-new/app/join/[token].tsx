@@ -128,8 +128,12 @@ export default function JoinInviteScreen() {
             setError('Password is required');
             return;
         }
-        if (password.length < 6) {
-            setError('Password must be at least 6 characters');
+        if (password.length < 8) {
+            setError('Password must be at least 8 characters');
+            return;
+        }
+        if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+            setError('Password must contain uppercase, lowercase, and a number');
             return;
         }
         if (password !== confirmPassword) {

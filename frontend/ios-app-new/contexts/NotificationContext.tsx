@@ -44,8 +44,9 @@ Notifications.setNotificationHandler({
     },
 });
 
-// Set up notification categories with action buttons
+// Set up notification categories with action buttons (native only)
 async function setupNotificationCategories() {
+    if (Platform.OS === 'web') return;
     await Notifications.setNotificationCategoryAsync('incoming_call', [
         {
             identifier: 'answer',

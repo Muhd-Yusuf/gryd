@@ -1,8 +1,33 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { clearAllCaches } from './userCache';
 import { queryClient } from './queryClient';
+
+// Secure storage helpers — use SecureStore on native, AsyncStorage on web
+const secureSet = async (key: string, value: string) => {
+    if (Platform.OS === 'web') {
+        await AsyncStorage.setItem(key, value);
+    } else {
+        await SecureStore.setItemAsync(key, value);
+    }
+};
+
+const secureGet = async (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+        return AsyncStorage.getItem(key);
+    }
+    return SecureStore.getItemAsync(key);
+};
+
+const secureRemove = async (key: string) => {
+    if (Platform.OS === 'web') {
+        await AsyncStorage.removeItem(key);
+    } else {
+        await SecureStore.deleteItemAsync(key);
+    }
+};
 
 // Auth storage keys
 const AUTH_TOKEN_KEY = '@auth_token';
@@ -84,8 +109,8 @@ export interface AuthUser {
 export const initAuth = async (): Promise<AuthUser | null> => {
     try {
         const [tokenStr, userStr] = await Promise.all([
-            AsyncStorage.getItem(AUTH_TOKEN_KEY),
-            AsyncStorage.getItem(AUTH_USER_KEY),
+            secureGet(AUTH_TOKEN_KEY),
+            secureGet(AUTH_USER_KEY),
         ]);
 
         if (tokenStr && userStr) {
@@ -110,8 +135,8 @@ export const initAuth = async (): Promise<AuthUser | null> => {
 export const setAuthUser = async (token: string, user: AuthUser): Promise<void> => {
     try {
         await Promise.all([
-            AsyncStorage.setItem(AUTH_TOKEN_KEY, token),
-            AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(user)),
+            secureSet(AUTH_TOKEN_KEY, token),
+            secureSet(AUTH_USER_KEY, JSON.stringify(user)),
         ]);
         authToken = token;
         resolvedUserId = user.userId;
@@ -129,13 +154,13 @@ export const setAuthUser = async (token: string, user: AuthUser): Promise<void> 
 
 export const updateAuthUser = async (updates: Partial<AuthUser>): Promise<AuthUser | null> => {
     try {
-        const userStr = await AsyncStorage.getItem(AUTH_USER_KEY);
+        const userStr = await secureGet(AUTH_USER_KEY);
         if (!userStr) {
             return null;
         }
         const existing = JSON.parse(userStr) as AuthUser;
         const merged = { ...existing, ...updates };
-        await AsyncStorage.setItem(AUTH_USER_KEY, JSON.stringify(merged));
+        await secureSet(AUTH_USER_KEY, JSON.stringify(merged));
         if (merged.userId) {
             resolvedUserId = merged.userId;
         }
@@ -149,12 +174,12 @@ export const updateAuthUser = async (updates: Partial<AuthUser>): Promise<AuthUs
 // Get current auth user
 export const getAuthUser = async (): Promise<AuthUser | null> => {
     try {
-        const userStr = await AsyncStorage.getItem(AUTH_USER_KEY);
+        const userStr = await secureGet(AUTH_USER_KEY);
         if (userStr) {
             return JSON.parse(userStr) as AuthUser;
         }
     } catch (err) {
-        console.error('[Auth] Failed to get auth user:', err);
+        if (__DEV__) console.error('[Auth] Failed to get auth user:', err);
     }
     return null;
 };
@@ -202,16 +227,26 @@ export const clearSubgridRoleCache = () => {
 
 // Check if user is authenticated
 export const isAuthenticated = async (): Promise<boolean> => {
-    const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    const token = await secureGet(AUTH_TOKEN_KEY);
     return !!token;
 };
 
-// Logout - clear auth data and all cached state
+// Logout - revoke token server-side, then clear local auth data
 export const logout = async (): Promise<void> => {
     try {
+        // Revoke token server-side (best effort — don't block logout on failure)
+        if (authToken) {
+            try {
+                await fetch(`${API_BASE_URL}/auth/logout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+                });
+            } catch {}
+        }
+
         await Promise.all([
-            AsyncStorage.removeItem(AUTH_TOKEN_KEY),
-            AsyncStorage.removeItem(AUTH_USER_KEY),
+            secureRemove(AUTH_TOKEN_KEY),
+            secureRemove(AUTH_USER_KEY),
             // Clear persisted React Query cache so old user data doesn't reload
             AsyncStorage.removeItem('GRYD_REACT_QUERY_CACHE'),
         ]);

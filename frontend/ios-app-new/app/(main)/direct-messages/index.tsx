@@ -1847,54 +1847,7 @@ const DirectMessagesScreen = () => {
                 />
             )}
 
-            {/* Incoming Call Modal */}
-            {incomingCall && !isCallModalVisible && (
-                <Modal visible={true} transparent animationType="fade">
-                    <View style={styles.callModalOverlay}>
-                        <TouchableOpacity style={styles.callModalBackdrop} activeOpacity={1} onPress={() => handleDeclineCall(incomingCall.callId)} />
-                        <View style={styles.callModalCard}>
-                            <View style={styles.callModalHeader}>
-                                <UserAvatar
-                                    uri={getAvatarUrl(incomingCall.callerId)}
-                                    name={buildName(incomingCall.callerId, friendUsers[incomingCall.callerId])}
-                                    style={styles.callModalAvatar}
-                                />
-                                <View style={styles.callModalInfo}>
-                                    <Text style={styles.callModalName}>
-                                        {buildName(incomingCall.callerId, friendUsers[incomingCall.callerId])}
-                                    </Text>
-                                    <View style={styles.callModalType}>
-                                        {incomingCall.callType === 'video' ? (
-                                            <Video size={16} color={colors.textMuted} />
-                                        ) : (
-                                            <Phone size={16} color={colors.textMuted} />
-                                        )}
-                                        <Text style={styles.callModalTypeText}>
-                                            Incoming {incomingCall.callType === 'video' ? 'Video' : 'Audio'} Call
-                                        </Text>
-                                    </View>
-                                </View>
-                            </View>
-                            <View style={styles.callModalActions}>
-                                <TouchableOpacity
-                                    style={styles.declineCallButton}
-                                    onPress={() => handleDeclineCall(incomingCall.callId)}
-                                >
-                                    <PhoneOff size={20} color="#FFFFFF" />
-                                    <Text style={styles.declineCallText}>Decline</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.acceptCallButton}
-                                    onPress={() => handleAnswerCall(incomingCall.callId, incomingCall.callType)}
-                                >
-                                    <Phone size={20} color="#FFFFFF" />
-                                    <Text style={styles.acceptCallText}>Accept</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
-            )}
+            {/* Incoming calls handled by global IncomingCallOverlay in _layout.tsx */}
         </SafeAreaView>
     );
 };
@@ -2505,87 +2458,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             fontSize: 12,
             fontWeight: '600',
             color: colors.text,
-        },
-        callModalOverlay: {
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            justifyContent: 'flex-start',
-            alignItems: 'center',
-            paddingTop: 80,
-            paddingHorizontal: 16,
-        },
-        callModalBackdrop: {
-            ...StyleSheet.absoluteFillObject,
-        },
-        callModalCard: {
-            width: '100%',
-            maxWidth: 340,
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            padding: 16,
-            gap: 16,
-        },
-        callModalHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-        },
-        callModalAvatar: {
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-        },
-        callModalInfo: {
-            flex: 1,
-            gap: 4,
-        },
-        callModalName: {
-            fontSize: 16,
-            fontWeight: '600',
-            color: colors.text,
-        },
-        callModalType: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-        },
-        callModalTypeText: {
-            fontSize: 14,
-            color: colors.textMuted,
-        },
-        callModalActions: {
-            flexDirection: 'row',
-            gap: 12,
-        },
-        acceptCallButton: {
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            paddingVertical: 14,
-            borderRadius: 12,
-            backgroundColor: '#22C55E',
-        },
-        acceptCallText: {
-            fontSize: 15,
-            fontWeight: '600',
-            color: '#FFFFFF',
-        },
-        declineCallButton: {
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            paddingVertical: 14,
-            borderRadius: 12,
-            backgroundColor: '#F87171',
-        },
-        declineCallText: {
-            fontSize: 15,
-            fontWeight: '600',
-            color: '#FFFFFF',
         },
         // Chat header call icons
         chatHeaderRight: {

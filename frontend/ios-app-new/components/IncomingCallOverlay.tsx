@@ -11,6 +11,7 @@ import {
     TouchableOpacity,
     Animated,
     Modal,
+    Platform,
 } from 'react-native';
 import { Phone, Video, PhoneOff } from 'lucide-react-native';
 import { useCallContextSafe } from '../contexts/CallContext';
@@ -54,11 +55,67 @@ const IncomingCallOverlay: React.FC = () => {
         return null;
     }
 
+    const isMobile = Platform.OS === 'ios' || Platform.OS === 'android';
+
+    if (isMobile) {
+        // Mobile: Top banner style
+        return (
+            <Modal
+                visible={true}
+                transparent
+                animationType="slide"
+                statusBarTranslucent
+            >
+                <View style={styles.bannerContainer}>
+                    <View style={[styles.banner, { backgroundColor: colors.surface }]}>
+                        <View style={styles.bannerLeft}>
+                            <UserAvatar
+                                uri={incomingCall.callerAvatar}
+                                name={incomingCall.callerName}
+                                style={styles.bannerAvatar}
+                            />
+                            <View style={styles.bannerInfo}>
+                                <Text style={[styles.bannerName, { color: colors.text }]} numberOfLines={1}>
+                                    {incomingCall.callerName}
+                                </Text>
+                                <View style={styles.bannerType}>
+                                    <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                                        {incomingCall.callType === 'video' ? (
+                                            <Video size={14} color="#22C55E" />
+                                        ) : (
+                                            <Phone size={14} color="#22C55E" />
+                                        )}
+                                    </Animated.View>
+                                    <Text style={[styles.bannerTypeText, { color: colors.textMuted }]}>
+                                        {incomingCall.callType === 'video' ? 'Video' : 'Voice'} Call
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                        <View style={styles.bannerActions}>
+                            <TouchableOpacity style={styles.bannerDeclineBtn} onPress={declineCall}>
+                                <PhoneOff size={20} color="#FFFFFF" />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.bannerAnswerBtn} onPress={answerCall}>
+                                {incomingCall.callType === 'video' ? (
+                                    <Video size={20} color="#FFFFFF" />
+                                ) : (
+                                    <Phone size={20} color="#FFFFFF" />
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        );
+    }
+
+    // Web: Centered card style
     return (
         <Modal
             visible={true}
             transparent
-            animationType="slide"
+            animationType="fade"
             statusBarTranslucent
         >
             <View style={styles.container}>
@@ -129,6 +186,81 @@ const IncomingCallOverlay: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+    // Mobile banner styles
+    bannerContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        paddingTop: 50,
+        paddingHorizontal: 12,
+        zIndex: 9999,
+    },
+    banner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 15,
+    },
+    bannerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    bannerAvatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        borderWidth: 2,
+        borderColor: '#22C55E',
+    },
+    bannerInfo: {
+        marginLeft: 12,
+        flex: 1,
+    },
+    bannerName: {
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    bannerType: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginTop: 2,
+    },
+    bannerTypeText: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    bannerActions: {
+        flexDirection: 'row',
+        gap: 10,
+        marginLeft: 12,
+    },
+    bannerDeclineBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#EF4444',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    bannerAnswerBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#22C55E',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    // Web centered card styles
     container: {
         flex: 1,
         justifyContent: 'center',

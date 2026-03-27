@@ -4,6 +4,17 @@ const UsageEvent = require('../models/UsageEvent');
 const Invoice = require('../models/Invoice');
 const PaymentMethod = require('../models/PaymentMethod');
 
+// Helper: pick only allowed fields from request body
+const pick = (obj, keys) => {
+    const result = {};
+    for (const key of keys) {
+        if (obj && obj[key] !== undefined) {
+            result[key] = obj[key];
+        }
+    }
+    return result;
+};
+
 exports.getBillingAccount = async (req, res) => {
     try {
         const { tenantId } = req.params;
@@ -23,9 +34,13 @@ exports.getBillingAccount = async (req, res) => {
 exports.updateBillingAccount = async (req, res) => {
     try {
         const { tenantId } = req.params;
+        const allowed = pick(req.body, ['billingEmail', 'companyName', 'address', 'taxId']);
+        if (Object.keys(allowed).length === 0) {
+            return res.status(400).json({ message: 'No valid fields to update' });
+        }
         const account = await BillingAccount.findOneAndUpdate(
             { tenantId },
-            { $set: req.body || {} },
+            { $set: allowed },
             { new: true, upsert: true }
         );
         return res.status(200).json({ success: true, data: account });
@@ -54,9 +69,13 @@ exports.getSubscription = async (req, res) => {
 exports.updateSubscription = async (req, res) => {
     try {
         const { tenantId } = req.params;
+        const allowed = pick(req.body, ['planName', 'status']);
+        if (Object.keys(allowed).length === 0) {
+            return res.status(400).json({ message: 'No valid fields to update' });
+        }
         const subscription = await Subscription.findOneAndUpdate(
             { tenantId },
-            { $set: req.body || {} },
+            { $set: allowed },
             { new: true, upsert: true }
         );
         return res.status(200).json({ success: true, data: subscription });
@@ -78,12 +97,12 @@ exports.listUsageEvents = async (req, res) => {
 exports.createUsageEvent = async (req, res) => {
     try {
         const { tenantId } = req.params;
-        const payload = req.body || {};
+        const { feature, units } = req.body || {};
         const event = await UsageEvent.create({
             tenantId,
-            feature: payload.feature || 'ai-usage',
-            units: payload.units || 0,
-            cost: payload.cost || 0,
+            feature: String(feature || 'ai-usage').substring(0, 100),
+            units: Math.max(0, Number(units) || 0),
+            cost: 0, // Cost should be calculated server-side, not client-supplied
         });
         return res.status(201).json({ success: true, data: event });
     } catch (error) {
@@ -104,14 +123,14 @@ exports.listInvoices = async (req, res) => {
 exports.createInvoice = async (req, res) => {
     try {
         const { tenantId } = req.params;
-        const payload = req.body || {};
+        const { amountDue, dueDate } = req.body || {};
         const invoice = await Invoice.create({
             tenantId,
-            number: payload.number || `INV-${Date.now()}`,
-            status: payload.status || 'open',
-            amountDue: payload.amountDue || 0,
-            amountPaid: payload.amountPaid || 0,
-            dueDate: payload.dueDate || null,
+            number: `INV-${Date.now()}`, // Always server-generated
+            status: 'open', // Always starts as open
+            amountDue: Math.max(0, Number(amountDue) || 0),
+            amountPaid: 0,
+            dueDate: dueDate || null,
         });
         return res.status(201).json({ success: true, data: invoice });
     } catch (error) {
@@ -132,12 +151,12 @@ exports.listPaymentMethods = async (req, res) => {
 exports.addPaymentMethod = async (req, res) => {
     try {
         const { tenantId } = req.params;
-        const payload = req.body || {};
+        const { provider, last4 } = req.body || {};
         const method = await PaymentMethod.create({
             tenantId,
-            provider: payload.provider || 'plaid',
+            provider: ['plaid', 'stripe', 'paystack'].includes(provider) ? provider : 'plaid',
             type: 'ach',
-            last4: payload.last4 || '0000',
+            last4: String(last4 || '0000').substring(0, 4),
         });
         return res.status(201).json({ success: true, data: method });
     } catch (error) {

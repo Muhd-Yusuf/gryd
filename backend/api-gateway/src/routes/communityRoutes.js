@@ -97,6 +97,8 @@ const {
     listBannedUsers,
     banUser,
     unbanUser,
+    getPrivacySettings,
+    updatePrivacySettings,
 } = require('../controllers/communityController');
 const {
     getRoles,
@@ -124,6 +126,10 @@ router.use(attachEmbedContext);
 router.get('/users/me', requireUser, getUserProfile);
 router.patch('/users/me', requireUser, updateUserProfile);
 
+// Privacy settings
+router.get('/users/me/privacy', requireUser, getPrivacySettings);
+router.patch('/users/me/privacy', requireUser, updatePrivacySettings);
+
 router.get('/tenants', requireUser, listTenants);
 router.post('/tenants', requireUser, createTenant);
 router.post('/tenants/:tenantId/members', requireUser, addTenantMember);
@@ -146,7 +152,7 @@ router.post('/subgrids/:subgridId/invites/email', requireUser, loadSubgrid, requ
 router.post('/subgrids/:subgridId/invites/:inviteId/revoke', requireUser, loadSubgrid, requireSubgridAdmin, revokeInviteLink);
 router.post('/subgrids/:subgridId/invites/:inviteId/resend', requireUser, loadSubgrid, requireSubgridAdmin, resendInviteEmail);
 router.post('/subgrids/:subgridId/invites/accept', requireUser, loadSubgrid, acceptInviteLink);
-router.post('/subgrids/:subgridId/embed-token', loadSubgrid, issueEmbedToken);
+router.post('/subgrids/:subgridId/embed-token', requireUser, loadSubgrid, requireSubgridAdmin, issueEmbedToken);
 
 router.get('/subgrids/:subgridId/channels', loadSubgrid, requireSubgridRead, listChannels);
 router.post('/subgrids/:subgridId/channels', requireUser, loadSubgrid, requireSubgridAdmin, createChannel);
