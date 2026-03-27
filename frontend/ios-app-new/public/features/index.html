@@ -26,22 +26,64 @@ a{color:var(--blue);text-decoration:none}
 
 /* ============================================================
    iOS 26 LIQUID GLASS
+   Real Liquid Glass: refraction, specular shine, edge caustics,
+   dynamic highlight that responds to scroll position.
    ============================================================ */
 .liquid-glass{
   position:relative;overflow:hidden;
-  background:rgba(255,255,255,0.04);
-  backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);
-  border:1px solid rgba(255,255,255,0.1);
+  background:linear-gradient(
+    135deg,
+    rgba(255,255,255,0.08) 0%,
+    rgba(255,255,255,0.03) 40%,
+    rgba(255,255,255,0.06) 100%
+  );
+  backdrop-filter:blur(40px) saturate(200%) brightness(1.1);
+  -webkit-backdrop-filter:blur(40px) saturate(200%) brightness(1.1);
+  border:1px solid rgba(255,255,255,0.12);
   border-radius:24px;
   box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.08),
-    inset 0 -1px 0 0 rgba(0,0,0,0.15),
-    0 8px 32px rgba(0,0,0,0.2);
+    /* top edge caustic */
+    inset 0 1px 0 0 rgba(255,255,255,0.15),
+    /* bottom edge shadow */
+    inset 0 -1px 0 0 rgba(0,0,0,0.1),
+    /* left edge caustic */
+    inset 1px 0 0 0 rgba(255,255,255,0.06),
+    /* outer glow */
+    0 8px 32px rgba(0,0,0,0.2),
+    0 0 0 0.5px rgba(255,255,255,0.05);
+  transition:box-shadow 0.4s ease,border-color 0.4s ease;
 }
+/* Specular shine layer - shifts with scroll via JS */
+.liquid-glass::before{
+  content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+  border-radius:inherit;
+  background:
+    radial-gradient(ellipse 80% 50% at var(--shine-x,30%) var(--shine-y,20%),
+      rgba(255,255,255,0.12) 0%,
+      rgba(255,255,255,0.04) 40%,
+      transparent 70%
+    );
+  transition:opacity 0.3s;
+}
+/* Top edge highlight - light refraction */
 .liquid-glass::after{
-  content:'';position:absolute;top:0;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent 10%,rgba(255,255,255,0.12) 50%,transparent 90%);
-  pointer-events:none;z-index:1;
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;z-index:2;pointer-events:none;
+  background:linear-gradient(90deg,
+    transparent 5%,
+    rgba(255,255,255,0.2) 20%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.2) 80%,
+    transparent 95%
+  );
+}
+.liquid-glass:hover{
+  border-color:rgba(255,255,255,0.18);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.2),
+    inset 0 -1px 0 0 rgba(0,0,0,0.1),
+    inset 1px 0 0 0 rgba(255,255,255,0.08),
+    0 12px 40px rgba(0,0,0,0.25),
+    0 0 0 0.5px rgba(255,255,255,0.08);
 }
 
 /* Liquid Glass Button */
@@ -49,25 +91,34 @@ a{color:var(--blue);text-decoration:none}
   position:relative;display:inline-flex;align-items:center;gap:10px;
   padding:14px 34px;border-radius:100px;border:none;cursor:pointer;
   font-family:inherit;font-weight:700;font-size:15px;color:white;
-  background:rgba(255,255,255,0.06);
-  backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);
-  border:1px solid rgba(255,255,255,0.12);
+  background:linear-gradient(135deg,rgba(255,255,255,0.1),rgba(255,255,255,0.04));
+  backdrop-filter:blur(30px) saturate(180%) brightness(1.05);
+  -webkit-backdrop-filter:blur(30px) saturate(180%) brightness(1.05);
+  border:1px solid rgba(255,255,255,0.14);
   box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.12),
-    inset 0 -1px 0 0 rgba(0,0,0,0.1),
-    0 4px 16px rgba(0,0,0,0.3);
+    inset 0 1px 0 0 rgba(255,255,255,0.18),
+    inset 0 -1px 0 0 rgba(0,0,0,0.08),
+    0 4px 16px rgba(0,0,0,0.25),
+    0 0 0 0.5px rgba(255,255,255,0.06);
   transition:all 0.3s cubic-bezier(0.16,1,0.3,1);
-  text-decoration:none;
+  text-decoration:none;overflow:hidden;
+}
+/* Specular gloss on button */
+.liquid-btn::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:50%;
+  background:linear-gradient(180deg,rgba(255,255,255,0.1),transparent);
+  border-radius:100px 100px 0 0;pointer-events:none;
 }
 .liquid-btn:hover{
   transform:translateY(-2px);
+  border-color:rgba(255,255,255,0.22);
   box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.18),
-    inset 0 -1px 0 0 rgba(0,0,0,0.1),
-    0 8px 32px rgba(0,0,0,0.4);
-  border-color:rgba(255,255,255,0.18);
+    inset 0 1px 0 0 rgba(255,255,255,0.25),
+    inset 0 -1px 0 0 rgba(0,0,0,0.08),
+    0 8px 32px rgba(0,0,0,0.35),
+    0 0 0 0.5px rgba(255,255,255,0.1);
 }
-.liquid-btn:active{transform:translateY(0);box-shadow:inset 0 2px 4px rgba(0,0,0,0.3)}
+.liquid-btn:active{transform:translateY(0);box-shadow:inset 0 2px 6px rgba(0,0,0,0.25)}
 
 .liquid-btn-blue{
   background:linear-gradient(145deg,rgba(59,130,246,0.5),rgba(37,99,235,0.4));
@@ -344,16 +395,17 @@ a{color:var(--blue);text-decoration:none}
 </head>
 <body>
 
-<!-- SVG FILTERS for iOS 26 Liquid Glass (subtle, no duplication) -->
+<!-- SVG FILTERS for iOS 26 Liquid Glass refraction -->
 <svg width="0" height="0" style="position:absolute">
   <defs>
-    <filter id="liquid-glass-filter" x="0%" y="0%" width="100%" height="100%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="0.3" result="softened"/>
-      <feColorMatrix in="softened" type="saturate" values="1.15"/>
-    </filter>
-    <filter id="liquid-glass-btn" x="0%" y="0%" width="100%" height="100%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="0.15" result="softened"/>
-      <feColorMatrix in="softened" type="saturate" values="1.1"/>
+    <!-- Subtle noise texture for glass grain -->
+    <filter id="glass-noise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0" result="mono"/>
+      <feBlend in="SourceGraphic" in2="mono" mode="overlay" result="grained"/>
+      <feComponentTransfer in="grained">
+        <feFuncA type="linear" slope="0.97"/>
+      </feComponentTransfer>
     </filter>
   </defs>
 </svg>
@@ -592,9 +644,51 @@ a{color:var(--blue);text-decoration:none}
 </footer>
 
 <script>
+// Scroll reveal animations
 const obs=new IntersectionObserver(e=>{e.forEach(e=>{e.isIntersecting&&e.target.classList.add('v')})},{threshold:.1,rootMargin:'0px 0px -40px 0px'});
 document.querySelectorAll('.anim').forEach(e=>obs.observe(e));
-function playVid(){const p=document.getElementById('vidPh'),v=document.getElementById('vid'),s=v.querySelector('source').src;if(!s||s.endsWith('https://res.cloudinary.com/dgxmypgcu/video/upload/v1774638803/TheGryd-Promo_uw7vlt.mp4')){alert('Upload the video to Cloudinary first, then update the source URL.');return}p.style.display='none';v.style.display='block';v.play()}
+
+// iOS 26 Liquid Glass: specular highlight shifts with scroll
+// Creates the "living glass" effect where light moves across surfaces
+const glassEls=document.querySelectorAll('.liquid-glass');
+let ticking=false;
+function updateShine(){
+  const scrollY=window.scrollY;
+  const vh=window.innerHeight;
+  glassEls.forEach(el=>{
+    const rect=el.getBoundingClientRect();
+    if(rect.bottom<-100||rect.top>vh+100)return;
+    const progress=(rect.top+rect.height/2)/vh;
+    const shineX=20+progress*40;
+    const shineY=10+progress*60;
+    el.style.setProperty('--shine-x',shineX+'%');
+    el.style.setProperty('--shine-y',shineY+'%');
+  });
+  ticking=false;
+}
+window.addEventListener('scroll',()=>{if(!ticking){requestAnimationFrame(updateShine);ticking=true}});
+updateShine();
+
+// Mouse parallax on glass cards (shine follows cursor like real glass)
+glassEls.forEach(el=>{
+  el.addEventListener('mousemove',e=>{
+    const rect=el.getBoundingClientRect();
+    const x=(e.clientX-rect.left)/rect.width;
+    const y=(e.clientY-rect.top)/rect.height;
+    el.style.setProperty('--shine-x',(x*100)+'%');
+    el.style.setProperty('--shine-y',(y*100)+'%');
+  });
+  el.addEventListener('mouseleave',()=>{
+    el.style.setProperty('--shine-x','30%');
+    el.style.setProperty('--shine-y','20%');
+  });
+});
+
+// Video player
+function playVid(){
+  const p=document.getElementById('vidPh'),v=document.getElementById('vid');
+  p.style.display='none';v.style.display='block';v.play();
+}
 </script>
 </body>
 </html>
