@@ -275,7 +275,7 @@ a{color:var(--blue);text-decoration:none}
       <span>Watch the product tour</span>
     </div>
     <video id="vid" style="display:none" controls playsinline>
-      <source src="VIDEO_URL_HERE" type="video/mp4">
+      <source src="https://res.cloudinary.com/dgxmypgcu/video/upload/v1774638803/TheGryd-Promo_uw7vlt.mp4" type="video/mp4">
     </video>
   </div>
 </section>
@@ -477,7 +477,7 @@ a{color:var(--blue);text-decoration:none}
 <script>
 const obs=new IntersectionObserver(e=>{e.forEach(e=>{e.isIntersecting&&e.target.classList.add('v')})},{threshold:.1,rootMargin:'0px 0px -40px 0px'});
 document.querySelectorAll('.anim').forEach(e=>obs.observe(e));
-function playVid(){const p=document.getElementById('vidPh'),v=document.getElementById('vid'),s=v.querySelector('source').src;if(!s||s.endsWith('VIDEO_URL_HERE')){alert('Upload the video to Cloudinary first, then update the source URL.');return}p.style.display='none';v.style.display='block';v.play()}
+function playVid(){const p=document.getElementById('vidPh'),v=document.getElementById('vid'),s=v.querySelector('source').src;if(!s||s.endsWith('https://res.cloudinary.com/dgxmypgcu/video/upload/v1774638803/TheGryd-Promo_uw7vlt.mp4')){alert('Upload the video to Cloudinary first, then update the source URL.');return}p.style.display='none';v.style.display='block';v.play()}
 </script>
 </body>
 </html>
