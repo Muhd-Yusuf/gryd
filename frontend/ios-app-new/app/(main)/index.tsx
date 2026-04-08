@@ -57,6 +57,8 @@ import { useTheme } from '../../lib/theme';
 import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
+import { GlassRailButton } from '../../components/glass';
+import { BlurView } from 'expo-blur';
 import { ImageViewer } from '../../components/ImageViewer';
 import { ErrorRetry } from '../../components/ErrorRetry';
 import { ChannelSkeleton, FeedSkeleton } from '../../components/SkeletonLoader';
@@ -1728,7 +1730,13 @@ const TenantCommunityScreen = () => {
                     isMobile && styles.gridMobile,
                 ]}>
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
-                        <View style={styles.leftRail}>
+                        <BlurView
+                            intensity={colors.glassBlurIntensity}
+                            tint={mode === 'dark' ? 'dark' : 'light'}
+                            style={styles.leftRail}
+                        >
+                            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glassNavBg }]} />
+                            {/* Server logo */}
                             <TouchableOpacity
                                 style={[
                                     styles.railLogo,
@@ -1746,38 +1754,45 @@ const TenantCommunityScreen = () => {
                                     )
                                 ) : null}
                             </TouchableOpacity>
+                            {/* Rail nav buttons — spring bounce + haptics + metallic shimmer */}
                             {railItems.map((item) => {
                                 const isActive = activeRail === item.id;
                                 const IconComponent = RAIL_ICONS[item.icon] || MessageCircle;
                                 return (
-                                    <TouchableOpacity
+                                    <GlassRailButton
                                         key={item.id}
-                                        style={[styles.railButton, isActive && styles.railButtonActive]}
+                                        label={item.id}
+                                        isActive={isActive}
                                         onPress={() => {
                                             setActiveRail(item.id);
                                             item.onPress?.();
                                         }}
-                                    >
-                                        <IconComponent
-                                            size={20}
-                                            color={isActive ? colors.text : colors.textMuted}
-                                        />
-                                    </TouchableOpacity>
+                                        icon={
+                                            <IconComponent
+                                                size={22}
+                                                color={isActive ? colors.glassActiveText : colors.textMuted}
+                                            />
+                                        }
+                                    />
                                 );
                             })}
                             <View style={styles.railDivider} />
-                            <TouchableOpacity style={styles.railButton} onPress={toggleTheme}>
-                                {mode === 'dark' ? (
-                                    <Sun size={20} color={colors.textMuted} />
-                                ) : (
-                                    <Moon size={20} color={colors.textMuted} />
-                                )}
-                            </TouchableOpacity>
+                            {/* Theme toggle */}
+                            <GlassRailButton
+                                label="theme"
+                                isActive={false}
+                                onPress={toggleTheme}
+                                icon={mode === 'dark'
+                                    ? <Sun size={20} color={colors.textMuted} />
+                                    : <Moon size={20} color={colors.textMuted} />
+                                }
+                            />
                             <View style={{ flex: 1 }} />
+                            {/* Logout */}
                             <TouchableOpacity style={styles.exitButton} onPress={handleLogout}>
                                 <X size={18} color="#FFFFFF" />
                             </TouchableOpacity>
-                        </View>
+                        </BlurView>
 
                         <View style={styles.channelPanel}>
                             <View style={styles.panelHeader}>
@@ -2712,7 +2727,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             alignItems: 'center',
             gap: 12,
-            backgroundColor: colors.appBg,
+            borderRightWidth: 1,
+            borderRightColor: colors.glassBorder,
+            overflow: 'hidden',
         },
         railLogo: {
             width: 48,
