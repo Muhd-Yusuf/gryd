@@ -5,6 +5,7 @@ import {
     StyleSheet,
     TouchableOpacity,
     ScrollView,
+    Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter, usePathname } from 'expo-router';
@@ -35,6 +36,7 @@ import { isFeatureEnabled, type FeatureKey } from '../lib/featureFlags';
 import { useTheme } from '../lib/theme';
 import { getAuthUser } from '../lib/api';
 import UserAvatar from './UserAvatar';
+import { GlassNavButton } from './glass';
 
 interface SidebarProps {
     onClose?: () => void;
@@ -147,45 +149,27 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.menuSection}>
                     {visibleMenuItems.map((item, idx) => {
-                        // High-level active check
                         const isMainActive = item.path === '/(main)'
                             ? pathname === '/(main)' || pathname === '/'
                             : pathname.startsWith(item.path);
 
                         const isExpanded = expandedMenu === item.label;
 
+                        const iconColor = isMainActive && !item.hasSubmenu
+                            ? colors.glassActiveText
+                            : colors.textSubtle;
+
                         return (
                             <View key={idx}>
-                                <TouchableOpacity
-                                    style={[
-                                        styles.menuItem,
-                                        isMainActive && !item.hasSubmenu && styles.menuItemActive
-                                    ]}
+                                <GlassNavButton
+                                    icon={<item.icon size={20} color={iconColor} />}
+                                    label={item.label}
+                                    isActive={isMainActive && !item.hasSubmenu}
+                                    badge={item.badge}
                                     onPress={() => handlePress(item)}
-                                >
-                                    <View style={styles.menuLeft}>
-                                        <item.icon
-                                            size={20}
-                                            color={isMainActive && !item.hasSubmenu ? colors.primaryText : colors.textSubtle}
-                                        />
-                                        <Text style={[
-                                            styles.menuLabel,
-                                            isMainActive && !item.hasSubmenu && styles.menuLabelActive
-                                        ]}>
-                                            {item.label}
-                                        </Text>
-                                    </View>
-                                    {item.hasSubmenu && (
-                                        isExpanded
-                                            ? <ChevronUp size={16} color={colors.textSubtle} />
-                                            : <ChevronDown size={16} color={colors.textSubtle} />
-                                    )}
-                                    {item.badge && (
-                                        <View style={styles.badge}>
-                                            <Text style={styles.badgeText}>{item.badge}</Text>
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
+                                    hasSubmenu={item.hasSubmenu}
+                                    submenuOpen={isExpanded}
+                                />
 
                                 {/* Submenu */}
                                 {item.hasSubmenu && isExpanded && (
@@ -193,23 +177,15 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
                                         {item.submenu?.map((sub, subIdx) => {
                                             const isSubActive = pathname === sub.path;
                                             return (
-                                                <TouchableOpacity
+                                                <GlassNavButton
                                                     key={subIdx}
-                                                    style={[styles.submenuItem, isSubActive && styles.submenuItemActive]}
+                                                    icon={<sub.icon size={17} color={isSubActive ? colors.glassActiveText : colors.textSubtle} />}
+                                                    label={sub.label}
+                                                    isActive={isSubActive}
                                                     onPress={() => handleSubPress(sub.path)}
-                                                >
-                                                    <sub.icon
-                                                        size={18}
-                                                        color={isSubActive ? colors.text : colors.textSubtle}
-                                                    />
-                                                    <Text style={[
-                                                        styles.submenuLabel,
-                                                        isSubActive && styles.submenuLabelActive
-                                                    ]}>
-                                                        {sub.label}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            )
+                                                    style={{ marginLeft: 12 }}
+                                                />
+                                            );
                                         })}
                                     </View>
                                 )}
@@ -258,9 +234,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.glassNavBg,
         borderRightWidth: 1,
-        borderRightColor: colors.border,
+        borderRightColor: colors.glassBorder,
         display: 'flex',
         flexDirection: 'column',
     },

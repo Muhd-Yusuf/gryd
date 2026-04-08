@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
+import { GradientBackground } from './glass';
 
 // Simple hook to detect screen width (simplified for basic responsive check)
 // In a real app, use useWindowDimensions()
@@ -36,7 +37,7 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
     );
 
     return (
-        <View style={styles.container}>
+        <GradientBackground style={styles.container}>
             {/* Desktop: Sidebar is always visible on left */}
             {isDesktop && isWeb && (
                 <View style={styles.sidebarWrapper}>
@@ -71,7 +72,7 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
                 </View>
             </View>
 
-            {/* Mobile Sidebar Overlay (Modal for simplicity & z-index safety) */}
+            {/* Mobile Sidebar Overlay */}
             <Modal
                 visible={sidebarOpen}
                 animationType="fade"
@@ -92,7 +93,7 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
                     </View>
                 </View>
             </Modal>
-        </View>
+        </GradientBackground>
     );
 };
 
@@ -101,7 +102,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     container: {
         flex: 1,
         flexDirection: 'row',
-        backgroundColor: colors.appBg,
     },
     sidebarWrapper: {
         width: 280,
