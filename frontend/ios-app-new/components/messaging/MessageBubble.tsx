@@ -172,7 +172,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                         return (
                             <VoiceMessagePlayer
                                 key={key}
-                                value={attachment.url}
+                                source={attachment.url}
                                 durationMs={attachment.durationMs || attachment.duration}
                             />
                         );
@@ -240,7 +240,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 style={[
                     styles.messageBubble,
                     isSelf ? styles.messageBubbleSelf : styles.messageBubbleOther,
-                    { backgroundColor: isSelf ? colors.primary : colors.surfaceMuted },
+                    { backgroundColor: isSelf ? colors.primary : colors.glassBg },
                 ]}
             >
                 {/* Sender name and badge for group chats */}
@@ -335,6 +335,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         messageBubbleOther: {
             borderBottomLeftRadius: 4,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            shadowColor: colors.glassShadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 1,
+            shadowRadius: 6,
+            elevation: 3,
         },
         senderRow: {
             flexDirection: 'row',
@@ -425,10 +432,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             padding: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             gap: 12,
             maxWidth: '80%',
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            shadowColor: colors.glassShadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 1,
+            shadowRadius: 6,
+            elevation: 3,
         },
         callHistoryIconWrap: {
             width: 40,

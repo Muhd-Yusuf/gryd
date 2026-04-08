@@ -191,7 +191,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     // Render recording UI
     if (isRecording) {
         return (
-            <View style={[styles.container, { backgroundColor: colors.appBg }]}>
+            <View style={styles.container}>
                 <View style={styles.recordingContainer}>
                     <View style={styles.recordingRow}>
                         {/* Cancel button */}
@@ -246,7 +246,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
 
     return (
-        <View style={[styles.container, { backgroundColor: colors.appBg }]}>
+        <View style={styles.container}>
             {/* Pending attachments preview */}
             {pendingAttachments.length > 0 && (
                 <ScrollView
@@ -386,7 +386,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomPaddi
             paddingTop: 12,
             paddingBottom: bottomPadding,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
+            ...(Platform.OS === 'web' ? {
+                // @ts-ignore
+                backdropFilter: 'blur(24px)',
+                WebkitBackdropFilter: 'blur(24px)',
+            } : {}),
         },
         composerRow: {
             flexDirection: 'row',
@@ -399,6 +405,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomPaddi
             borderRadius: 22,
             justifyContent: 'center',
             alignItems: 'center',
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         inputWrapper: {
             flex: 1,
@@ -407,6 +415,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomPaddi
             borderRadius: 24,
             paddingHorizontal: 4,
             minHeight: 48,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            shadowColor: colors.glassShadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 1,
+            shadowRadius: 8,
+            elevation: 3,
         },
         inputIconBtn: {
             width: 40,

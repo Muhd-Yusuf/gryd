@@ -15,16 +15,22 @@ import {
 } from 'react-native';
 import { Play, Pause } from 'lucide-react-native';
 import { useAudioPlayer, AudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { useTheme } from '../lib/theme';
 
 interface VoiceMessagePlayerProps {
-    source: string;
+    /** Audio source URL */
+    source?: string;
+    /** Alias for source — accepted for backwards compatibility */
+    value?: string;
     durationMs?: number;
-    colors: {
+    colors?: {
         primary: string;
         text: string;
         textMuted: string;
         surface: string;
         surfaceMuted: string;
+        glassBorder?: string;
+        glassShadow?: string;
     };
     compact?: boolean;
 }
@@ -42,11 +48,15 @@ const formatDuration = (ms?: number): string => {
 };
 
 export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
-    source,
+    source: sourceProp,
+    value,
     durationMs,
-    colors,
+    colors: colorsProp,
     compact = false,
 }) => {
+    const { colors: themeColors } = useTheme();
+    const colors = colorsProp ?? themeColors;
+    const source = sourceProp ?? value ?? '';
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -302,6 +312,13 @@ const createStyles = (
             gap: compact ? 8 : 10,
             minWidth: compact ? 140 : 180,
             maxWidth: 280,
+            borderWidth: 1,
+            borderColor: (colors as any).glassBorder ?? 'rgba(255,255,255,0.08)',
+            shadowColor: (colors as any).glassShadow ?? 'rgba(0,0,0,0.3)',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 1,
+            shadowRadius: 8,
+            elevation: 4,
         },
         playButton: {
             width: compact ? 28 : 36,

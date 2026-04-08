@@ -3064,7 +3064,13 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             paddingTop: 12,
             paddingBottom: bottomInset + 12,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
+            ...(Platform.OS === 'web' ? {
+                // @ts-ignore
+                backdropFilter: 'blur(24px)',
+                WebkitBackdropFilter: 'blur(24px)',
+            } : {}),
         },
         inputAddBtn: {
             padding: 4,
@@ -3073,9 +3079,16 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
             paddingHorizontal: 12,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            shadowColor: colors.glassShadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 1,
+            shadowRadius: 6,
+            elevation: 3,
         },
         input: {
             flex: 1,
