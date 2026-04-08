@@ -8,7 +8,7 @@ import {
     Text,
     useWindowDimensions,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeBlurView as BlurView } from './SafeBlurView';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Sidebar from './Sidebar';

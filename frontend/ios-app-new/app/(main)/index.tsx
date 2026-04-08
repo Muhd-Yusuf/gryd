@@ -58,7 +58,7 @@ import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twem
 import UserAvatar from '../../components/UserAvatar';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { GlassRailButton } from '../../components/glass';
-import { BlurView } from 'expo-blur';
+import { SafeBlurView as BlurView } from '../../components/SafeBlurView';
 import { ImageViewer } from '../../components/ImageViewer';
 import { ErrorRetry } from '../../components/ErrorRetry';
 import { ChannelSkeleton, FeedSkeleton } from '../../components/SkeletonLoader';

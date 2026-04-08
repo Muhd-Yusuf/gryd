@@ -1,31 +1,38 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import { clearAllCaches } from './userCache';
 import { queryClient } from './queryClient';
 
-// Secure storage helpers — use SecureStore on native, AsyncStorage on web
+// Lazy-load SecureStore to avoid crash when native module is unavailable (Expo Go)
+let SecureStore: typeof import('expo-secure-store') | null = null;
+try {
+    SecureStore = require('expo-secure-store');
+} catch {
+    // Running in Expo Go or environment without expo-secure-store — fall back to AsyncStorage
+}
+
+// Secure storage helpers — SecureStore on native dev builds, AsyncStorage as fallback
 const secureSet = async (key: string, value: string) => {
-    if (Platform.OS === 'web') {
-        await AsyncStorage.setItem(key, value);
-    } else {
+    if (SecureStore && Platform.OS !== 'web') {
         await SecureStore.setItemAsync(key, value);
+    } else {
+        await AsyncStorage.setItem(key, value);
     }
 };
 
 const secureGet = async (key: string): Promise<string | null> => {
-    if (Platform.OS === 'web') {
-        return AsyncStorage.getItem(key);
+    if (SecureStore && Platform.OS !== 'web') {
+        return SecureStore.getItemAsync(key);
     }
-    return SecureStore.getItemAsync(key);
+    return AsyncStorage.getItem(key);
 };
 
 const secureRemove = async (key: string) => {
-    if (Platform.OS === 'web') {
-        await AsyncStorage.removeItem(key);
-    } else {
+    if (SecureStore && Platform.OS !== 'web') {
         await SecureStore.deleteItemAsync(key);
+    } else {
+        await AsyncStorage.removeItem(key);
     }
 };
 

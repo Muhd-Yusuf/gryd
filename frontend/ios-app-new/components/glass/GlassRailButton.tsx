@@ -11,7 +11,7 @@ import {
     View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { BlurView } from 'expo-blur';
+import { SafeBlurView as BlurView } from '../SafeBlurView';
 import ShimmerOverlay from './ShimmerOverlay';
 import { useTheme } from '../../lib/theme';
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeBlurView as BlurView } from '../SafeBlurView';
 import { useTheme } from '../../lib/theme';
 
 interface GlassCardProps {

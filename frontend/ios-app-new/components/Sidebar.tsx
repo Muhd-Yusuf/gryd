@@ -8,7 +8,7 @@ import {
     Animated,
     Platform,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeBlurView as BlurView } from './SafeBlurView';
 import { Image } from 'expo-image';
 import { useRouter, usePathname } from 'expo-router';
 import {
