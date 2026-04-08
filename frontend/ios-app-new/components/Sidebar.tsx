@@ -6,7 +6,9 @@ import {
     TouchableOpacity,
     ScrollView,
     Animated,
+    Platform,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { useRouter, usePathname } from 'expo-router';
 import {
@@ -134,8 +136,32 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
         if (onClose) onClose();
     };
 
+    const SidebarWrapper = ({ children }: { children: React.ReactNode }) => {
+        if (Platform.OS === 'web') {
+            return (
+                <View style={[styles.container, {
+                    // @ts-ignore
+                    backdropFilter: 'blur(28px)',
+                    WebkitBackdropFilter: 'blur(28px)',
+                }]}>
+                    {children}
+                </View>
+            );
+        }
+        return (
+            <BlurView
+                intensity={colors.glassBlurIntensity}
+                tint={mode === 'dark' ? 'dark' : 'light'}
+                style={styles.container}
+            >
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glassNavBg }]} />
+                {children}
+            </BlurView>
+        );
+    };
+
     return (
-        <View style={styles.container}>
+        <SidebarWrapper>
             {/* Header / Logo */}
             <View style={styles.header}>
                 <TheGrydLogo />
@@ -226,7 +252,7 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
                     )}
                 </View>
             </View>
-        </View>
+        </SidebarWrapper>
     );
 };
 

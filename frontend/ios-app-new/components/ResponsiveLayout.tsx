@@ -6,8 +6,9 @@ import {
     Platform,
     Modal,
     Text,
-    useWindowDimensions
+    useWindowDimensions,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Sidebar from './Sidebar';
@@ -29,7 +30,7 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const { width } = useWindowDimensions();
     const isDesktop = width > 768; // Simple breakpoint
-    const { colors } = useTheme();
+    const { colors, mode } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
 
     const TheGrydLogoSmall = () => (
@@ -47,10 +48,19 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
 
             {/* Main Content Area */}
             <View style={styles.mainContent}>
-                {/* Mobile/Tablet Header */}
+                {/* Mobile/Tablet Header — glass */}
                 {(!isDesktop || !isWeb) && (
                     <SafeAreaView edges={['top']} style={styles.mobileHeaderSafe}>
-                        <View style={styles.mobileHeader}>
+                        <BlurView
+                            intensity={colors.glassBlurIntensity}
+                            tint={mode === 'dark' ? 'dark' : 'light'}
+                            style={styles.mobileHeader}
+                        >
+                            <View style={[StyleSheet.absoluteFill, {
+                                backgroundColor: colors.glassBg,
+                                borderBottomWidth: 1,
+                                borderBottomColor: colors.glassBorder,
+                            }]} />
                             <View style={styles.headerLeft}>
                                 <TheGrydLogoSmall />
                                 <Text style={styles.headerBrand}>THE GRYD</Text>
@@ -62,7 +72,7 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
                                 <Menu size={24} color={colors.text} />
                                 <Text style={styles.menuText}>Menu</Text>
                             </TouchableOpacity>
-                        </View>
+                        </BlurView>
                     </SafeAreaView>
                 )}
 
@@ -85,12 +95,16 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
                         activeOpacity={1}
                         onPress={() => setSidebarOpen(false)}
                     />
-                    <View style={styles.drawer}>
+                    <BlurView
+                        intensity={colors.glassBlurIntensity}
+                        tint={mode === 'dark' ? 'dark' : 'light'}
+                        style={styles.drawer}
+                    >
                         <Sidebar
                             isMobile={true}
                             onClose={() => setSidebarOpen(false)}
                         />
-                    </View>
+                    </BlurView>
                 </View>
             </Modal>
         </GradientBackground>
@@ -115,7 +129,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         flexDirection: 'column',
     },
     mobileHeaderSafe: {
-        backgroundColor: colors.appBg,
+        backgroundColor: 'transparent',
     },
     mobileHeader: {
         height: 60,
@@ -123,8 +137,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        overflow: 'hidden',
     },
     headerLeft: {
         flexDirection: 'row',
@@ -173,11 +186,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         width: '80%',
         maxWidth: 320,
         height: '100%',
-        backgroundColor: colors.surface,
+        overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: { width: 2, height: 0 },
-        shadowOpacity: 0.25,
-        shadowRadius: 10,
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
         elevation: 16,
     },
 });
