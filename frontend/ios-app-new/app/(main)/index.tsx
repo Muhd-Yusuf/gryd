@@ -29,8 +29,6 @@ import {
     MessageCircle,
     Volume2,
     Repeat2,
-    Sun,
-    Moon,
     X,
     Calendar,
     Megaphone,
@@ -49,6 +47,10 @@ import {
     Check,
     CheckCheck,
     AlertCircle,
+    Sun,
+    Moon,
+    LayoutGrid,
+    ShoppingBag,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -57,7 +59,7 @@ import { useTheme } from '../../lib/theme';
 import { Attachment, formatDuration, formatRelativeTime, formatMessageDate, twemojiUrl } from '../../lib/chatMedia';
 import UserAvatar from '../../components/UserAvatar';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
-import { GlassRailButton } from '../../components/glass';
+import { GlassRail } from '../../components/glass';
 import { SafeBlurView as BlurView } from '../../components/SafeBlurView';
 import { ImageViewer } from '../../components/ImageViewer';
 import { ErrorRetry } from '../../components/ErrorRetry';
@@ -66,6 +68,7 @@ import { generateTempId, markMessageFailed, markMessageSent, isTempId } from '..
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useWebSocketContext } from '../../contexts/WebSocketContext';
 import { hapticLight, hapticMedium, hapticSuccess, hapticError, hapticSelection } from '../../lib/haptics';
 import {
@@ -185,12 +188,6 @@ const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
     investor: '#EC4899',
 };
 
-// Mapping icon names to Lucide components for rail buttons
-const RAIL_ICONS: Record<string, any> = {
-    'chat-bubble-outline': MessageCircle,
-    'emoji-events': Trophy,
-    'person-outline': User,
-};
 
 type UserProfile = {
     id: string;
@@ -266,7 +263,7 @@ const TenantCommunityScreen = () => {
     const insets = useSafeAreaInsets();
     // Calculate safe area values for mobile
     const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
-    const styles = useMemo(() => createStyles(colors, bottomInset), [colors, bottomInset]);
+    const styles = useMemo(() => createStyles(colors, mode, bottomInset), [colors, mode, bottomInset]);
     const showCenterPanel = !isMobile;
     const showRightPanel = !isCompact;
     const [userId, setUserId] = useState(getUserId());
@@ -293,7 +290,7 @@ const TenantCommunityScreen = () => {
     const [activeDmId, setActiveDmId] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-    const [activeRail, setActiveRail] = useState('home');
+    const [activeRail, setActiveRail] = useState('messages');
     const [error, setError] = useState('');
     const [feedMenuOpen, setFeedMenuOpen] = useState<string | null>(null);
     const [feedMenuPosition, setFeedMenuPosition] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
@@ -933,10 +930,11 @@ const TenantCommunityScreen = () => {
         return badge.charAt(0).toUpperCase() + badge.slice(1);
     };
 
-    const railItems = [
+    const railItems: { id: string; label: string; Icon: typeof LayoutGrid; onPress?: () => void }[] = [
         {
             id: 'messages',
-            icon: 'chat-bubble-outline' as const,
+            label: 'Messages',
+            Icon: MessageCircle,
             onPress: () => {
                 if (!activeSubgridId) {
                     setError('Please select a community first.');
@@ -950,7 +948,8 @@ const TenantCommunityScreen = () => {
         },
         {
             id: 'contributors',
-            icon: 'emoji-events' as const,
+            label: 'Leaderboard',
+            Icon: Trophy,
             onPress: () =>
                 router.push({
                     pathname: '/(main)/top-contributors',
@@ -958,8 +957,16 @@ const TenantCommunityScreen = () => {
                 }),
         },
         {
+            id: 'marketplace',
+            label: 'Marketplace',
+            Icon: ShoppingBag,
+            onPress: () =>
+                router.push('/(main)/marketplace' as any),
+        },
+        {
             id: 'profile',
-            icon: 'person-outline' as const,
+            label: 'Profile',
+            Icon: User,
             onPress: () =>
                 router.push({
                     pathname: '/(main)/profile',
@@ -1722,7 +1729,7 @@ const TenantCommunityScreen = () => {
     };
 
     return (
-        <SafeAreaView style={styles.safe}>
+        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
             <View style={[styles.page, isMobile && styles.pageMobile]}>
                 <View style={[
                     styles.grid,
@@ -1730,69 +1737,29 @@ const TenantCommunityScreen = () => {
                     isMobile && styles.gridMobile,
                 ]}>
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
-                        <BlurView
-                            intensity={colors.glassBlurIntensity}
-                            tint={mode === 'dark' ? 'dark' : 'light'}
-                            style={styles.leftRail}
-                        >
-                            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.glassNavBg }]} />
-                            {/* Server logo */}
-                            <TouchableOpacity
-                                style={[
-                                    styles.railLogo,
-                                    activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }
-                                ]}
-                                onPress={() => router.push('/(main)')}
-                            >
-                                {activeSubgrid ? (
-                                    activeSubgrid.logoUrl ? (
-                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
-                                    ) : (
-                                        <Text style={styles.railLogoText}>
-                                            {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
-                                        </Text>
-                                    )
-                                ) : null}
-                            </TouchableOpacity>
-                            {/* Rail nav buttons — spring bounce + haptics + metallic shimmer */}
-                            {railItems.map((item) => {
+                        <GlassRail
+                            serverLogo={{
+                                uri: activeSubgrid?.logoUrl,
+                                name: activeSubgrid?.name,
+                                onPress: () => router.push('/(main)'),
+                            }}
+                            items={railItems.map((item) => {
                                 const isActive = activeRail === item.id;
-                                const IconComponent = RAIL_ICONS[item.icon] || MessageCircle;
-                                return (
-                                    <GlassRailButton
-                                        key={item.id}
-                                        label={item.id}
-                                        isActive={isActive}
-                                        onPress={() => {
-                                            setActiveRail(item.id);
-                                            item.onPress?.();
-                                        }}
-                                        icon={
-                                            <IconComponent
-                                                size={22}
-                                                color={isActive ? colors.glassActiveText : colors.textMuted}
-                                            />
-                                        }
-                                    />
-                                );
+                                return {
+                                    id: item.id,
+                                    label: item.label,
+                                    icon: <item.Icon size={20} color={colors.textMuted} />,
+                                    activeIcon: <item.Icon size={20} color={colors.glassActiveText} />,
+                                    onPress: () => {
+                                        setActiveRail(item.id);
+                                        item.onPress?.();
+                                    },
+                                    isActive,
+                                };
                             })}
-                            <View style={styles.railDivider} />
-                            {/* Theme toggle */}
-                            <GlassRailButton
-                                label="theme"
-                                isActive={false}
-                                onPress={toggleTheme}
-                                icon={mode === 'dark'
-                                    ? <Sun size={20} color={colors.textMuted} />
-                                    : <Moon size={20} color={colors.textMuted} />
-                                }
-                            />
-                            <View style={{ flex: 1 }} />
-                            {/* Logout */}
-                            <TouchableOpacity style={styles.exitButton} onPress={handleLogout}>
-                                <X size={18} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        </BlurView>
+                            onToggleTheme={toggleTheme}
+                            onLogout={handleLogout}
+                        />
 
                         <View style={styles.channelPanel}>
                             <View style={styles.panelHeader}>
@@ -1805,6 +1772,10 @@ const TenantCommunityScreen = () => {
                                     </View>
                                 </View>
                                 <TouchableOpacity style={styles.moreBtn}>
+                                    <LinearGradient
+                                        colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                        style={StyleSheet.absoluteFill}
+                                    />
                                     <MoreHorizontal size={18} color={colors.textMuted} />
                                 </TouchableOpacity>
                             </View>
@@ -1851,6 +1822,12 @@ const TenantCommunityScreen = () => {
                                         }
                                     }}
                                 >
+                                    <LinearGradient
+                                        colors={showEventsView
+                                            ? ['rgba(59,130,246,0.22)', 'rgba(59,130,246,0.10)', 'rgba(59,130,246,0.06)']
+                                            : ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.01)']}
+                                        style={StyleSheet.absoluteFill}
+                                    />
                                     <Calendar size={16} color={showEventsView ? colors.text : colors.textMuted} />
                                     <Text style={[styles.eventsButtonText, showEventsView && styles.eventsButtonTextActive]}>
                                         Events
@@ -2690,15 +2667,15 @@ const TenantCommunityScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset: number = 0) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], mode: 'light' | 'dark', bottomInset: number = 0) =>
     StyleSheet.create({
         safe: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         page: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         pageMobile: {
             padding: 0,
@@ -2716,70 +2693,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         leftPanel: {
             flexDirection: 'row',
             width: 380,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         panelCompact: {
             width: '100%',
         },
-        leftRail: {
-            width: 72,
-            paddingVertical: 20,
-            paddingHorizontal: 12,
-            alignItems: 'center',
-            gap: 12,
-            borderRightWidth: 1,
-            borderRightColor: colors.glassBorder,
-            overflow: 'hidden',
-        },
-        railLogo: {
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            backgroundColor: '#1E3A8A',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 8,
-        },
-        railLogoImage: {
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-        },
-        railLogoText: {
-            fontSize: 10,
-            fontWeight: '700',
-            color: '#FFFFFF',
-        },
-        railButton: {
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
-        },
-        railButtonActive: {
-            backgroundColor: colors.surface,
-        },
-        railDivider: {
-            width: 32,
-            height: 1,
-            backgroundColor: colors.border,
-            marginVertical: 8,
-        },
-        exitButton: {
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#7F1D1D',
-            marginTop: 'auto',
-        },
         channelPanel: {
             flex: 1,
             paddingVertical: 20,
-            paddingRight: 20,
+            paddingHorizontal: 16,
             gap: 16,
         },
         panelHeader: {
@@ -2795,7 +2717,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         memberPill: {
             marginTop: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 12,
             paddingVertical: 6,
             borderRadius: 999,
@@ -2812,7 +2734,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 18,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            overflow: 'hidden',
         },
         searchRow: {
             flexDirection: 'row',
@@ -2821,7 +2746,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 12,
             paddingHorizontal: 14,
             height: 44,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         searchInput: {
             flex: 1,
@@ -2850,12 +2775,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             alignItems: 'center',
             gap: 8,
             paddingVertical: 8,
-            paddingHorizontal: 8,
-            borderRadius: 6,
+            paddingHorizontal: 10,
+            borderRadius: 10,
             marginBottom: 8,
+            overflow: 'hidden',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.10)',
         },
         eventsButtonActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         eventsButtonText: {
             fontSize: 14,
@@ -2889,11 +2817,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             gap: 16,
         },
         eventCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 16,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         eventCardHeader: {
             flexDirection: 'row',
@@ -2989,7 +2917,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 10,
         },
         channelRowActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassActiveBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         channelLeft: {
             flexDirection: 'row',
@@ -3011,9 +2941,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 8,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         badgeText: {
             fontSize: 12,
@@ -3034,7 +2964,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 64,
             height: 64,
             borderRadius: 32,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 16,
@@ -3051,10 +2981,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         centerPanel: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 24,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             margin: 16,
             padding: 20,
             gap: 16,
@@ -3076,7 +3006,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         feedCard: {
             borderRadius: 18,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: 16,
             gap: 12,
         },
@@ -3098,10 +3028,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             position: 'absolute',
             top: 24,
             right: 0,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.15,
@@ -3133,10 +3063,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         floatingMenuDropdown: {
             position: 'fixed' as any,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.2,
@@ -3258,7 +3188,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 14,
             paddingHorizontal: 12,
             paddingVertical: 8,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         audioDot: {
             width: 8,
@@ -3277,7 +3207,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 14,
             paddingHorizontal: 12,
             paddingVertical: 10,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         fileText: {
             fontSize: 12,
@@ -3285,7 +3215,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flex: 1,
         },
         reshareCard: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 12,
             marginTop: 8,
@@ -3405,7 +3335,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 60,
             height: 60,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -3427,7 +3357,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 16,
             paddingVertical: 12,
             paddingBottom: bottomInset + 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         recordingIndicator: {
             flexDirection: 'row',
@@ -3454,7 +3384,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             padding: 8,
         },
         stopRecordingBtn: {
-            backgroundColor: '#5865F2',
+            backgroundColor: colors.primary,
             borderRadius: 20,
             padding: 10,
         },
@@ -3471,7 +3401,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         reportCard: {
             width: '100%',
             maxWidth: 420,
-            backgroundColor: colors.glassBg,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderRadius: 16,
             padding: 20,
             borderWidth: 1,
@@ -3481,11 +3411,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             shadowOpacity: 1,
             shadowRadius: 24,
             elevation: 12,
-            ...(Platform.OS === 'web' ? {
-                // @ts-ignore
-                backdropFilter: 'blur(28px)',
-                WebkitBackdropFilter: 'blur(28px)',
-            } : {}),
         },
         reportHeader: {
             flexDirection: 'row',
@@ -3513,12 +3438,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             borderRadius: 14,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         reportReasonChipActive: {
-            backgroundColor: '#111111',
-            borderColor: '#111111',
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
         },
         reportReasonText: {
             fontSize: 12,
@@ -3540,11 +3465,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         reportNotesInput: {
             minHeight: 80,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             padding: 12,
             color: colors.text,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             textAlignVertical: 'top',
         },
         reportActions: {
@@ -3558,7 +3483,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 18,
             borderRadius: 18,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         reportCancelText: {
             fontSize: 12,
@@ -3568,7 +3493,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             paddingHorizontal: 18,
             borderRadius: 18,
-            backgroundColor: '#111111',
+            backgroundColor: colors.primary,
         },
         reportSubmitBtnDisabled: {
             opacity: 0.6,
@@ -3587,7 +3512,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         emojiModalContent: {
             width: 320,
             maxHeight: 400,
-            backgroundColor: colors.glassBg,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderRadius: 16,
             padding: 16,
             borderWidth: 1,
@@ -3640,7 +3565,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             backgroundColor: 'rgba(0,0,0,0.5)',
         },
         commentModalContent: {
-            backgroundColor: colors.glassBg,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
             maxHeight: '80%',
@@ -3649,11 +3574,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderLeftWidth: 1,
             borderRightWidth: 1,
             borderColor: colors.glassBorder,
-            ...(Platform.OS === 'web' ? {
-                // @ts-ignore
-                backdropFilter: 'blur(28px)',
-                WebkitBackdropFilter: 'blur(28px)',
-            } : {}),
         },
         commentModalHeader: {
             flexDirection: 'row',
@@ -3782,10 +3702,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         rightPanel: {
             width: 300,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 24,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             margin: 16,
             marginLeft: 0,
             padding: 20,
@@ -3807,8 +3727,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         dmSearchText: {
             fontSize: 12,
@@ -3823,8 +3743,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 8,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         addFriendsText: {
             fontSize: 12,
@@ -3851,12 +3771,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             paddingHorizontal: 12,
             borderRadius: 14,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         dmRowActive: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassActiveBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         dmAvatarLarge: {
             width: 36,

@@ -8,7 +8,6 @@ import {
     View,
     Text,
     StyleSheet,
-    TouchableOpacity,
     Animated,
     Modal,
     Platform,
@@ -17,6 +16,7 @@ import { Phone, Video, PhoneOff } from 'lucide-react-native';
 import { useCallContextSafe } from '../contexts/CallContext';
 import { useTheme } from '../lib/theme';
 import UserAvatar from './UserAvatar';
+import { GlassButton, GlassIconButton } from './glass';
 
 const IncomingCallOverlay: React.FC = () => {
     const callContext = useCallContextSafe();
@@ -67,12 +67,12 @@ const IncomingCallOverlay: React.FC = () => {
                 statusBarTranslucent
             >
                 <View style={styles.bannerContainer}>
-                    <View style={[styles.banner, { backgroundColor: colors.surface }]}>
+                    <View style={[styles.banner, { backgroundColor: colors.glassBg, borderColor: colors.glassBorder, borderWidth: 1 }]}>
                         <View style={styles.bannerLeft}>
                             <UserAvatar
                                 uri={incomingCall.callerAvatar}
                                 name={incomingCall.callerName}
-                                style={styles.bannerAvatar}
+                                style={[styles.bannerAvatar, { borderColor: colors.successText }]}
                             />
                             <View style={styles.bannerInfo}>
                                 <Text style={[styles.bannerName, { color: colors.text }]} numberOfLines={1}>
@@ -81,9 +81,9 @@ const IncomingCallOverlay: React.FC = () => {
                                 <View style={styles.bannerType}>
                                     <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                                         {incomingCall.callType === 'video' ? (
-                                            <Video size={14} color="#22C55E" />
+                                            <Video size={14} color={colors.successText} />
                                         ) : (
-                                            <Phone size={14} color="#22C55E" />
+                                            <Phone size={14} color={colors.successText} />
                                         )}
                                     </Animated.View>
                                     <Text style={[styles.bannerTypeText, { color: colors.textMuted }]}>
@@ -93,16 +93,22 @@ const IncomingCallOverlay: React.FC = () => {
                             </View>
                         </View>
                         <View style={styles.bannerActions}>
-                            <TouchableOpacity style={styles.bannerDeclineBtn} onPress={declineCall}>
-                                <PhoneOff size={20} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.bannerAnswerBtn} onPress={answerCall}>
-                                {incomingCall.callType === 'video' ? (
+                            <GlassIconButton
+                                icon={<PhoneOff size={20} color={colors.dangerText} />}
+                                onPress={declineCall}
+                                variant="danger"
+                                size="sm"
+                            />
+                            <GlassIconButton
+                                icon={incomingCall.callType === 'video' ? (
                                     <Video size={20} color="#FFFFFF" />
                                 ) : (
                                     <Phone size={20} color="#FFFFFF" />
                                 )}
-                            </TouchableOpacity>
+                                onPress={answerCall}
+                                variant="active"
+                                size="sm"
+                            />
                         </View>
                     </View>
                 </View>
@@ -119,8 +125,8 @@ const IncomingCallOverlay: React.FC = () => {
             statusBarTranslucent
         >
             <View style={styles.container}>
-                <View style={styles.backdrop} />
-                <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                <View style={[styles.backdrop, { backgroundColor: colors.overlay }]} />
+                <View style={[styles.card, { backgroundColor: colors.glassBg, borderColor: colors.glassBorder, borderWidth: 1 }]}>
                     <View style={styles.header}>
                         <Text style={[styles.callLabel, { color: colors.textMuted }]}>
                             Incoming {incomingCall.callType === 'video' ? 'Video' : 'Voice'} Call
@@ -131,7 +137,7 @@ const IncomingCallOverlay: React.FC = () => {
                         <UserAvatar
                             uri={incomingCall.callerAvatar}
                             name={incomingCall.callerName}
-                            style={styles.avatar}
+                            style={[styles.avatar, { borderColor: colors.successText }]}
                         />
                         <Text style={[styles.callerName, { color: colors.text }]}>
                             {incomingCall.callerName}
@@ -139,44 +145,40 @@ const IncomingCallOverlay: React.FC = () => {
                         <Animated.View
                             style={[
                                 styles.pulseIcon,
-                                { transform: [{ scale: pulseAnim }] },
+                                { backgroundColor: colors.successBg, transform: [{ scale: pulseAnim }] },
                             ]}
                         >
                             {incomingCall.callType === 'video' ? (
-                                <Video size={24} color="#22C55E" />
+                                <Video size={24} color={colors.successText} />
                             ) : (
-                                <Phone size={24} color="#22C55E" />
+                                <Phone size={24} color={colors.successText} />
                             )}
                         </Animated.View>
                     </View>
 
                     <View style={styles.actions}>
                         <View style={styles.actionWrap}>
-                            <TouchableOpacity
-                                style={styles.declineBtn}
+                            <GlassButton
+                                label="Decline"
                                 onPress={declineCall}
-                            >
-                                <PhoneOff size={28} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
-                                Decline
-                            </Text>
+                                variant="danger"
+                                size="md"
+                                icon={<PhoneOff size={18} color={colors.dangerText} />}
+                            />
                         </View>
 
                         <View style={styles.actionWrap}>
-                            <TouchableOpacity
-                                style={styles.answerBtn}
+                            <GlassButton
+                                label="Answer"
                                 onPress={answerCall}
-                            >
-                                {incomingCall.callType === 'video' ? (
-                                    <Video size={28} color="#FFFFFF" />
+                                variant="primary"
+                                size="md"
+                                icon={incomingCall.callType === 'video' ? (
+                                    <Video size={18} color="#FFFFFF" />
                                 ) : (
-                                    <Phone size={28} color="#FFFFFF" />
+                                    <Phone size={18} color="#FFFFFF" />
                                 )}
-                            </TouchableOpacity>
-                            <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
-                                Answer
-                            </Text>
+                            />
                         </View>
                     </View>
                 </View>
@@ -219,7 +221,6 @@ const styles = StyleSheet.create({
         height: 44,
         borderRadius: 22,
         borderWidth: 2,
-        borderColor: '#22C55E',
     },
     bannerInfo: {
         marginLeft: 12,
@@ -244,22 +245,6 @@ const styles = StyleSheet.create({
         gap: 10,
         marginLeft: 12,
     },
-    bannerDeclineBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#EF4444',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    bannerAnswerBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#22C55E',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     // Web centered card styles
     container: {
         flex: 1,
@@ -268,7 +253,6 @@ const styles = StyleSheet.create({
     },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
     },
     card: {
         width: '90%',
@@ -299,7 +283,6 @@ const styles = StyleSheet.create({
         borderRadius: 50,
         marginBottom: 16,
         borderWidth: 3,
-        borderColor: '#22C55E',
     },
     callerName: {
         fontSize: 24,
@@ -310,39 +293,16 @@ const styles = StyleSheet.create({
         width: 48,
         height: 48,
         borderRadius: 24,
-        backgroundColor: 'rgba(34, 197, 94, 0.2)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     actions: {
         flexDirection: 'row',
         justifyContent: 'center',
-        gap: 48,
+        gap: 24,
     },
     actionWrap: {
         alignItems: 'center',
-    },
-    declineBtn: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: '#EF4444',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    answerBtn: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: '#22C55E',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    actionLabel: {
-        fontSize: 14,
-        fontWeight: '500',
     },
 });
 

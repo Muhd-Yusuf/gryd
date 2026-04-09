@@ -10,14 +10,16 @@ import {
     Pressable,
     Platform,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MessageCircle, Trophy, User, Sun, Moon, X, BadgeCheck, Mail, Calendar, Building2, ArrowLeft, UserPlus, MoreHorizontal } from 'lucide-react-native';
+import { MessageCircle, Trophy, User, Sun, Moon, X, BadgeCheck, Mail, Calendar, Building2, ArrowLeft, UserPlus, MoreHorizontal, LucideIcon } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getTenantId, getUserId, StakeholderBadge } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../../components/UserAvatar';
 import { useSubgrids, useMembers, usePosts, useSubgridMessages, useTenantId, useCurrentUser } from '../../hooks/queries';
+import { GlassIconButton, GlassRail } from '../../components/glass';
 
 // Badge colors for stakeholders
 const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
@@ -230,10 +232,10 @@ const TopContributorsScreen = () => {
         router.push('/(main)');
     };
 
-    const railItems = [
+    const railItems: { id: string; Icon: LucideIcon; onPress?: () => void }[] = [
         {
             id: 'messages',
-            icon: MessageCircle,
+            Icon: MessageCircle,
             onPress: () =>
                 router.push({
                     pathname: '/(main)/direct-messages',
@@ -242,67 +244,42 @@ const TopContributorsScreen = () => {
         },
         {
             id: 'contributors',
-            icon: Trophy,
+            Icon: Trophy,
         },
         {
             id: 'profile',
-            icon: User,
+            Icon: User,
             onPress: () => router.push('/(main)/profile'),
         },
     ];
 
     return (
-        <SafeAreaView style={styles.safe}>
+        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
             <View style={[styles.page, isMobile && styles.pageMobile]}>
                 <View style={[styles.grid, isMobile && styles.gridMobile]}>
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
-                        <View style={styles.leftRail}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.railLogo,
-                                    activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }
-                                ]}
-                                onPress={handleBack}
-                            >
-                                {activeSubgrid ? (
-                                    activeSubgrid.logoUrl ? (
-                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
-                                    ) : (
-                                        <Text style={styles.railLogoText}>
-                                            {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
-                                        </Text>
-                                    )
-                                ) : null}
-                            </TouchableOpacity>
-                            {railItems.map((item) => {
+                        <GlassRail
+                            serverLogo={{
+                                uri: activeSubgrid?.logoUrl,
+                                name: activeSubgrid?.name,
+                                onPress: handleBack,
+                            }}
+                            items={railItems.map((item) => {
                                 const isActive = activeRail === item.id;
-                                const IconComponent = item.icon;
-                                return (
-                                    <TouchableOpacity
-                                        key={item.id}
-                                        style={[styles.railButton, isActive && styles.railButtonActive]}
-                                        onPress={() => {
-                                            setActiveRail(item.id);
-                                            item.onPress?.();
-                                        }}
-                                    >
-                                        <IconComponent size={20} color={isActive ? colors.text : colors.textMuted} />
-                                    </TouchableOpacity>
-                                );
+                                return {
+                                    id: item.id,
+                                    icon: <item.Icon size={20} color={colors.textMuted} />,
+                                    activeIcon: <item.Icon size={20} color={colors.glassActiveText} />,
+                                    onPress: () => {
+                                        setActiveRail(item.id);
+                                        item.onPress?.();
+                                    },
+                                    isActive,
+                                };
                             })}
-                            <View style={styles.railDivider} />
-                            <TouchableOpacity style={styles.railButton} onPress={toggleTheme}>
-                                {mode === 'dark' ? (
-                                    <Sun size={20} color={colors.textMuted} />
-                                ) : (
-                                    <Moon size={20} color={colors.textMuted} />
-                                )}
-                            </TouchableOpacity>
-                            <View style={{ flex: 1 }} />
-                            <TouchableOpacity style={styles.exitButton} onPress={handleBack}>
-                                <X size={18} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        </View>
+                            onToggleTheme={toggleTheme}
+                            onLogout={handleBack}
+                        />
 
                         <View style={styles.mainPanel}>
                             <Text style={styles.panelTitle}>Leaderboard</Text>
@@ -361,7 +338,7 @@ const TopContributorsScreen = () => {
                     {!isMobile && selectedContributor && (
                         <View style={styles.profilePanel}>
                             {/* Profile Banner */}
-                            <View style={[styles.profileBanner, { backgroundColor: activeSubgrid?.coverImageUrl || colors.primary }]}>
+                            <View style={[styles.profileBanner, { backgroundColor: colors.primary }]}>
                                 {getMemberBannerUrl(selectedContributor.member) ? (
                                     <Image
                                         source={{ uri: getMemberBannerUrl(selectedContributor.member)! }}
@@ -371,12 +348,20 @@ const TopContributorsScreen = () => {
                                     />
                                 ) : null}
                                 <View style={styles.profileHeaderActions}>
-                                    <TouchableOpacity style={styles.profileHeaderIcon}>
-                                        <UserPlus size={18} color={colors.text} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.profileHeaderIcon}>
-                                        <MoreHorizontal size={18} color={colors.text} />
-                                    </TouchableOpacity>
+                                    <GlassIconButton
+                                        icon={<UserPlus size={18} color={colors.text} />}
+                                        onPress={() => {}}
+                                        variant="default"
+                                        size="sm"
+                                        accessibilityLabel="Add friend"
+                                    />
+                                    <GlassIconButton
+                                        icon={<MoreHorizontal size={18} color={colors.text} />}
+                                        onPress={() => {}}
+                                        variant="default"
+                                        size="sm"
+                                        accessibilityLabel="More options"
+                                    />
                                 </View>
                             </View>
 
@@ -480,18 +465,22 @@ const TopContributorsScreen = () => {
                 {/* Mobile Profile Modal */}
                 {isMobile && mobileShowProfile && selectedContributor && (
                     <Modal visible={mobileShowProfile} animationType="slide" presentationStyle="pageSheet">
-                        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.surface }]}>
+                        <SafeAreaView style={[styles.modalContainer, { backgroundColor: mode === 'dark' ? '#05050E' : '#F4F6FF' }]}>
                             <View style={styles.modalHeader}>
-                                <TouchableOpacity onPress={() => setMobileShowProfile(false)} style={styles.modalBackButton}>
-                                    <ArrowLeft size={20} color={colors.text} />
-                                </TouchableOpacity>
+                                <GlassIconButton
+                                    icon={<ArrowLeft size={20} color={colors.text} />}
+                                    onPress={() => setMobileShowProfile(false)}
+                                    variant="default"
+                                    size="sm"
+                                    accessibilityLabel="Go back"
+                                />
                                 <Text style={styles.modalTitle}>{selectedContributor.name}</Text>
-                                <View style={{ width: 28 }} />
+                                <View style={{ width: 32 }} />
                             </View>
 
                             <ScrollView style={styles.modalContent}>
                                 {/* Profile Banner */}
-                                <View style={[styles.profileBanner, { backgroundColor: activeSubgrid?.coverImageUrl || colors.primary }]}>
+                                <View style={[styles.profileBanner, { backgroundColor: colors.primary }]}>
                                     {getMemberBannerUrl(selectedContributor.member) ? (
                                         <Image
                                             source={{ uri: getMemberBannerUrl(selectedContributor.member)! }}
@@ -598,11 +587,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         safe: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         page: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         pageMobile: {
             padding: 0,
@@ -617,66 +606,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         leftPanel: {
             flexDirection: 'row',
             width: 420,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         panelCompact: {
             width: '100%',
         },
-        leftRail: {
-            width: 72,
-            paddingVertical: 20,
-            paddingHorizontal: 12,
-            alignItems: 'center',
-            gap: 12,
-            backgroundColor: colors.appBg,
-        },
-        railLogo: {
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            backgroundColor: '#1E3A8A',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 8,
-        },
-        railLogoImage: {
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-        },
-        railLogoText: {
-            fontSize: 10,
-            fontWeight: '700',
-            color: '#FFFFFF',
-        },
-        railButton: {
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
-        },
-        railButtonActive: {
-            backgroundColor: colors.surface,
-        },
-        railDivider: {
-            width: 32,
-            height: 1,
-            backgroundColor: colors.border,
-            marginVertical: 8,
-        },
-        exitButton: {
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#7F1D1D',
-        },
         mainPanel: {
             flex: 1,
             paddingVertical: 20,
+            paddingLeft: 16,
             paddingRight: 20,
             gap: 20,
         },
@@ -705,9 +643,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 14,
             padding: 8,
             borderRadius: 8,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         contributorRowSelected: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassActiveBg,
         },
         contributorAvatar: {
             width: 48,
@@ -753,9 +694,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         // Profile Panel styles
         profilePanel: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
         },
         profileBanner: {
             height: 180,
@@ -778,7 +719,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 36,
             height: 36,
             borderRadius: 18,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -790,11 +733,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 100,
             height: 100,
             borderRadius: 50,
-            backgroundColor: '#E8D4C4',
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 4,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
             marginBottom: 16,
             overflow: 'hidden',
         },
@@ -806,7 +749,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         profileAvatarText: {
             fontSize: 32,
             fontWeight: '600',
-            color: '#8B7355',
+            color: colors.text,
         },
         profileName: {
             fontSize: 24,
@@ -839,8 +782,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: '#FFFFFF',
         },
         aboutCard: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: 'rgba(255,255,255,0.10)',
             borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             padding: 16,
         },
         aboutSection: {
@@ -873,7 +818,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             paddingHorizontal: 16,
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         modalBackButton: {
             padding: 4,

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import SuperAdminDashboard from '../../components/SuperAdminDashboard';
 import { getAuthUser, isAuthenticated } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
+import { GlassButton } from '../../components/glass';
 
 export default function SuperAdminPage() {
     const router = useRouter();
@@ -35,23 +36,21 @@ export default function SuperAdminPage() {
     }, []);
 
     if (loading) {
-        return <View style={[styles.container, { backgroundColor: colors.appBg }]} />;
+        return <View style={[styles.container, { backgroundColor: 'transparent' }]} />;
     }
 
     if (!hasAccess) {
         return (
-            <View style={[styles.container, { backgroundColor: colors.appBg }]}>
+            <View style={[styles.container, { backgroundColor: 'transparent' }]}>
                 <Text style={[styles.title, { color: colors.text }]}>Access Denied</Text>
                 <Text style={[styles.subtitle, { color: colors.textMuted }]}>
                     You don't have permission to access the super admin dashboard.
                     Only super admins can access this area.
                 </Text>
-                <TouchableOpacity
-                    style={[styles.button, { backgroundColor: colors.primary }]}
+                <GlassButton
+                    label="Go to Community"
                     onPress={() => router.replace('/(main)')}
-                >
-                    <Text style={[styles.buttonText, { color: colors.primaryText }]}>Go to Community</Text>
-                </TouchableOpacity>
+                />
             </View>
         );
     }
@@ -76,14 +75,5 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         maxWidth: 320,
         marginBottom: 24,
-    },
-    button: {
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 12,
-    },
-    buttonText: {
-        fontSize: 16,
-        fontWeight: '600',
     },
 });

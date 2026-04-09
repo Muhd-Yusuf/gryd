@@ -410,7 +410,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         shell: {
             flexGrow: 1,
@@ -419,7 +419,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         leftPanel: {
             flex: 1,
-            backgroundColor: '#000000',
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 32,
             paddingTop: 26,
             paddingBottom: 80,
@@ -485,11 +485,11 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         rightPanel: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
             padding: 48,
             justifyContent: 'center',
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
         },
         themeToggle: {
             position: 'absolute',
@@ -497,7 +497,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             right: 20,
             padding: 10,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         formCard: {
             maxWidth: 400,
@@ -524,7 +524,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             marginBottom: 20,
             paddingBottom: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         avatarContainer: {
             width: 56,
@@ -539,11 +539,11 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         avatarPlaceholder: {
             width: '100%',
             height: '100%',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 28,
         },
         avatarText: {
@@ -573,13 +573,13 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 10,
             paddingVertical: 10,
             borderBottomWidth: 1,
-            borderBottomColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
         },
         infoIcon: {
             width: 32,
             height: 32,
             borderRadius: 16,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
         },
@@ -600,7 +600,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
             borderColor: colors.error,
             padding: 10,
@@ -618,7 +618,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         editButton: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 10,
             height: 36,
             alignItems: 'center',
@@ -706,7 +706,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         scrollContent: {
             padding: 30,
@@ -725,7 +725,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         header: {
             marginBottom: 40,
@@ -751,7 +751,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             marginBottom: 20,
             paddingBottom: 24,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         avatarContainer: {
             width: 72,
@@ -766,11 +766,11 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         avatarPlaceholder: {
             width: '100%',
             height: '100%',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 36,
         },
         avatarText: {
@@ -800,13 +800,13 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 12,
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
         },
         infoIcon: {
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
         },
@@ -827,7 +827,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
             borderColor: colors.error,
             padding: 12,
@@ -844,7 +844,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         editButton: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 30,
             height: 56,
             alignItems: 'center',
@@ -896,7 +896,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         successContainer: {
             alignItems: 'center',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             padding: 32,
             width: '100%',

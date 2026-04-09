@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../lib/theme';
+import { GlassButton } from './glass';
 
 // City Background URL (Modern Black & White Architecture)
 const CITY_BG =
@@ -135,7 +136,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         containerDesktop: {
             flexDirection: 'row',
@@ -182,7 +183,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
 
         // Content Side
         contentSide: {
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
             flex: 1,
         },
         contentDesktop: {
@@ -261,7 +262,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         progressBarBg: {
             height: 6,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             borderRadius: 3,
             marginBottom: 8,
         },

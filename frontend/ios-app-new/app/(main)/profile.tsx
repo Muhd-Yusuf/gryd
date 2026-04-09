@@ -9,18 +9,20 @@ import {
     Alert,
     Platform,
     useWindowDimensions,
-    TextInput,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Sun, Moon, Camera, X, Check, AtSign, User, UserCircle, Mail, BadgeCheck, Building2, Users, LogOut, Edit2, Shield, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Camera, X, Check, AtSign, User, UserCircle, Mail, BadgeCheck, Building2, Users, LogOut, Edit2, Shield, ChevronRight, Sun, Moon, Wallet, Copy, Link, CheckCircle } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { resolveTenantId, logout, updateAuthUser, StakeholderBadge } from '../../lib/api';
+import { resolveTenantId, logout, StakeholderBadge } from '../../lib/api';
+import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '../../lib/theme';
 import UserAvatar from '../../components/UserAvatar';
-import { useUserProfile, useUserMemberships, useUploadAvatar, useUploadBanner, useUpdateUsername } from '../../hooks/queries';
+import { useUserProfile, useUserMemberships, useUploadAvatar, useUploadBanner, useUpdateUsername, useWalletMutation, useEnsMutation } from '../../hooks/queries';
+import { GlassCard, GlassIconButton, GlassButton, GlassInput } from '../../components/glass';
 
 type UserProfile = {
     userId: string;
@@ -33,6 +35,8 @@ type UserProfile = {
     stakeholderBadge?: StakeholderBadge;
     company?: string;
     username?: string;
+    walletAddress?: string;
+    ensDomain?: string;
 };
 
 type SubgridMembership = {
@@ -53,6 +57,8 @@ const ProfileScreen = () => {
     const uploadAvatarMutation = useUploadAvatar();
     const uploadBannerMutation = useUploadBanner();
     const updateUsernameMutation = useUpdateUsername();
+    const walletMutation = useWalletMutation();
+    const ensMutation = useEnsMutation();
 
     // Tenant ID for memberships
     const [tenantId, setTenantId] = useState('');
@@ -66,6 +72,14 @@ const ProfileScreen = () => {
     const [editingUsername, setEditingUsername] = useState(false);
     const [usernameError, setUsernameError] = useState('');
 
+    // Web3 & Crypto inline state
+    const [walletInput, setWalletInput] = useState('');
+    const [ensInput, setEnsInput] = useState('');
+    const [walletError, setWalletError] = useState('');
+    const [ensError, setEnsError] = useState('');
+    const walletSaving = walletMutation.isPending;
+    const ensSaving = ensMutation.isPending;
+
     // Derived data from React Query
     const user: UserProfile | null = profileQuery.data ? {
         userId: profileQuery.data.userId,
@@ -78,6 +92,8 @@ const ProfileScreen = () => {
         stakeholderBadge: profileQuery.data.stakeholderBadge,
         company: profileQuery.data.company,
         username: profileQuery.data.username,
+        walletAddress: profileQuery.data.walletAddress,
+        ensDomain: profileQuery.data.ensDomain,
     } : null;
 
     const memberships: SubgridMembership[] = membershipsQuery.data || [];
@@ -100,6 +116,19 @@ const ProfileScreen = () => {
             setUsername(user.username);
         }
     }, [user?.username, editingUsername]);
+
+    // Sync wallet / ENS inputs from saved profile data
+    useEffect(() => {
+        if (user?.walletAddress !== undefined) {
+            setWalletInput(user.walletAddress ?? '');
+        }
+    }, [user?.walletAddress]);
+
+    useEffect(() => {
+        if (user?.ensDomain !== undefined) {
+            setEnsInput(user.ensDomain ?? '');
+        }
+    }, [user?.ensDomain]);
 
     // Redirect to login if no profile
     useEffect(() => {
@@ -247,6 +276,55 @@ const ProfileScreen = () => {
         setUsernameError('');
     };
 
+    const truncateAddress = (addr: string) =>
+        `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+
+    const handleConnectWallet = async () => {
+        const address = walletInput.trim();
+        if (!address.startsWith('0x') || address.length !== 42) {
+            setWalletError('Enter a valid Ethereum address (0x… 42 chars)');
+            return;
+        }
+        setWalletError('');
+        try {
+            await walletMutation.mutateAsync(address);
+            setWalletInput('');
+        } catch (err: any) {
+            setWalletError(err.message || 'Failed to connect wallet');
+        }
+    };
+
+    const handleDisconnectWallet = async () => {
+        try {
+            await walletMutation.mutateAsync(null);
+        } catch (err: any) {
+            setError(err.message || 'Failed to disconnect wallet');
+        }
+    };
+
+    const handleLinkEns = async () => {
+        const domain = ensInput.trim();
+        if (!domain.endsWith('.eth') || domain.length < 7) {
+            setEnsError('Enter a valid ENS domain (e.g. yourname.eth, min 7 chars)');
+            return;
+        }
+        setEnsError('');
+        try {
+            await ensMutation.mutateAsync(domain);
+            setEnsInput('');
+        } catch (err: any) {
+            setEnsError(err.message || 'Failed to link ENS domain');
+        }
+    };
+
+    const handleUnlinkEns = async () => {
+        try {
+            await ensMutation.mutateAsync(null);
+        } catch (err: any) {
+            setError(err.message || 'Failed to unlink ENS domain');
+        }
+    };
+
     const handleLogout = async () => {
         const confirmLogout = Platform.OS === 'web'
             ? window.confirm('Are you sure you want to log out?')
@@ -290,7 +368,7 @@ const ProfileScreen = () => {
             case 'moderator':
                 return { bg: '#F59E0B', text: '#FFFFFF' };
             default:
-                return { bg: colors.surfaceMuted, text: colors.text };
+                return { bg: colors.glassBg, text: colors.text };
         }
     };
 
@@ -360,26 +438,30 @@ const ProfileScreen = () => {
             <View style={styles.container}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-                        <ArrowLeft size={24} color={colors.text} />
-                    </TouchableOpacity>
+                    <GlassIconButton
+                        icon={<ArrowLeft size={22} color={colors.text} />}
+                        onPress={handleBack}
+                        variant="default"
+                        size="md"
+                        accessibilityLabel="Go back"
+                    />
                     <Text style={styles.headerTitle}>Profile</Text>
-                    <TouchableOpacity style={styles.themeButton} onPress={toggleTheme}>
-                        {mode === 'dark' ? (
-                            <Sun size={24} color={colors.text} />
-                        ) : (
-                            <Moon size={24} color={colors.text} />
-                        )}
-                    </TouchableOpacity>
+                    <GlassIconButton
+                        icon={mode === 'dark' ? <Sun size={20} color={colors.text} /> : <Moon size={20} color={colors.text} />}
+                        onPress={toggleTheme}
+                        variant="default"
+                        size="md"
+                        accessibilityLabel="Toggle theme"
+                    />
                 </View>
 
                 <ScrollView
-                    style={styles.content}
-                    contentContainerStyle={styles.contentContainer}
+                    style={styles.scroll}
+                    contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Profile Card with Banner and Avatar */}
-                    <View style={styles.profileCard}>
+                    <GlassCard style={styles.profileCard}>
                         {/* Banner Section */}
                         <TouchableOpacity
                             style={styles.bannerContainer}
@@ -390,15 +472,20 @@ const ProfileScreen = () => {
                             {bannerUri ? (
                                 <Image source={{ uri: bannerUri }} style={styles.bannerImage} cachePolicy="memory-disk" />
                             ) : (
-                                <View style={[styles.bannerPlaceholder, { backgroundColor: mode === 'dark' ? '#1a1a2e' : '#667eea' }]} />
+                                <View style={[styles.bannerPlaceholder, { backgroundColor: 'rgba(59,130,246,0.15)' }]} />
                             )}
-                            <View style={styles.bannerOverlay}>
+                            <LinearGradient
+                                colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.04)']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 0, y: 1 }}
+                                style={styles.bannerOverlay}
+                            >
                                 {savingBanner ? (
                                     <ActivityIndicator size="small" color="#FFFFFF" />
                                 ) : (
                                     <Camera size={20} color="#FFFFFF" />
                                 )}
-                            </View>
+                            </LinearGradient>
                         </TouchableOpacity>
 
                         {/* Avatar Section - Positioned over banner */}
@@ -410,38 +497,38 @@ const ProfileScreen = () => {
                                     style={styles.avatar}
                                     accessibilityLabel={`${fullName} avatar`}
                                 />
-                                <View style={styles.avatarOverlay}>
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0.06)']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                    style={styles.avatarOverlay}
+                                >
                                     {saving ? (
                                         <ActivityIndicator size="small" color="#FFFFFF" />
                                     ) : (
                                         <Camera size={20} color="#FFFFFF" />
                                     )}
-                                </View>
+                                </LinearGradient>
                             </TouchableOpacity>
                             {stagedImage ? (
                                 <View style={styles.avatarActions}>
-                                    <TouchableOpacity
-                                        style={styles.cancelAvatarButton}
+                                    <GlassButton
+                                        label="Cancel"
                                         onPress={handleCancelAvatar}
+                                        variant="secondary"
+                                        size="sm"
                                         disabled={saving}
-                                    >
-                                        <X size={16} color={colors.text} />
-                                        <Text style={styles.cancelAvatarText}>Cancel</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={styles.saveAvatarButton}
+                                        icon={<X size={14} color={colors.text} />}
+                                    />
+                                    <GlassButton
+                                        label="Save"
                                         onPress={handleSaveAvatar}
+                                        variant="primary"
+                                        size="sm"
+                                        loading={saving}
                                         disabled={saving}
-                                    >
-                                        {saving ? (
-                                            <ActivityIndicator size="small" color="#FFFFFF" />
-                                        ) : (
-                                            <>
-                                                <Check size={16} color="#FFFFFF" />
-                                                <Text style={styles.saveAvatarText}>Save</Text>
-                                            </>
-                                        )}
-                                    </TouchableOpacity>
+                                        icon={<Check size={14} color="#FFFFFF" />}
+                                    />
                                 </View>
                             ) : (
                                 <Text style={styles.avatarHint}>Tap to change photo</Text>
@@ -451,28 +538,23 @@ const ProfileScreen = () => {
                         {/* Banner Actions - Moved below avatar to prevent overlap */}
                         {stagedBanner && (
                             <View style={styles.bannerActions}>
-                                <TouchableOpacity
-                                    style={styles.cancelBannerButton}
+                                <GlassButton
+                                    label="Cancel"
                                     onPress={handleCancelBanner}
+                                    variant="secondary"
+                                    size="sm"
                                     disabled={savingBanner}
-                                >
-                                    <X size={14} color={colors.text} />
-                                    <Text style={styles.cancelBannerText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.saveBannerButton}
+                                    icon={<X size={14} color={colors.text} />}
+                                />
+                                <GlassButton
+                                    label="Save Banner"
                                     onPress={handleSaveBanner}
+                                    variant="primary"
+                                    size="sm"
+                                    loading={savingBanner}
                                     disabled={savingBanner}
-                                >
-                                    {savingBanner ? (
-                                        <ActivityIndicator size="small" color="#FFFFFF" />
-                                    ) : (
-                                        <>
-                                            <Check size={14} color="#FFFFFF" />
-                                            <Text style={styles.saveBannerText}>Save Banner</Text>
-                                        </>
-                                    )}
-                                </TouchableOpacity>
+                                    icon={<Check size={14} color="#FFFFFF" />}
+                                />
                             </View>
                         )}
 
@@ -499,14 +581,21 @@ const ProfileScreen = () => {
                                         </Text>
                                     </View>
                                 )}
+                                {/* ETH badge — shown when wallet is connected */}
+                                {user?.walletAddress && (
+                                    <View style={styles.ethBadge}>
+                                        <Wallet size={11} color="#F59E0B" />
+                                        <Text style={styles.ethBadgeText}>ETH</Text>
+                                    </View>
+                                )}
                             </View>
                         </View>
-                    </View>
+                    </GlassCard>
 
                     {/* Account Info Section */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Account Information</Text>
-                        <View style={styles.infoCard}>
+                        <GlassCard style={styles.infoCard}>
                             {/* Username Field */}
                             <View style={styles.infoRow}>
                                 <AtSign size={20} color={colors.textMuted} />
@@ -514,41 +603,35 @@ const ProfileScreen = () => {
                                     <Text style={styles.infoLabel}>Username</Text>
                                     {editingUsername ? (
                                         <View style={styles.usernameEditContainer}>
-                                            <TextInput
-                                                style={styles.usernameInput}
+                                            <GlassInput
                                                 value={username}
-                                                onChangeText={(text) => {
+                                                onChangeText={(text: string) => {
                                                     setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
                                                     setUsernameError('');
                                                 }}
                                                 placeholder="Choose a username"
-                                                placeholderTextColor={colors.textMuted}
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
                                                 maxLength={20}
+                                                error={usernameError || undefined}
+                                                icon={<AtSign size={15} color={colors.textMuted} />}
                                             />
-                                            {usernameError ? (
-                                                <Text style={styles.usernameErrorText}>{usernameError}</Text>
-                                            ) : null}
                                             <View style={styles.usernameActions}>
-                                                <TouchableOpacity
-                                                    style={styles.cancelUsernameButton}
+                                                <GlassButton
+                                                    label="Cancel"
                                                     onPress={handleCancelUsername}
+                                                    variant="secondary"
+                                                    size="sm"
                                                     disabled={savingUsername}
-                                                >
-                                                    <Text style={styles.cancelUsernameText}>Cancel</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.saveUsernameButton}
+                                                />
+                                                <GlassButton
+                                                    label="Save"
                                                     onPress={handleSaveUsername}
+                                                    variant="primary"
+                                                    size="sm"
+                                                    loading={savingUsername}
                                                     disabled={savingUsername}
-                                                >
-                                                    {savingUsername ? (
-                                                        <ActivityIndicator size="small" color="#FFFFFF" />
-                                                    ) : (
-                                                        <Text style={styles.saveUsernameText}>Save</Text>
-                                                    )}
-                                                </TouchableOpacity>
+                                                />
                                             </View>
                                         </View>
                                     ) : (
@@ -608,14 +691,14 @@ const ProfileScreen = () => {
                                     </View>
                                 </>
                             )}
-                        </View>
+                        </GlassCard>
                     </View>
 
                     {/* Community Memberships Section */}
                     {memberships.length > 0 && (
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>Community Memberships</Text>
-                            <View style={styles.infoCard}>
+                            <GlassCard style={styles.infoCard}>
                                 {memberships.map((membership, index) => {
                                     const memberRoleBadge = getRoleBadgeColor(membership.role);
                                     return (
@@ -637,14 +720,14 @@ const ProfileScreen = () => {
                                         </React.Fragment>
                                     );
                                 })}
-                            </View>
+                            </GlassCard>
                         </View>
                     )}
 
                     {/* Privacy & Safety Section */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Settings</Text>
-                        <View style={styles.infoCard}>
+                        <GlassCard style={styles.infoCard}>
                             <TouchableOpacity
                                 style={styles.infoRow}
                                 onPress={() => router.push('/(main)/privacy-settings')}
@@ -652,20 +735,131 @@ const ProfileScreen = () => {
                             >
                                 <Shield size={20} color={colors.primary} />
                                 <View style={styles.infoContent}>
-                                    <Text style={styles.infoLabel}>Privacy & Safety</Text>
+                                    <Text style={styles.infoLabel}>Privacy &amp; Safety</Text>
                                     <Text style={styles.infoValue}>Control who can see your profile</Text>
                                 </View>
                                 <ChevronRight size={18} color={colors.textMuted} />
                             </TouchableOpacity>
-                        </View>
+                        </GlassCard>
+                    </View>
+
+                    {/* Web3 & Crypto Section */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Web3 &amp; Crypto</Text>
+                        <GlassCard style={styles.web3Card}>
+                            {/* Section header row */}
+                            <View style={styles.web3HeaderRow}>
+                                <View style={styles.web3IconWrap}>
+                                    <Wallet size={18} color="#F59E0B" />
+                                </View>
+                                <Text style={styles.web3CardTitle}>Web3 &amp; Crypto</Text>
+                            </View>
+
+                            {/* ETH Wallet Address */}
+                            <View style={styles.web3FieldBlock}>
+                                <Text style={styles.web3FieldLabel}>ETH Wallet Address</Text>
+                                <View style={styles.web3InputRow}>
+                                    <View style={styles.web3InputFlex}>
+                                        <GlassInput
+                                            value={walletInput}
+                                            onChangeText={(t: string) => { setWalletInput(t); setWalletError(''); }}
+                                            placeholder="0x…"
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                            error={walletError || undefined}
+                                            icon={<Wallet size={15} color="#F59E0B" />}
+                                        />
+                                    </View>
+                                    {user?.walletAddress ? (
+                                        <GlassButton
+                                            label="Remove"
+                                            onPress={handleDisconnectWallet}
+                                            variant="danger"
+                                            size="sm"
+                                            loading={walletSaving}
+                                            disabled={walletSaving}
+                                        />
+                                    ) : (
+                                        <GlassButton
+                                            label="Save"
+                                            onPress={handleConnectWallet}
+                                            variant="primary"
+                                            size="sm"
+                                            loading={walletSaving}
+                                            disabled={walletSaving || !walletInput.trim()}
+                                            icon={<Check size={13} color="#fff" />}
+                                        />
+                                    )}
+                                </View>
+                                {user?.walletAddress && (
+                                    <View style={styles.web3SavedRow}>
+                                        <CheckCircle size={13} color="#22C55E" />
+                                        <Text style={styles.web3SavedText}>{truncateAddress(user.walletAddress)}</Text>
+                                        <TouchableOpacity onPress={() => Clipboard.setStringAsync(user.walletAddress!)} style={styles.web3CopyBtn}>
+                                            <Copy size={13} color={colors.textMuted} />
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+
+                            <View style={styles.web3Divider} />
+
+                            {/* ENS Domain */}
+                            <View style={styles.web3FieldBlock}>
+                                <Text style={styles.web3FieldLabel}>ENS Domain</Text>
+                                <View style={styles.web3InputRow}>
+                                    <View style={styles.web3InputFlex}>
+                                        <GlassInput
+                                            value={ensInput}
+                                            onChangeText={(t: string) => { setEnsInput(t.toLowerCase()); setEnsError(''); }}
+                                            placeholder="yourname.eth"
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                            error={ensError || undefined}
+                                            icon={<Link size={15} color="#8B5CF6" />}
+                                        />
+                                    </View>
+                                    {user?.ensDomain ? (
+                                        <GlassButton
+                                            label="Unlink"
+                                            onPress={handleUnlinkEns}
+                                            variant="danger"
+                                            size="sm"
+                                            loading={ensSaving}
+                                            disabled={ensSaving}
+                                        />
+                                    ) : (
+                                        <GlassButton
+                                            label="Link"
+                                            onPress={handleLinkEns}
+                                            variant="secondary"
+                                            size="sm"
+                                            loading={ensSaving}
+                                            disabled={ensSaving || !ensInput.trim()}
+                                            icon={<Link size={13} color={colors.primary} />}
+                                        />
+                                    )}
+                                </View>
+                                {user?.ensDomain && (
+                                    <View style={styles.web3SavedRow}>
+                                        <CheckCircle size={13} color="#22C55E" />
+                                        <Text style={styles.web3SavedText}>{user.ensDomain}</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </GlassCard>
                     </View>
 
                     {/* Logout Section */}
                     <View style={styles.section}>
-                        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                            <LogOut size={20} color="#EF4444" />
-                            <Text style={styles.logoutText}>Log Out</Text>
-                        </TouchableOpacity>
+                        <GlassButton
+                            label="Log Out"
+                            onPress={handleLogout}
+                            variant="danger"
+                            size="md"
+                            fullWidth
+                            icon={<LogOut size={18} color={mode === 'dark' ? '#FCA5A5' : '#DC2626'} />}
+                        />
                     </View>
 
                     {!!error && (
@@ -673,6 +867,7 @@ const ProfileScreen = () => {
                     )}
                 </ScrollView>
             </View>
+
         </SafeAreaView>
     );
 };
@@ -681,10 +876,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
     StyleSheet.create({
         safe: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         container: {
             flex: 1,
+            backgroundColor: 'transparent',
         },
         header: {
             flexDirection: 'row',
@@ -693,8 +889,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             paddingHorizontal: 16,
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         backButton: {
             width: 40,
@@ -723,11 +919,20 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             paddingBottom: 40,
             gap: 24,
         },
+        // Aliases used in JSX
+        scroll: {
+            flex: 1,
+        },
+        scrollContent: {
+            padding: 16,
+            paddingBottom: 40,
+            gap: 24,
+        },
         profileCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             overflow: 'hidden',
         },
         // Banner Styles
@@ -764,7 +969,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             gap: 12,
             paddingVertical: 12,
             paddingHorizontal: 16,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         cancelBannerButton: {
             flexDirection: 'row',
@@ -774,8 +979,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             paddingVertical: 8,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         cancelBannerText: {
             fontSize: 13,
@@ -812,9 +1017,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             width: 100,
             height: 100,
             borderRadius: 50,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderWidth: 4,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         avatarOverlay: {
             position: 'absolute',
@@ -827,7 +1032,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 3,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         avatarHint: {
             fontSize: 12,
@@ -847,8 +1052,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             paddingVertical: 10,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         cancelAvatarText: {
             fontSize: 14,
@@ -913,12 +1118,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             letterSpacing: 0.5,
             marginLeft: 4,
         },
+        // GlassCard wraps with its own border/bg — pass overflow + padding 0
         infoCard: {
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: colors.border,
             overflow: 'hidden',
+            padding: 0,
         },
         infoRow: {
             flexDirection: 'row',
@@ -947,7 +1150,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
         },
         divider: {
             height: 1,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             marginLeft: 48,
         },
         membershipRow: {
@@ -960,7 +1163,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: 'rgba(59,130,246,0.10)',
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -983,22 +1186,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             fontSize: 11,
             fontWeight: '600',
         },
-        logoutButton: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            backgroundColor: colors.dangerBg,
-            borderRadius: 12,
-            paddingVertical: 14,
-            borderWidth: 1,
-            borderColor: colors.error,
-        },
-        logoutText: {
-            fontSize: 15,
-            fontWeight: '600',
-            color: '#EF4444',
-        },
         errorText: {
             fontSize: 13,
             color: colors.error,
@@ -1011,18 +1198,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
         },
         usernameEditContainer: {
             flex: 1,
-            gap: 8,
-        },
-        usernameInput: {
-            fontSize: 15,
-            fontWeight: '500',
-            color: colors.text,
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: 8,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            backgroundColor: colors.surfaceMuted,
+            gap: 10,
         },
         usernameValueContainer: {
             flexDirection: 'row',
@@ -1034,35 +1210,102 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], width: numb
             gap: 8,
             marginTop: 4,
         },
-        cancelUsernameButton: {
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 6,
+        // Web3 & Crypto — inline card
+        web3IconWrap: {
+            width: 36,
+            height: 36,
+            borderRadius: 12,
+            backgroundColor: 'rgba(255,255,255,0.07)',
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
-        cancelUsernameText: {
-            fontSize: 13,
-            fontWeight: '600',
+        web3ActionGroup: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        ensValueRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        ethBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 10,
+            backgroundColor: 'rgba(245,158,11,0.15)',
+            borderWidth: 1,
+            borderColor: 'rgba(245,158,11,0.35)',
+        },
+        ethBadgeText: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: '#F59E0B',
+            letterSpacing: 0.5,
+        },
+        web3Card: {
+            overflow: 'hidden',
+            padding: 0,
+        },
+        web3HeaderRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            paddingHorizontal: 16,
+            paddingTop: 16,
+            paddingBottom: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.glassBorder,
+        },
+        web3CardTitle: {
+            fontSize: 15,
+            fontWeight: '700',
             color: colors.text,
         },
-        saveUsernameButton: {
+        web3FieldBlock: {
             paddingHorizontal: 16,
-            paddingVertical: 6,
-            borderRadius: 6,
-            backgroundColor: colors.primary,
-            minWidth: 60,
-            alignItems: 'center',
+            paddingVertical: 14,
+            gap: 8,
         },
-        saveUsernameText: {
-            fontSize: 13,
-            fontWeight: '600',
-            color: '#FFFFFF',
-        },
-        usernameErrorText: {
+        web3FieldLabel: {
             fontSize: 12,
-            color: colors.error,
+            fontWeight: '600',
+            color: colors.textMuted,
+            textTransform: 'uppercase',
+            letterSpacing: 0.4,
+            marginBottom: 2,
+        },
+        web3InputRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+        },
+        web3InputFlex: {
+            flex: 1,
+        },
+        web3SavedRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 4,
+        },
+        web3SavedText: {
+            fontSize: 13,
+            color: colors.textMuted,
+            fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+        },
+        web3CopyBtn: {
+            padding: 4,
+        },
+        web3Divider: {
+            height: 1,
+            backgroundColor: colors.glassBorder,
+            marginHorizontal: 16,
         },
     });
 

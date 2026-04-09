@@ -600,7 +600,7 @@ const createStyles = (colors: any) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         header: {
             flexDirection: 'row',
@@ -609,7 +609,7 @@ const createStyles = (colors: any) =>
             paddingHorizontal: 16,
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         backButton: {
             padding: 8,
@@ -727,7 +727,7 @@ const createStyles = (colors: any) =>
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: colors.appBg,
+            borderColor: 'transparent',
         },
         micIndicatorMuted: {
             backgroundColor: '#EF4444',
@@ -753,8 +753,10 @@ const createStyles = (colors: any) =>
             top: 70,
             left: -20,
             right: -20,
-            backgroundColor: colors.cardBg,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             padding: 8,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
@@ -776,9 +778,11 @@ const createStyles = (colors: any) =>
         },
         waveSection: {
             marginBottom: 24,
-            backgroundColor: '#FEF3C7',
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 12,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         waveRequestRow: {
             flexDirection: 'row',
@@ -794,7 +798,7 @@ const createStyles = (colors: any) =>
         waveName: {
             flex: 1,
             fontSize: 14,
-            color: '#78350F',
+            color: colors.text,
         },
         waveActions: {
             flexDirection: 'row',
@@ -846,7 +850,7 @@ const createStyles = (colors: any) =>
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: colors.appBg,
+            borderColor: 'transparent',
         },
         listenerName: {
             fontSize: 10,
@@ -873,25 +877,27 @@ const createStyles = (colors: any) =>
             paddingVertical: 24,
             paddingBottom: 40,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         controlButton: {
             width: 56,
             height: 56,
             borderRadius: 28,
-            backgroundColor: colors.textMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             justifyContent: 'center',
             alignItems: 'center',
         },
         controlButtonActive: {
-            backgroundColor: colors.cardBg,
+            backgroundColor: colors.glassBg,
             borderWidth: 2,
             borderColor: '#F59E0B',
         },
         controlButtonMuted: {
-            backgroundColor: colors.cardBg,
+            backgroundColor: colors.glassBg,
             borderWidth: 2,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         endCallButton: {
             width: 64,

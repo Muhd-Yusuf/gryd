@@ -411,7 +411,7 @@ const createStyles = (colors: any) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         keyboardView: {
             flex: 1,
@@ -465,7 +465,7 @@ const createStyles = (colors: any) =>
             marginBottom: 24,
         },
         logoContainer: {
-            backgroundColor: '#1E3A8A',
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 12,
@@ -479,10 +479,10 @@ const createStyles = (colors: any) =>
         inviteCard: {
             width: '100%',
             maxWidth: 400,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 24,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: 32,
             alignItems: 'center',
             marginBottom: 24,
@@ -491,7 +491,7 @@ const createStyles = (colors: any) =>
             width: 80,
             height: 80,
             borderRadius: 40,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 16,
@@ -512,7 +512,7 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 12,
@@ -526,7 +526,7 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             width: '100%',
             maxWidth: 400,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 4,
             marginBottom: 24,
@@ -538,7 +538,7 @@ const createStyles = (colors: any) =>
             borderRadius: 10,
         },
         modeButtonActive: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         modeButtonText: {
             fontSize: 15,
@@ -568,9 +568,9 @@ const createStyles = (colors: any) =>
             marginTop: 16,
         },
         input: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
             paddingHorizontal: 16,
             paddingVertical: 14,
@@ -581,7 +581,7 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: '#FEE2E2',
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 14,
             marginTop: 16,
@@ -589,7 +589,7 @@ const createStyles = (colors: any) =>
         errorBannerText: {
             flex: 1,
             fontSize: 14,
-            color: '#991B1B',
+            color: colors.error,
         },
         submitButton: {
             backgroundColor: '#3B82F6',

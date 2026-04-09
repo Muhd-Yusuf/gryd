@@ -26,8 +26,11 @@ export default function Index() {
                     setRedirectTo('/super-admin');
                 } else if (user?.role === 'admin') {
                     setRedirectTo('/admin');
+                } else if (user?.role === 'stakeholder') {
+                    setRedirectTo('/(main)/partner');
                 } else {
-                    setRedirectTo('/(main)');
+                    // Members land on marketplace (browse/shop only)
+                    setRedirectTo('/(main)/marketplace');
                 }
             } catch {
                 // Use unified login page for all platforms

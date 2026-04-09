@@ -37,8 +37,8 @@ const secureRemove = async (key: string) => {
 };
 
 // Auth storage keys
-const AUTH_TOKEN_KEY = '@auth_token';
-const AUTH_USER_KEY = '@auth_user';
+const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_USER_KEY = 'auth_user';
 
 const withApiSuffix = (baseUrl: string) => {
     const trimmed = baseUrl.replace(/\/+$/, '');

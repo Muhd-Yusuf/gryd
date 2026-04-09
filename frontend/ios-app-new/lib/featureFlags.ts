@@ -13,6 +13,8 @@ export type FeatureKey =
     | 'settings'
     | 'community'
     | 'communityAdmin'
+    | 'marketplace'
+    | 'partnerDashboard'
     | 'adminDashboard'
     | 'adminCommunity'
     | 'adminSpace'
@@ -29,6 +31,8 @@ export const FEATURE_FLAGS: Record<FeatureKey, boolean> = {
     settings: asBool(process.env.EXPO_PUBLIC_FEATURE_SETTINGS, false),
     community: asBool(process.env.EXPO_PUBLIC_FEATURE_COMMUNITY, true),
     communityAdmin: asBool(process.env.EXPO_PUBLIC_FEATURE_COMMUNITY_ADMIN, false),
+    marketplace: asBool(process.env.EXPO_PUBLIC_FEATURE_MARKETPLACE, true),
+    partnerDashboard: asBool(process.env.EXPO_PUBLIC_FEATURE_PARTNER_DASHBOARD, true),
     adminDashboard: asBool(process.env.EXPO_PUBLIC_FEATURE_ADMIN_DASHBOARD, true),
     adminCommunity: asBool(process.env.EXPO_PUBLIC_FEATURE_ADMIN_COMMUNITY, true),
     adminSpace: asBool(process.env.EXPO_PUBLIC_FEATURE_ADMIN_SPACE, true),
@@ -77,6 +81,12 @@ export const resolveFeatureForPath = (pathname: string): FeatureKey | null => {
     }
     if (path.startsWith('/community')) {
         return 'community';
+    }
+    if (path.startsWith('/marketplace')) {
+        return 'marketplace';
+    }
+    if (path.startsWith('/partner')) {
+        return 'partnerDashboard';
     }
 
     if (path === '/admin' || path === '/admin/') {

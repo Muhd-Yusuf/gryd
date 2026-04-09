@@ -231,7 +231,7 @@ export default function StakeholderWelcomeScreen() {
 const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.appBg,
+        backgroundColor: 'transparent',
     },
     header: {
         flexDirection: 'row',
@@ -258,7 +258,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
         width: 10,
         height: 10,
         borderRadius: 5,
-        backgroundColor: colors.border,
+        backgroundColor: colors.glassBorder,
     },
     stepActive: {
         backgroundColor: colors.primary,
@@ -269,13 +269,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
     stepLine: {
         width: 20,
         height: 2,
-        backgroundColor: colors.border,
+        backgroundColor: colors.glassBorder,
     },
     stepLineCompleted: {
         backgroundColor: '#22C55E',
     },
     logoutButton: {
-        backgroundColor: colors.surface,
+        backgroundColor: colors.glassBg,
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 8,
@@ -294,7 +294,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
     card: {
         width: '100%',
         maxWidth: 500,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.glassBg,
         borderRadius: 16,
         padding: 32,
     },
@@ -312,7 +312,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
     userSection: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.appBg,
+        backgroundColor: colors.glassBg,
         borderRadius: 12,
         padding: 16,
         marginBottom: 24,
@@ -322,7 +322,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
         width: 48,
         height: 48,
         borderRadius: 24,
-        backgroundColor: colors.border,
+        backgroundColor: colors.glassBorder,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -365,19 +365,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
     emptyContainer: {
         alignItems: 'center',
         padding: 24,
-        backgroundColor: '#FEF2F2',
+        backgroundColor: colors.glassBg,
         borderRadius: 12,
         marginBottom: 24,
     },
     emptyTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#991B1B',
+        color: colors.error,
         marginBottom: 8,
     },
     emptyText: {
         fontSize: 14,
-        color: '#B91C1C',
+        color: colors.error,
         textAlign: 'center',
     },
     serverList: {
@@ -392,9 +392,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
     serverCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.appBg,
+        backgroundColor: colors.glassBg,
         borderWidth: 2,
-        borderColor: colors.border,
+        borderColor: colors.glassBorder,
         borderRadius: 12,
         padding: 16,
         marginBottom: 12,
@@ -402,7 +402,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
     },
     serverCardSelected: {
         borderColor: colors.primary,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.glassBg,
     },
     serverAvatarWrapper: {
         width: 56,
@@ -425,12 +425,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
         left: 4,
         right: 4,
         height: 44,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.glassBg,
         borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.glassBorder,
     },
     serverAvatarText: {
         fontSize: 16,
@@ -469,7 +469,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) => StyleShe
         fontWeight: '600',
     },
     errorContainer: {
-        backgroundColor: '#FEF2F2',
+        backgroundColor: colors.glassBg,
         padding: 12,
         borderRadius: 12,
         marginBottom: 16,

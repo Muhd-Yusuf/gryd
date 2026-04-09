@@ -9,7 +9,6 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
@@ -20,33 +19,40 @@ import {
     getUserId,
 } from '../lib/api';
 
+// Lazy-load expo-notifications — not available in Expo Go
+let Notifications: any = null;
+try { Notifications = require('expo-notifications'); } catch { /* Expo Go */ }
+
 // Configure how notifications are handled when app is in foreground
-Notifications.setNotificationHandler({
-    handleNotification: async (notification) => {
-        const data = notification.request.content.data;
-        if (data?.type === 'call') {
+if (Notifications) {
+    Notifications.setNotificationHandler({
+        handleNotification: async (notification: any) => {
+            const data = notification.request.content.data;
+            if (data?.type === 'call') {
+                return {
+                    shouldShowAlert: true,
+                    shouldPlaySound: true,
+                    shouldSetBadge: false,
+                    shouldShowBanner: true,
+                    shouldShowList: true,
+                    priority: Notifications.AndroidNotificationPriority?.MAX,
+                };
+            }
             return {
                 shouldShowAlert: true,
                 shouldPlaySound: true,
-                shouldSetBadge: false,
+                shouldSetBadge: true,
                 shouldShowBanner: true,
                 shouldShowList: true,
-                priority: Notifications.AndroidNotificationPriority.MAX,
             };
-        }
-        return {
-            shouldShowAlert: true,
-            shouldPlaySound: true,
-            shouldSetBadge: true,
-            shouldShowBanner: true,
-            shouldShowList: true,
-        };
-    },
-});
+        },
+    });
+}
 
 // Set up notification categories with action buttons (native only)
 async function setupNotificationCategories() {
     if (Platform.OS === 'web') return;
+    if (!Notifications) return;
     await Notifications.setNotificationCategoryAsync('incoming_call', [
         {
             identifier: 'answer',
@@ -69,6 +75,7 @@ setupNotificationCategories();
  */
 async function setupAndroidChannels() {
     if (Platform.OS !== 'android') return;
+    if (!Notifications) return;
 
     // Delete old channels so updated settings take effect
     const channelIds = ['calls', 'messages', 'mentions', 'invites'];
@@ -158,8 +165,8 @@ export const setCallNotificationHandlers = (
 
 interface NotificationContextValue {
     expoPushToken: string | null;
-    notification: Notifications.Notification | null;
-    permissionStatus: Notifications.PermissionStatus | null;
+    notification: any | null;
+    permissionStatus: string | null;
     isRegistered: boolean;
     requestPermissions: () => Promise<boolean>;
     registerToken: () => Promise<void>;
@@ -174,19 +181,20 @@ interface NotificationProviderProps {
 
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
     const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-    const [notification, setNotification] = useState<Notifications.Notification | null>(null);
-    const [permissionStatus, setPermissionStatus] = useState<Notifications.PermissionStatus | null>(null);
+    const [notification, setNotification] = useState<any | null>(null);
+    const [permissionStatus, setPermissionStatus] = useState<string | null>(null);
     const [isRegistered, setIsRegistered] = useState(false);
     const isRegisteringRef = useRef(false);
     const router = useRouter();
 
-    const notificationListener = useRef<Notifications.Subscription>();
-    const responseListener = useRef<Notifications.Subscription>();
+    const notificationListener = useRef<any>();
+    const responseListener = useRef<any>();
 
     /**
      * Get the Expo push token for this device
      */
     const getExpoPushToken = async (): Promise<string | null> => {
+        if (!Notifications) return null;
         if (!Device.isDevice) return null;
 
         try {
@@ -226,6 +234,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
      * Request notification permissions and set up Android channels
      */
     const requestPermissions = useCallback(async (): Promise<boolean> => {
+        if (!Notifications) return false;
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
 
@@ -299,13 +308,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     /**
      * Handle notification tap/response
      */
-    const handleNotificationResponse = useCallback((response: Notifications.NotificationResponse) => {
+    const handleNotificationResponse = useCallback((response: any) => {
         const data = response.notification.request.content.data as NotificationData;
         if (!data?.type) return;
 
         // Check if this is a button action (Answer/Decline)
         const actionId = response.actionIdentifier;
-        if (data.type === 'call' && actionId && actionId !== Notifications.DEFAULT_ACTION_IDENTIFIER) {
+        const DEFAULT_ACTION = Notifications?.DEFAULT_ACTION_IDENTIFIER ?? 'expo.modules.notifications.actions.DEFAULT';
+        if (data.type === 'call' && actionId && actionId !== DEFAULT_ACTION) {
             if (actionId === 'answer') {
                 onCallAnswered?.(data);
             } else if (actionId === 'decline') {
@@ -347,7 +357,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     // Set up notification listeners on mount
     useEffect(() => {
-        notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
+        if (!Notifications) return;
+
+        notificationListener.current = Notifications.addNotificationReceivedListener((notification: any) => {
             setNotification(notification);
         });
 

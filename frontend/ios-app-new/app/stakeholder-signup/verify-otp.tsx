@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sun, Moon } from 'lucide-react-native';
 import { authVerifyOtp, authSendOtp } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 
@@ -28,7 +27,7 @@ export default function StakeholderVerifyOtpScreen() {
         subgridName: string;
         stakeholderBadge: string;
     }>();
-    const { colors, mode, toggleTheme } = useTheme();
+    const { colors } = useTheme();
     const styles = createStyles(colors);
 
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -160,13 +159,6 @@ export default function StakeholderVerifyOtpScreen() {
                     <View style={styles.step} />
                 </View>
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme}>
-                        {mode === 'dark' ? (
-                            <Sun color={colors.text} size={20} />
-                        ) : (
-                            <Moon color={colors.text} size={20} />
-                        )}
-                    </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.logoutButton}
                         onPress={() => router.replace('/login')}
@@ -258,7 +250,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         header: {
             flexDirection: 'row',
@@ -275,7 +267,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         logoContainer: {
             flexDirection: 'row',
@@ -295,7 +287,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 10,
             height: 10,
             borderRadius: 5,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
         },
         stepActive: {
             backgroundColor: colors.primary,
@@ -306,13 +298,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         stepLine: {
             width: 20,
             height: 2,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
         },
         stepLineCompleted: {
             backgroundColor: '#22C55E',
         },
         logoutButton: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 16,
             paddingVertical: 8,
             borderRadius: 8,
@@ -334,7 +326,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         card: {
             width: '100%',
             maxWidth: 450,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             padding: 32,
         },
@@ -371,17 +363,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 48,
             height: 56,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
-            backgroundColor: colors.appBg,
+            backgroundColor: colors.glassBg,
             fontSize: 24,
             fontWeight: '600',
             textAlign: 'center',
             color: colors.text,
         },
         otpInputFilled: {
-            borderColor: colors.primary,
-            backgroundColor: colors.surface,
+            borderColor: 'rgba(100,168,255,0.75)',
+            backgroundColor: 'rgba(59,130,246,0.15)',
         },
         otpInputError: {
             borderColor: colors.error,

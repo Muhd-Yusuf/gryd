@@ -2,23 +2,22 @@ import React, { useState } from 'react';
 import {
     View,
     Text,
-    TextInput,
-    TouchableOpacity,
     StyleSheet,
     SafeAreaView,
     ScrollView,
-    ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
+    TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ShieldCheck, Lock, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, ShieldCheck, Lock, AlertCircle, Sun, Moon } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import { authSignupSuperAdmin, setAuthUser } from '../lib/api';
+import { GlassButton, GlassInput } from '../components/glass';
 
 export default function SuperAdminSignupScreen() {
     const router = useRouter();
-    const { colors } = useTheme();
+    const { colors, mode, toggleTheme } = useTheme();
     const styles = createStyles(colors);
 
     const [loading, setLoading] = useState(false);
@@ -96,14 +95,25 @@ export default function SuperAdminSignupScreen() {
                         >
                             <ArrowLeft size={24} color={colors.text} />
                         </TouchableOpacity>
+
+                        {/* Logo */}
                         <View style={styles.logoContainer}>
                             <Text style={styles.logoText}>THE GRYD</Text>
                         </View>
+
+                        {/* Theme Toggle */}
+                        <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme}>
+                            {mode === 'dark' ? (
+                                <Sun size={20} color={colors.textMuted} />
+                            ) : (
+                                <Moon size={20} color={colors.textMuted} />
+                            )}
+                        </TouchableOpacity>
                     </View>
 
                     <View style={styles.formCard}>
                         <View style={styles.iconContainer}>
-                            <ShieldCheck size={48} color="#3B82F6" />
+                            <ShieldCheck size={48} color={colors.primary} />
                         </View>
 
                         <Text style={styles.formTitle}>Super Admin Signup</Text>
@@ -111,72 +121,65 @@ export default function SuperAdminSignupScreen() {
                             Create a super admin account to manage the platform
                         </Text>
 
+                        {/* Name Row */}
                         <View style={styles.nameRow}>
                             <View style={styles.nameField}>
-                                <Text style={styles.label}>First Name</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="John"
-                                    placeholderTextColor={colors.textSubtle}
+                                <GlassInput
+                                    label="First Name"
                                     value={firstName}
                                     onChangeText={setFirstName}
+                                    placeholder="John"
                                     autoCapitalize="words"
                                 />
                             </View>
                             <View style={styles.nameField}>
-                                <Text style={styles.label}>Last Name</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Doe"
-                                    placeholderTextColor={colors.textSubtle}
+                                <GlassInput
+                                    label="Last Name"
                                     value={lastName}
                                     onChangeText={setLastName}
+                                    placeholder="Doe"
                                     autoCapitalize="words"
                                 />
                             </View>
                         </View>
 
-                        <Text style={styles.label}>Email</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="admin@example.com"
-                            placeholderTextColor={colors.textSubtle}
+                        <GlassInput
+                            label="Email"
                             value={email}
                             onChangeText={setEmail}
+                            placeholder="admin@example.com"
                             keyboardType="email-address"
                             autoCapitalize="none"
                             autoCorrect={false}
+                            containerStyle={styles.inputSpacing}
                         />
 
-                        <Text style={styles.label}>Password</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Create a password"
-                            placeholderTextColor={colors.textSubtle}
+                        <GlassInput
+                            label="Password"
                             value={password}
                             onChangeText={setPassword}
+                            placeholder="Create a password"
                             secureTextEntry
+                            containerStyle={styles.inputSpacing}
                         />
 
-                        <Text style={styles.label}>Confirm Password</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Confirm your password"
-                            placeholderTextColor={colors.textSubtle}
+                        <GlassInput
+                            label="Confirm Password"
                             value={confirmPassword}
                             onChangeText={setConfirmPassword}
+                            placeholder="Confirm your password"
                             secureTextEntry
+                            containerStyle={styles.inputSpacing}
                         />
 
                         <View style={styles.secretKeySection}>
-                            <Text style={styles.label}>Secret Key</Text>
-                            <TextInput
-                                style={[styles.input, styles.secretKeyInput]}
-                                placeholder="Enter the super admin secret key"
-                                placeholderTextColor={colors.textSubtle}
+                            <GlassInput
+                                label="Secret Key"
                                 value={secretKey}
                                 onChangeText={setSecretKey}
+                                placeholder="Enter the super admin secret key"
                                 secureTextEntry
+                                containerStyle={styles.secretKeyInputContainer}
                             />
                             <View style={styles.secretKeyHint}>
                                 <Lock size={14} color={colors.textMuted} />
@@ -188,22 +191,19 @@ export default function SuperAdminSignupScreen() {
 
                         {!!error && (
                             <View style={styles.errorBanner}>
-                                <AlertCircle size={18} color="#EF4444" />
+                                <AlertCircle size={18} color={colors.error} />
                                 <Text style={styles.errorBannerText}>{error}</Text>
                             </View>
                         )}
 
-                        <TouchableOpacity
-                            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                        <GlassButton
+                            label="Create Super Admin Account"
                             onPress={handleSignup}
-                            disabled={loading}
-                        >
-                            {loading ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                                <Text style={styles.submitButtonText}>Create Super Admin Account</Text>
-                            )}
-                        </TouchableOpacity>
+                            loading={loading}
+                            variant="primary"
+                            fullWidth
+                            style={styles.submitButton}
+                        />
 
                         <View style={styles.loginInfo}>
                             <Text style={styles.loginInfoText}>
@@ -227,7 +227,7 @@ const createStyles = (colors: any) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         keyboardView: {
             flex: 1,
@@ -250,8 +250,15 @@ const createStyles = (colors: any) =>
             left: 0,
             padding: 8,
         },
+        themeToggle: {
+            position: 'absolute',
+            right: 0,
+            padding: 8,
+        },
         logoContainer: {
-            backgroundColor: '#1E3A8A',
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 12,
@@ -259,16 +266,16 @@ const createStyles = (colors: any) =>
         logoText: {
             fontSize: 20,
             fontWeight: '800',
-            color: '#FFFFFF',
+            color: colors.text,
             letterSpacing: 1,
         },
         formCard: {
             width: '100%',
             maxWidth: 440,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 24,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: 32,
         },
         iconContainer: {
@@ -288,23 +295,6 @@ const createStyles = (colors: any) =>
             textAlign: 'center',
             marginBottom: 24,
         },
-        label: {
-            fontSize: 14,
-            fontWeight: '500',
-            color: colors.text,
-            marginBottom: 8,
-            marginTop: 16,
-        },
-        input: {
-            backgroundColor: colors.appBg,
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: 12,
-            paddingHorizontal: 16,
-            paddingVertical: 14,
-            fontSize: 16,
-            color: colors.text,
-        },
         nameRow: {
             flexDirection: 'row',
             gap: 12,
@@ -312,14 +302,17 @@ const createStyles = (colors: any) =>
         nameField: {
             flex: 1,
         },
+        inputSpacing: {
+            marginTop: 16,
+        },
         secretKeySection: {
-            marginTop: 8,
+            marginTop: 24,
             paddingTop: 16,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
-        secretKeyInput: {
-            borderColor: '#F59E0B',
+        secretKeyInputContainer: {
+            // amber-tinted border via glassBorder override — keep subtle
         },
         secretKeyHint: {
             flexDirection: 'row',
@@ -335,7 +328,7 @@ const createStyles = (colors: any) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: '#FEE2E2',
+            backgroundColor: colors.dangerBg,
             borderRadius: 12,
             padding: 14,
             marginTop: 16,
@@ -343,22 +336,10 @@ const createStyles = (colors: any) =>
         errorBannerText: {
             flex: 1,
             fontSize: 14,
-            color: '#991B1B',
+            color: colors.dangerText,
         },
         submitButton: {
-            backgroundColor: '#3B82F6',
-            borderRadius: 12,
-            paddingVertical: 16,
-            alignItems: 'center',
             marginTop: 24,
-        },
-        submitButtonDisabled: {
-            opacity: 0.7,
-        },
-        submitButtonText: {
-            fontSize: 16,
-            fontWeight: '600',
-            color: '#FFFFFF',
         },
         loginInfo: {
             marginTop: 20,
@@ -369,7 +350,7 @@ const createStyles = (colors: any) =>
             color: colors.textMuted,
         },
         linkText: {
-            color: '#3B82F6',
+            color: colors.primary,
             fontWeight: '600',
         },
     });

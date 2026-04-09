@@ -44,6 +44,7 @@ import { CallModalDefault as CallModal } from '../../../components';
 import UserAvatar from '../../../components/UserAvatar';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 import { MessageBubble, MessageComposer } from '../../../components/messaging';
+import { GlassIconButton } from '../../../components/glass';
 import { useWebSocketContext } from '../../../contexts/WebSocketContext';
 import {
     useSubgrids,
@@ -1273,9 +1274,13 @@ const DirectMessageChatScreen = () => {
                 <View style={styles.chatContainer}>
                     {/* Header */}
                     <View style={styles.header}>
-                        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-                            <ArrowLeft size={22} color={colors.text} />
-                        </TouchableOpacity>
+                        <GlassIconButton
+                            icon={<ArrowLeft size={20} color={colors.text} />}
+                            onPress={handleBack}
+                            variant="default"
+                            size="sm"
+                            accessibilityLabel="Back"
+                        />
                         <View style={styles.headerAvatarWrap}>
                             <UserAvatar
                                 uri={friendAvatar}
@@ -1301,15 +1306,27 @@ const DirectMessageChatScreen = () => {
                             )}
                         </View>
                         <View style={styles.headerActions}>
-                            <TouchableOpacity style={styles.headerIcon} onPress={() => handleStartCall('audio')}>
-                                <Phone size={20} color={colors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.headerIcon} onPress={() => handleStartCall('video')}>
-                                <Video size={20} color={colors.text} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.headerIcon}>
-                                <Search size={20} color={colors.text} />
-                            </TouchableOpacity>
+                            <GlassIconButton
+                                icon={<Phone size={18} color={colors.text} />}
+                                onPress={() => handleStartCall('audio')}
+                                variant="default"
+                                size="sm"
+                                accessibilityLabel="Voice call"
+                            />
+                            <GlassIconButton
+                                icon={<Video size={18} color={colors.text} />}
+                                onPress={() => handleStartCall('video')}
+                                variant="default"
+                                size="sm"
+                                accessibilityLabel="Video call"
+                            />
+                            <GlassIconButton
+                                icon={<Search size={18} color={colors.text} />}
+                                onPress={() => {}}
+                                variant="default"
+                                size="sm"
+                                accessibilityLabel="Search"
+                            />
                         </View>
                     </View>
 
@@ -1699,14 +1716,14 @@ const DirectMessageChatScreen = () => {
 
 const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').useTheme>['colors'], bottomInset: number = 0) =>
     StyleSheet.create({
-        safe: { flex: 1, backgroundColor: colors.appBg },
+        safe: { flex: 1, backgroundColor: 'transparent' },
         mainContainer: { flex: 1, flexDirection: 'row' },
-        chatContainer: { flex: 1, backgroundColor: colors.appBg },
-        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
+        chatContainer: { flex: 1, backgroundColor: 'transparent' },
+        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 12, backgroundColor: colors.glassNavBg, borderBottomWidth: 1, borderBottomColor: colors.glassBorder },
         backButton: { padding: 4 },
         headerAvatarWrap: { position: 'relative' },
         headerAvatar: { width: 36, height: 36, borderRadius: 18 },
-        onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E', borderWidth: 2, borderColor: colors.appBg },
+        onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E', borderWidth: 2, borderColor: 'transparent' },
         headerNameRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
         headerName: { fontSize: 17, fontWeight: '600', color: colors.text },
         headerUsername: { fontSize: 13, color: colors.textMuted, fontWeight: '400' },
@@ -1715,11 +1732,11 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         stakeholderBadgeText: { fontSize: 10, fontWeight: '600', color: '#FFFFFF' },
         headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
         headerIcon: { padding: 4 },
-        headerDivider: { height: 1, backgroundColor: colors.border },
+        headerDivider: { height: 1, backgroundColor: colors.glassBorder },
         content: { flex: 1 },
         contentContainer: { padding: 20, paddingBottom: 100 },
         profileSection: { alignItems: 'flex-start', marginBottom: 24 },
-        profileAvatarWrap: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#F472B6', padding: 4, marginBottom: 16 },
+        profileAvatarWrap: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.glassBg, borderWidth: 2, borderColor: colors.glassBorder, padding: 4, marginBottom: 16 },
         profileAvatar: { width: '100%', height: '100%', borderRadius: 56 },
         profileName: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 4 },
         profileHandle: { fontSize: 15, color: colors.textMuted, marginBottom: 20 },
@@ -1728,29 +1745,29 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         forumCommon: { fontSize: 14, color: colors.textMuted, marginBottom: 20 },
         forumCommonValue: { color: colors.textSubtle },
         profileActions: { flexDirection: 'row', gap: 12 },
-        removeButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, backgroundColor: colors.surfaceMuted },
+        removeButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, backgroundColor: colors.glassBg },
         removeButtonText: { fontSize: 14, fontWeight: '500', color: colors.text },
-        blockButton: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: 'transparent' },
+        blockButton: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.glassBorder, backgroundColor: 'transparent' },
         blockButtonText: { fontSize: 14, fontWeight: '500', color: colors.text },
         dateDivider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24, gap: 12 },
-        dateLine: { flex: 1, height: 1, backgroundColor: colors.border },
+        dateLine: { flex: 1, height: 1, backgroundColor: colors.glassBorder },
         dateText: { fontSize: 13, color: colors.textMuted },
-        callHistoryItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.surfaceMuted, borderRadius: 12, marginBottom: 12, gap: 12 },
-        callHistoryIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+        callHistoryItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glassBg, borderRadius: 12, marginBottom: 12, gap: 12 },
+        callHistoryIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glassBg, alignItems: 'center', justifyContent: 'center' },
         callHistoryIconMissed: { backgroundColor: 'rgba(239, 68, 68, 0.1)' },
         callHistoryInfo: { flex: 1 },
         callHistoryType: { fontSize: 14, fontWeight: '600', color: colors.text },
         callHistoryTypeMissed: { color: '#EF4444' },
         callHistoryDuration: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
         callHistoryTime: { fontSize: 12, color: colors.textMuted },
-        callHistoryAction: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+        callHistoryAction: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glassBg, alignItems: 'center', justifyContent: 'center' },
         messageRow: { flexDirection: 'row', marginBottom: 12, gap: 8, alignItems: 'flex-end', paddingRight: 60 },
         messageRowSelf: { flexDirection: 'row-reverse', paddingRight: 0, paddingLeft: 40 },
         messageDeleteBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', opacity: 0.7 },
         messageAvatar: { width: 32, height: 32, borderRadius: 16 },
-        messageBubble: { padding: 12, borderRadius: 16, flexShrink: 1 },
-        messageBubbleSelf: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
-        messageBubbleOther: { backgroundColor: colors.surfaceMuted, borderBottomLeftRadius: 4 },
+        messageBubble: { padding: 12, borderRadius: 16, flexShrink: 1, borderWidth: 1, borderColor: colors.glassBorder },
+        messageBubbleSelf: { backgroundColor: colors.primary, borderBottomRightRadius: 4, borderColor: 'transparent' },
+        messageBubbleOther: { backgroundColor: colors.glassBg, borderBottomLeftRadius: 4 },
         messageSenderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' },
         messageSender: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
         messageBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
@@ -1768,26 +1785,26 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         audioText: { fontSize: 13, color: colors.text },
         errorText: { fontSize: 13, color: '#EF4444', marginBottom: 12 },
         loadingText: { fontSize: 13, color: colors.textMuted, marginBottom: 12 },
-        recordingContainer: { padding: 16, paddingBottom: bottomInset + 16, backgroundColor: colors.appBg },
+        recordingContainer: { padding: 16, paddingBottom: bottomInset + 16, backgroundColor: 'transparent' },
         recordingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-        recordingCopy: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-        recordingCancel: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-        recordingWaveform: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 22, paddingHorizontal: 16, height: 44, gap: 12 },
+        recordingCopy: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.glassBg, alignItems: 'center', justifyContent: 'center' },
+        recordingCancel: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.glassBg, alignItems: 'center', justifyContent: 'center' },
+        recordingWaveform: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.glassBg, borderRadius: 22, paddingHorizontal: 16, height: 44, gap: 12 },
         recordingTimer: { fontSize: 13, color: colors.text, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
         waveformBars: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', height: 24 },
         waveformBar: { width: 3, backgroundColor: colors.textMuted, borderRadius: 2 },
         recordingSend: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22C55E', alignItems: 'center', justifyContent: 'center' },
-        composerContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, paddingBottom: bottomInset + 12, gap: 12, backgroundColor: colors.appBg },
-        composer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 24, paddingHorizontal: 4, height: 52 },
+        composerContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, paddingBottom: bottomInset + 12, gap: 12, backgroundColor: 'transparent' },
+        composer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.glassBg, borderRadius: 24, borderWidth: 1, borderColor: colors.glassBorder, paddingHorizontal: 4, height: 52 },
         composerIconLeft: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
         composerInput: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 8 },
         composerIconRight: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-        micButton: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+        micButton: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.glassBg, alignItems: 'center', justifyContent: 'center' },
         sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
-        sendButtonDisabled: { backgroundColor: colors.surfaceMuted },
+        sendButtonDisabled: { backgroundColor: colors.glassBg },
         recordingError: { fontSize: 12, color: '#EF4444', paddingHorizontal: 16, paddingBottom: 8 },
-        sidebar: { width: 280, backgroundColor: colors.surface, borderLeftWidth: 1, borderLeftColor: colors.border },
-        sidebarHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+        sidebar: { width: 280, backgroundColor: colors.glassBg, borderLeftWidth: 1, borderLeftColor: colors.glassBorder },
+        sidebarHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: colors.glassBorder },
         sidebarIcon: { width: 32, height: 32, borderRadius: 8, overflow: 'hidden' },
         sidebarLogo: { width: 32, height: 32 },
         sidebarTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
@@ -1801,8 +1818,8 @@ const createStyles = (colors: ReturnType<typeof import('../../../lib/theme').use
         contributorCount: { fontSize: 11, color: colors.textMuted },
         modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 },
         modalBackdrop: { ...StyleSheet.absoluteFillObject },
-        emojiPickerCard: { width: '100%', maxWidth: 400, backgroundColor: colors.surface, borderRadius: 20, padding: 16, maxHeight: 400 },
-        emojiSearchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 12, paddingHorizontal: 12, height: 40, gap: 8, marginBottom: 12 },
+        emojiPickerCard: { width: '100%', maxWidth: 400, backgroundColor: colors.glassBg, borderRadius: 20, borderWidth: 1, borderColor: colors.glassBorder, padding: 16, maxHeight: 400 },
+        emojiSearchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.glassBg, borderRadius: 12, paddingHorizontal: 12, height: 40, gap: 8, marginBottom: 12 },
         emojiSearchInput: { flex: 1, fontSize: 14, color: colors.text },
         emojiGrid: { flex: 1 },
         emojiRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },

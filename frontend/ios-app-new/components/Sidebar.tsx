@@ -13,7 +13,6 @@ import { Image } from 'expo-image';
 import { useRouter, usePathname } from 'expo-router';
 import {
     LayoutDashboard,
-    Home,
     Users,
     Bot,
     Globe,
@@ -32,7 +31,13 @@ import {
     FileText,
     Shield,
     Sun,
-    Moon
+    Moon,
+    Handshake,
+    ShoppingBag,
+    Store,
+    LayoutList,
+    MessageCircle,
+    Trophy,
 } from 'lucide-react-native';
 import { isFeatureEnabled, type FeatureKey } from '../lib/featureFlags';
 import { useTheme } from '../lib/theme';
@@ -71,6 +76,10 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
 
     // Check if user is admin (super_admin or admin role)
     const isAdmin = userRole === 'super_admin' || userRole === 'admin';
+    // Stakeholders are partners/vendors — they manage listings, not browse
+    const isStakeholder = userRole === 'stakeholder';
+    // Pure members — shop only
+    const isMember = !isAdmin && !isStakeholder && userRole !== null;
 
     const TheGrydLogo = () => (
         <View style={styles.logoRow}>
@@ -87,17 +96,32 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
         badge?: string;
         hasSubmenu?: boolean;
         submenu?: Array<{ icon: any; label: string; path: string }>;
-        adminOnly?: boolean; // Only show to admin users
+        adminOnly?: boolean;        // Only show to admin/super_admin
+        stakeholderOnly?: boolean;  // Only show to stakeholders
+        memberOnly?: boolean;       // Only show to members
+        hideFromMember?: boolean;   // Hide from members (community/crm features)
+        hideFromStakeholder?: boolean; // Hide from stakeholders
     };
 
     const menuItems: MenuItem[] = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: '/(main)', feature: 'dashboard' },
+        // ── Admin only ───────────────────────────────────────────────────────
         { icon: Shield, label: 'Admin Dashboard', path: '/admin', feature: 'adminDashboard', adminOnly: true },
+
+        // ── Stakeholder primary ──────────────────────────────────────────────
+        { icon: LayoutList, label: 'My Listings', path: '/(main)/partner', feature: 'partnerDashboard', stakeholderOnly: true },
+
+        // ── Member primary ───────────────────────────────────────────────────
+        { icon: Store, label: 'Marketplace', path: '/(main)/marketplace', feature: 'marketplace', memberOnly: true },
+
+        // ── Community features (admins + non-member non-stakeholder users) ───
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/(main)', feature: 'dashboard', hideFromMember: true, hideFromStakeholder: true },
         {
             icon: Users,
             label: 'Lead CRM',
             path: '/(main)/leads',
             feature: 'leadCrm',
+            hideFromMember: true,
+            hideFromStakeholder: true,
             hasSubmenu: true,
             submenu: [
                 { icon: PieChart, label: 'Overview', path: '/(main)/leads/overview' },
@@ -109,16 +133,27 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
                 { icon: FileText, label: 'Reports', path: '/(main)/leads/reports' },
             ]
         },
-        { icon: Globe, label: 'Community', path: '/(main)', feature: 'community' },
+        // Stakeholders and admins can access the community/server screen (channels, posts, feed)
+        { icon: Globe, label: 'Community', path: '/(main)', feature: 'community', hideFromMember: true },
+
+        // ── Stakeholder + admin community features ───────────────────────────
+        { icon: MessageCircle, label: 'Messages', path: '/(main)/direct-messages', feature: 'community', hideFromMember: true },
+        { icon: Trophy, label: 'Leaderboard', path: '/(main)/top-contributors', feature: 'community', hideFromMember: true },
+
+        // ── Shared ───────────────────────────────────────────────────────────
         { icon: Bell, label: 'Notifications', path: '/(main)/notifications', badge: '20', feature: 'notifications' },
         { icon: Gift, label: 'Rewards', path: '/(main)/rewards', feature: 'rewards' },
         { icon: Settings, label: 'Settings', path: '/(main)/settings', feature: 'settings' },
     ];
 
-    // Filter menu items by feature flag AND admin role if required
+    // Filter menu items by feature flag and role gates
     const visibleMenuItems = menuItems.filter((item) => {
         if (!isFeatureEnabled(item.feature)) return false;
         if (item.adminOnly && !isAdmin) return false;
+        if (item.stakeholderOnly && !isStakeholder) return false;
+        if (item.memberOnly && !isMember) return false;
+        if (item.hideFromMember && isMember) return false;
+        if (item.hideFromStakeholder && isStakeholder) return false;
         return true;
     });
 
@@ -243,9 +278,11 @@ const Sidebar = ({ onClose, isMobile }: SidebarProps) => {
                     />
                     <View style={styles.profileInfo}>
                         <Text style={styles.profileName}>{userName}</Text>
-                        <Text style={styles.profileRole}>{isAdmin ? 'Admin' : 'Member'}</Text>
+                        <Text style={styles.profileRole}>
+                            {isAdmin ? 'Admin' : isStakeholder ? 'Partner' : 'Member'}
+                        </Text>
                     </View>
-                    {!isAdmin && (
+                    {isMember && (
                         <TouchableOpacity style={styles.upgradeBtn}>
                             <Text style={styles.upgradeText}>Upgrade</Text>
                         </TouchableOpacity>
@@ -339,7 +376,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         borderRadius: 12,
     },
     submenuItemActive: {
-        backgroundColor: colors.surfaceMuted,
+        backgroundColor: colors.glassBg,
     },
     submenuLabel: {
         fontSize: 14,
@@ -351,7 +388,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         fontWeight: '600',
     },
     badge: {
-        backgroundColor: colors.surfaceMuted,
+        backgroundColor: colors.glassBg,
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 12,
@@ -367,16 +404,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     },
     divider: {
         height: 1,
-        backgroundColor: colors.border,
+        backgroundColor: colors.glassBorder,
         marginBottom: 16,
     },
     themeToggle: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: colors.surfaceMuted,
+        backgroundColor: colors.glassBg,
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.glassBorder,
         paddingVertical: 8,
         paddingHorizontal: 12,
         borderRadius: 10,

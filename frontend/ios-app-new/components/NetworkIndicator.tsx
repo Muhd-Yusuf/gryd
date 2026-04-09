@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
+import { useTheme } from '../lib/theme';
 
 export const NetworkIndicator: React.FC = () => {
+    const { colors } = useTheme();
     const [isOffline, setIsOffline] = useState(false);
     const [opacity] = useState(new Animated.Value(0));
 
@@ -22,8 +24,18 @@ export const NetworkIndicator: React.FC = () => {
     if (!isOffline) return null;
 
     return (
-        <Animated.View style={[styles.container, { opacity }]}>
-            <Text style={styles.text}>No internet connection</Text>
+        <Animated.View
+            style={[
+                styles.container,
+                {
+                    opacity,
+                    backgroundColor: colors.dangerBg,
+                    borderColor: colors.glassBorder,
+                    top: Platform.OS === 'ios' ? 50 : 30,
+                },
+            ]}
+        >
+            <Text style={[styles.text, { color: colors.dangerText }]}>No internet connection</Text>
         </Animated.View>
     );
 };
@@ -31,11 +43,10 @@ export const NetworkIndicator: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
-        top: Platform.OS === 'ios' ? 50 : 30,
         left: 16,
         right: 16,
-        backgroundColor: '#EF4444',
         borderRadius: 8,
+        borderWidth: 1,
         paddingVertical: 8,
         paddingHorizontal: 16,
         alignItems: 'center',
@@ -47,7 +58,6 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     text: {
-        color: '#fff',
         fontSize: 14,
         fontWeight: '600',
     },

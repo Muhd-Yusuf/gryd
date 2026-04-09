@@ -250,7 +250,7 @@ const PrivacySettingsScreen = () => {
                                         setShowOnlineStatus(value);
                                         handleUpdate('showOnlineStatus', value);
                                     }}
-                                    trackColor={{ false: colors.border, true: colors.primary }}
+                                    trackColor={{ false: colors.glassBorder, true: colors.primary }}
                                     thumbColor="#FFFFFF"
                                 />
                             </View>
@@ -266,7 +266,7 @@ const createStyles = (colors: ReturnType<typeof import('../../lib/theme').useThe
     StyleSheet.create({
         safe: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         container: {
             flex: 1,
@@ -278,8 +278,8 @@ const createStyles = (colors: ReturnType<typeof import('../../lib/theme').useThe
             paddingHorizontal: 16,
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         backButton: {
             width: 40,
@@ -303,7 +303,7 @@ const createStyles = (colors: ReturnType<typeof import('../../lib/theme').useThe
         },
         infoBanner: {
             flexDirection: 'row',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 16,
             gap: 12,
@@ -334,10 +334,10 @@ const createStyles = (colors: ReturnType<typeof import('../../lib/theme').useThe
             letterSpacing: 0.5,
         },
         card: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             overflow: 'hidden',
         },
         radioRow: {
@@ -365,7 +365,7 @@ const createStyles = (colors: ReturnType<typeof import('../../lib/theme').useThe
             height: 22,
             borderRadius: 11,
             borderWidth: 2,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -390,7 +390,7 @@ const createStyles = (colors: ReturnType<typeof import('../../lib/theme').useThe
         },
         divider: {
             height: 1,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             marginLeft: 16,
         },
     });

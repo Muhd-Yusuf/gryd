@@ -1,6 +1,8 @@
 import React from 'react';
-import { ScrollView, Text, View, StyleSheet, Platform } from 'react-native';
+import { ScrollView, Text, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Sun, Moon } from 'lucide-react-native';
+import { useTheme } from '../lib/theme';
 
 const sections = [
     {
@@ -83,20 +85,43 @@ Each service has its own privacy policy governing their use of data.`,
 ];
 
 export default function PrivacyPolicy() {
+    const { colors, mode, toggleTheme } = useTheme();
+
     return (
-        <SafeAreaView style={styles.safe}>
+        <SafeAreaView style={[styles.safe, { backgroundColor: 'transparent' }]}>
+            {/* Theme Toggle */}
+            <TouchableOpacity
+                style={styles.themeToggle}
+                onPress={toggleTheme}
+            >
+                {mode === 'dark' ? (
+                    <Sun size={20} color={colors.textMuted} />
+                ) : (
+                    <Moon size={20} color={colors.textMuted} />
+                )}
+            </TouchableOpacity>
+
             <ScrollView
                 style={styles.container}
                 contentContainerStyle={styles.content}
             >
-                <Text style={styles.heading}>Privacy Policy</Text>
-                <Text style={styles.subtitle}>The Gryd</Text>
-                <Text style={styles.updated}>Last updated: March 6, 2026</Text>
+                <Text style={[styles.heading, { color: colors.text }]}>Privacy Policy</Text>
+                <Text style={[styles.subtitle, { color: colors.textMuted }]}>The Gryd</Text>
+                <Text style={[styles.updated, { color: colors.textSubtle }]}>Last updated: March 6, 2026</Text>
 
                 {sections.map((section, index) => (
-                    <View key={index} style={styles.section}>
-                        <Text style={styles.sectionTitle}>{section.title}</Text>
-                        <Text style={styles.sectionBody}>{section.body}</Text>
+                    <View
+                        key={index}
+                        style={[
+                            styles.section,
+                            {
+                                backgroundColor: colors.glassBg,
+                                borderColor: colors.glassBorder,
+                            },
+                        ]}
+                    >
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>{section.title}</Text>
+                        <Text style={[styles.sectionBody, { color: colors.textMuted }]}>{section.body}</Text>
                     </View>
                 ))}
             </ScrollView>
@@ -107,7 +132,13 @@ export default function PrivacyPolicy() {
 const styles = StyleSheet.create({
     safe: {
         flex: 1,
-        backgroundColor: '#ffffff',
+    },
+    themeToggle: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        zIndex: 10,
+        padding: 8,
     },
     container: {
         flex: 1,
@@ -122,32 +153,30 @@ const styles = StyleSheet.create({
     heading: {
         fontSize: 32,
         fontWeight: '700',
-        color: '#111827',
         marginBottom: 4,
     },
     subtitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#6b7280',
         marginBottom: 4,
     },
     updated: {
         fontSize: 14,
-        color: '#9ca3af',
         marginBottom: 32,
     },
     section: {
-        marginBottom: 24,
+        marginBottom: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 20,
     },
     sectionTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#111827',
         marginBottom: 8,
     },
     sectionBody: {
         fontSize: 15,
         lineHeight: 24,
-        color: '#374151',
     },
 });

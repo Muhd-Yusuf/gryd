@@ -6,7 +6,9 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as Notifications from 'expo-notifications';
+// Lazy-load expo-notifications — not available in Expo Go
+let Notifications: typeof import('expo-notifications') | null = null;
+try { Notifications = require('expo-notifications'); } catch { /* Expo Go */ }
 import { Audio } from 'expo-av';
 import { subscribeToCallEventsAsync, declineCall as apiDeclineCall, endCall as apiEndCall } from '../lib/api';
 import { setCallNotificationHandlers, NotificationData } from './NotificationContext';
@@ -371,6 +373,7 @@ export const CallProvider: React.FC<CallProviderProps> = ({ children }) => {
     // Listen for foreground push notifications with call data (fallback when WebSocket is down)
     useEffect(() => {
         if (Platform.OS === 'web') return;
+        if (!Notifications) return; // not available in Expo Go
 
         const subscription = Notifications.addNotificationReceivedListener((notification) => {
             const data = notification.request.content.data;

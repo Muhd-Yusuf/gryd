@@ -26,6 +26,8 @@ import {
     Shield,
     MessageSquare,
     Trophy,
+    DollarSign,
+    TrendingUp,
     Sun,
     Moon,
     X,
@@ -90,13 +92,18 @@ import {
     XCircle,
     CheckCheck,
     AlertCircle,
+    Handshake,
+    RefreshCw,
+    ShoppingBag,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync, createAudioPlayer } from 'expo-audio';
 import { communityGet, communityPost, communityPatch, communityPut, communityDelete, getTenantId, getUserId, resolveTenantId, getOnlineStatus, updatePresence, setUserOnline, uploadFile, getAuthUser, initiateChannelCall, logout, inviteStakeholder, StakeholderBadge, getNotificationPreferences, updateNotificationPreferences, getCustomRoles, createCustomRole, updateCustomRole, deleteCustomRole, assignCustomRole, removeCustomRole, CustomRole } from '../lib/api';
 import { useTheme } from '../lib/theme';
+import { GlassButton, GlassIconButton, GlassModal, GlassStatCard, GlassBadge, GlassInput, GlassRail } from './glass';
 import UserAvatar from './UserAvatar';
 import VoiceMessagePlayer from './VoiceMessagePlayer';
 import { ErrorRetry } from './ErrorRetry';
@@ -384,6 +391,7 @@ type ModerationFlag = {
     content?: any;
 };
 
+
 const CreditUnionAdminScreen = () => {
     const { colors, mode, toggleTheme } = useTheme();
     const router = useRouter();
@@ -393,7 +401,7 @@ const CreditUnionAdminScreen = () => {
     // Calculate safe area values for mobile
     const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
     const topInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.top, 16) : 0;
-    const styles = useMemo(() => createStyles(colors, bottomInset, topInset), [colors, bottomInset, topInset]);
+    const styles = useMemo(() => createStyles(colors, mode, bottomInset, topInset), [colors, mode, bottomInset, topInset]);
     const [mobileShowContent, setMobileShowContent] = useState(false);
     const [mobileShowSettingsContent, setMobileShowSettingsContent] = useState(false);
     const { subscribe, joinRoom, leaveRoom, isConnected, startTyping, stopTyping } = useWebSocketContext();
@@ -665,6 +673,29 @@ const CreditUnionAdminScreen = () => {
     const [newEventType, setNewEventType] = useState<'event' | 'announcement'>('event');
     const [newEventLocation, setNewEventLocation] = useState('');
     const [showEventsView, setShowEventsView] = useState(false);
+    const [showRevenueView, setShowRevenueView] = useState(false);
+    const [showRevShareTab, setShowRevShareTab] = useState(false);
+    const [showPartnerListingsView, setShowPartnerListingsView] = useState(false);
+    const [showPartnerRequestsView, setShowPartnerRequestsView] = useState(false);
+    const [partnerListings, setPartnerListings] = useState<any[]>([]);
+    const [partnerListingsLoading, setPartnerListingsLoading] = useState(false);
+    const [listingActionTarget, setListingActionTarget] = useState<any | null>(null);
+    const [listingActionModalOpen, setListingActionModalOpen] = useState(false);
+    const [listingActionLoading, setListingActionLoading] = useState(false);
+    const [revShareSummary, setRevShareSummary] = useState<any>(null);
+    const [partnerRevShare, setPartnerRevShare] = useState<any[]>([]);
+    const [revShareLoading, setRevShareLoading] = useState(false);
+    const [expandedPartnerId, setExpandedPartnerId] = useState<string | null>(null);
+    const [revShareData, setRevShareData] = useState<{
+        totalRevShare: number;
+        partners: Array<{
+            partnerId: string;
+            businessName: string;
+            cuAmount: number;
+            transactionCount: number;
+            percent: number;
+        }>;
+    } | null>(null);
     const [serverName, setServerName] = useState('');
     const [serverDescription, setServerDescription] = useState('');
     const [serverLogoUrl, setServerLogoUrl] = useState('');
@@ -735,6 +766,14 @@ const CreditUnionAdminScreen = () => {
 
     // Server Settings Tab
     const [settingsTab, setSettingsTab] = useState('server-profile');
+    const [partnershipStatus, setPartnershipStatus] = useState<'open' | 'invite' | 'closed'>('open');
+    const [partnershipStatusSaving, setPartnershipStatusSaving] = useState(false);
+    const [revShareRate, setRevShareRate] = useState<number>(10);
+    const [revShareRateSaving, setRevShareRateSaving] = useState(false);
+    const [vendorInviteEmail, setVendorInviteEmail] = useState('');
+    const [vendorInviteSending, setVendorInviteSending] = useState(false);
+    const [vendorInvites, setVendorInvites] = useState<any[]>([]);
+    const [vendorInvitesLoading, setVendorInvitesLoading] = useState(false);
     const [accountEmail, setAccountEmail] = useState('');
     const [selectedBanner, setSelectedBanner] = useState(0);
     const [membersSearch, setMembersSearch] = useState('');
@@ -773,6 +812,17 @@ const CreditUnionAdminScreen = () => {
         autoEmoji: false,
         stickersAutocomplete: true,
     });
+
+    // Partnership Requests State
+    const [partnershipRequestsOpen, setPartnershipRequestsOpen] = useState(false);
+    const [partnershipApplications, setPartnershipApplications] = useState<any[]>([]);
+    const [partnershipApplicationsLoading, setPartnershipApplicationsLoading] = useState(false);
+    const [selectedApplication, setSelectedApplication] = useState<any | null>(null);
+    const [applicationActionOpen, setApplicationActionOpen] = useState(false);
+    const [applicationFeedback, setApplicationFeedback] = useState('');
+    const [applicationActionLoading, setApplicationActionLoading] = useState(false);
+    const [partnerRequestsFilter, setPartnerRequestsFilter] = useState<'all' | 'pending' | 'under_review' | 'approved' | 'rejected'>('all');
+    const [expandedApplicationIds, setExpandedApplicationIds] = useState<string[]>([]);
 
     // Bootstrap tenant and load user info
     useEffect(() => {
@@ -1163,6 +1213,13 @@ const CreditUnionAdminScreen = () => {
     };
 
     const activeSubgrid = subgrids.find((s) => s._id === activeSubgridId);
+
+    // Load partnership status from active subgrid when server settings modal opens
+    useEffect(() => {
+        if (!serverSettingsModalOpen || !activeSubgrid) return;
+        setPartnershipStatus((activeSubgrid as any).partnershipStatus || 'open');
+    }, [serverSettingsModalOpen, activeSubgrid]);
+
     const activeChannel = channels.find((c) => c._id === activeChannelId);
     const moderationContent = activeModerationItem?.content || {};
     const moderationAuthorId = moderationContent?.authorId || moderationContent?.senderId;
@@ -1424,6 +1481,78 @@ const CreditUnionAdminScreen = () => {
             } else {
                 Alert.alert('Error', err.message || 'Failed to save content moderation settings.');
             }
+        }
+    };
+
+    const handleSavePartnershipStatus = async (status: 'open' | 'invite' | 'closed') => {
+        if (!activeSubgridId) return;
+        setPartnershipStatus(status);
+        setPartnershipStatusSaving(true);
+        try {
+            await communityPatch(`/subgrids/${activeSubgridId}/settings`, { partnershipStatus: status });
+        } catch (e) {
+            console.error('Failed to save partnership status', e);
+        } finally {
+            setPartnershipStatusSaving(false);
+        }
+    };
+
+    // Load revShare rate when partnerships tab opens
+    useEffect(() => {
+        if (!serverSettingsModalOpen || settingsTab !== 'partnerships' || !activeSubgridId) return;
+        communityGet(`/subgrids/${activeSubgridId}/settings`).then((data: any) => {
+            if (data?.revShareRate !== undefined) setRevShareRate(data.revShareRate);
+        }).catch(() => {});
+    }, [serverSettingsModalOpen, settingsTab, activeSubgridId]);
+
+    // Load vendor invites when partnerships tab opens in invite mode
+    useEffect(() => {
+        if (!serverSettingsModalOpen || settingsTab !== 'partnerships' || !activeSubgridId) return;
+        if (partnershipStatus === 'invite') fetchVendorInvites();
+    }, [serverSettingsModalOpen, settingsTab, activeSubgridId, partnershipStatus]);
+
+    const handleSaveRevShareRate = async () => {
+        if (!activeSubgridId) return;
+        setRevShareRateSaving(true);
+        try {
+            await communityPatch(`/subgrids/${activeSubgridId}/settings`, { revShareRate });
+        } catch (err) {
+            console.error('[CUA] revshare rate save error:', err);
+        } finally {
+            setRevShareRateSaving(false);
+        }
+    };
+
+    const fetchVendorInvites = async () => {
+        if (!activeSubgridId) return;
+        setVendorInvitesLoading(true);
+        try {
+            const data = await communityGet(`/partnership-forum/invites?subgridId=${activeSubgridId}`);
+            setVendorInvites(Array.isArray(data) ? data : (data as any)?.invites ?? []);
+        } catch {}
+        finally { setVendorInvitesLoading(false); }
+    };
+
+    const handleSendVendorInvite = async () => {
+        if (!vendorInviteEmail.trim() || !activeSubgridId) return;
+        setVendorInviteSending(true);
+        try {
+            await communityPost('/partnership-forum/invite', { email: vendorInviteEmail.trim(), subgridId: activeSubgridId });
+            setVendorInviteEmail('');
+            await fetchVendorInvites();
+        } catch (err) {
+            console.error('[CUA] vendor invite error:', err);
+        } finally {
+            setVendorInviteSending(false);
+        }
+    };
+
+    const handleRevokeVendorInvite = async (inviteId: string) => {
+        try {
+            await communityPatch(`/partnership-forum/invites/${inviteId}`, { status: 'revoked' });
+            await fetchVendorInvites();
+        } catch (err) {
+            console.error('[CUA] revoke invite error:', err);
         }
     };
 
@@ -3016,9 +3145,798 @@ const CreditUnionAdminScreen = () => {
         </View>
     );
 
+    // Fetch RevShare data when revenue view is shown
+    useEffect(() => {
+        if (!showRevenueView) return;
+        communityGet('/revshare/cu/summary').then((data: any) => {
+            if (data) {
+                setRevShareData({
+                    totalRevShare: data.totalRevShare ?? data.cuTotal ?? 0,
+                    partners: (data.partners ?? data.breakdown ?? []).map((p: any, idx: number) => ({
+                        partnerId: p.partnerId ?? p._id ?? String(idx),
+                        businessName: p.businessName ?? p.name ?? 'Partner',
+                        cuAmount: p.cuAmount ?? p.amount ?? 0,
+                        transactionCount: p.transactionCount ?? p.count ?? 0,
+                        percent: p.percent ?? 0,
+                    })),
+                });
+            }
+        }).catch(() => {});
+    }, [showRevenueView]);
+
+    // Render Revenue Tab
+    const renderRevenueTab = () => {
+        const totalRevShare = revShareData?.totalRevShare ?? 0;
+        const partnerRevShare = revShareData?.partners ?? [];
+
+        // Web-compatible glass card style
+        const glassCard = {
+            backgroundColor: colors.glassBg,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            padding: 20,
+            gap: 6,
+            ...(Platform.OS === 'web' ? {
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+            } as any : {}),
+        };
+
+        const glassPartnerCard = {
+            backgroundColor: colors.glassBg,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            padding: 16,
+            gap: 10,
+            ...(Platform.OS === 'web' ? {
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+            } as any : {}),
+        };
+
+        // For web, center content with max-width
+        const contentInner = !isMobile && Platform.OS === 'web'
+            ? { maxWidth: 720, width: '100%' as any, alignSelf: 'center' as any }
+            : {};
+
+        return (
+            <>
+                <View style={[styles.contentHeader, isMobile && { paddingTop: insets.top + 14 }]}>
+                    <View style={styles.contentHeaderLeft}>
+                        {isMobile && (
+                            <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
+                                <ArrowLeft size={20} color={colors.text} />
+                            </TouchableOpacity>
+                        )}
+                        <DollarSign size={18} color={colors.textMuted} />
+                        <Text style={styles.contentTitle}>Revenue Share</Text>
+                    </View>
+                </View>
+                <ScrollView
+                    style={styles.feedContainer}
+                    contentContainerStyle={[styles.eventsListContent, contentInner]}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Total RevShare hero card */}
+                    <View style={glassCard}>
+                        <Text style={{ fontSize: 12, fontWeight: '500', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                            Total Revenue This Month
+                        </Text>
+                        <Text style={{ fontSize: 36, fontWeight: '800', color: colors.text, letterSpacing: -1 }}>
+                            ${totalRevShare.toLocaleString()}
+                        </Text>
+                        <Text style={{ fontSize: 13, color: colors.textSubtle }}>From marketplace + marketing</Text>
+                    </View>
+
+                    {/* Stats row on wider screens */}
+                    {!isMobile && (
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <GlassStatCard
+                                label="Marketplace Revenue"
+                                value={partnerRevShare.length > 0
+                                    ? `$${partnerRevShare.reduce((s: number, p: any) => s + (p.cuAmount ?? 0), 0).toLocaleString()}`
+                                    : '$0'}
+                                icon={<DollarSign size={20} color="#3b82f6" />}
+                                accent="rgba(59,130,246,0.85)"
+                                style={{ flex: 1 }}
+                            />
+                            <GlassStatCard
+                                label="Active Partners"
+                                value={String(partnerRevShare.length)}
+                                icon={<TrendingUp size={20} color="#8b5cf6" />}
+                                accent="rgba(139,92,246,0.85)"
+                                style={{ flex: 1 }}
+                            />
+                            <GlassStatCard
+                                label="Total Transactions"
+                                value={String(partnerRevShare.reduce((s: number, p: any) => s + (p.transactionCount ?? 0), 0))}
+                                icon={<DollarSign size={20} color="#22c55e" />}
+                                accent="rgba(34,197,94,0.85)"
+                                style={{ flex: 1 }}
+                            />
+                        </View>
+                    )}
+
+                    {/* Per-partner breakdown */}
+                    {partnerRevShare.length > 0 && (
+                        <>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 }}>
+                                By Partner
+                            </Text>
+                            {partnerRevShare.map((partner) => (
+                                <View key={partner.partnerId} style={glassPartnerCard}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text, flex: 1 }} numberOfLines={1}>
+                                            {partner.businessName}
+                                        </Text>
+                                        <Text style={{ fontSize: 16, fontWeight: '700', color: colors.primary }}>
+                                            ${partner.cuAmount.toLocaleString()}
+                                        </Text>
+                                    </View>
+                                    <Text style={{ fontSize: 13, color: colors.textSubtle }}>
+                                        {partner.transactionCount} transaction{partner.transactionCount !== 1 ? 's' : ''}
+                                    </Text>
+                                    {/* Progress bar */}
+                                    <View style={{ height: 6, backgroundColor: colors.glassBorder, borderRadius: 3, overflow: 'hidden' }}>
+                                        <View style={{
+                                            height: 6,
+                                            width: `${Math.min(partner.percent, 100)}%` as any,
+                                            backgroundColor: colors.primary,
+                                            borderRadius: 3,
+                                        }} />
+                                    </View>
+                                </View>
+                            ))}
+                        </>
+                    )}
+
+                    {partnerRevShare.length === 0 && !revShareData && (
+                        <View style={{ alignItems: 'center', paddingVertical: 40, gap: 12 }}>
+                            <TrendingUp size={40} color={colors.textSubtle} />
+                            <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>No Revenue Data Yet</Text>
+                            <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center' }}>
+                                Revenue share data will appear here once transactions are processed.
+                            </Text>
+                        </View>
+                    )}
+                </ScrollView>
+            </>
+        );
+    };
+
+    // Fetch RevShare monitoring data
+    const fetchRevShare = async () => {
+        const cuId = getTenantId();
+        setRevShareLoading(true);
+        try {
+            const [summaryData, partnersData] = await Promise.all([
+                communityGet(`/admin/revshare/summary`),
+                communityGet(`/admin/revshare/partners`),
+            ]);
+            if (summaryData) setRevShareSummary(summaryData);
+            if (partnersData) setPartnerRevShare(partnersData);
+        } catch {
+            // leave state empty — UI shows empty state
+        } finally {
+            setRevShareLoading(false);
+        }
+    };
+
+    // Fetch partnership applications
+    const fetchPartnershipApplications = async () => {
+        if (!activeSubgridId) return;
+        setPartnershipApplicationsLoading(true);
+        try {
+            const data = await communityGet(`/partnership-forum/applications?subgridId=${activeSubgridId}`);
+            setPartnershipApplications(data?.applications || data || []);
+        } catch (e) {
+            console.error('Failed to load partnership applications', e);
+        } finally {
+            setPartnershipApplicationsLoading(false);
+        }
+    };
+
+    // Handle partnership application action
+    const handleApplicationAction = async (status: 'approved' | 'rejected' | 'under_review') => {
+        if (!selectedApplication) return;
+        setApplicationActionLoading(true);
+        try {
+            await communityPatch(`/partnership-forum/applications/${selectedApplication.id}`, {
+                status,
+                feedback: applicationFeedback,
+            });
+            setPartnershipApplications(prev =>
+                prev.map(a => a.id === selectedApplication.id ? { ...a, status, feedback: applicationFeedback } : a)
+            );
+            setApplicationActionOpen(false);
+            setSelectedApplication(null);
+            setApplicationFeedback('');
+        } catch (e) {
+            console.error('Failed to update application', e);
+        } finally {
+            setApplicationActionLoading(false);
+        }
+    };
+
+    // Render RevShare monitoring tab
+    const renderRevShareTab = () => {
+        const monthlyTrend: Array<{ month: string; amount: number }> = revShareSummary?.monthlyTrend ?? [];
+        const maxAmount = Math.max(...monthlyTrend.map((m: any) => m.amount), 1);
+        const barChartWidth = 280;
+        const barHeight = 18;
+        const barGap = 8;
+        const labelWidth = 32;
+        const chartPadding = 8;
+
+        return (
+            <>
+                <View style={[styles.contentHeader, isMobile && { paddingTop: insets.top + 14 }]}>
+                    <View style={styles.contentHeaderLeft}>
+                        {isMobile && (
+                            <TouchableOpacity onPress={() => setMobileShowContent(false)} style={styles.mobileBackButton}>
+                                <ArrowLeft size={20} color={colors.text} />
+                            </TouchableOpacity>
+                        )}
+                        <TrendingUp size={18} color={colors.textMuted} />
+                        <Text style={styles.contentTitle}>RevShare Monitor</Text>
+                    </View>
+                    <View style={styles.contentHeaderRight}>
+                        <TouchableOpacity
+                            style={styles.createEventHeaderBtn}
+                            onPress={() => Platform.OS === 'web' ? window.alert('Report exported!') : Alert.alert('Export', 'Report exported!')}
+                        >
+                            <FileText size={16} color="#FFFFFF" />
+                            <Text style={styles.createEventHeaderBtnText}>Export Report</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <ScrollView
+                    style={styles.feedContainer}
+                    contentContainerStyle={[
+                        styles.eventsListContent,
+                        !isMobile && Platform.OS === 'web' && { maxWidth: 900, width: '100%' as any, alignSelf: 'center' as any },
+                    ]}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {revShareLoading ? (
+                        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+                    ) : (
+                        <>
+                            {/* Top Stats Row */}
+                            <Text style={styles.revShareSectionLabel}>Overview</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+                                <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 4, paddingBottom: 4 }}>
+                                    {[
+                                        { label: 'Total RevShare Earned', value: `$${(revShareSummary?.totalEarned ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, isEarnings: true },
+                                        { label: "This Month's Earnings", value: `$${(revShareSummary?.monthEarned ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, isEarnings: true },
+                                        { label: 'Active Partners', value: String(revShareSummary?.activePartners ?? 0), isEarnings: false },
+                                        { label: 'Avg. Per Partner', value: `$${(revShareSummary?.avgPerPartner ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, isEarnings: true },
+                                    ].map((stat, idx) => (
+                                        <View key={idx} style={[styles.revShareStatCard, Platform.OS === 'web' && { backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' } as any]}>
+                                            <Text style={styles.revShareStatLabel}>{stat.label}</Text>
+                                            <Text style={[styles.revShareStatValue, stat.isEarnings && { color: colors.primary }]}>
+                                                {stat.value}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </ScrollView>
+
+                            {/* Monthly Trend Chart */}
+                            {monthlyTrend.length > 0 && (
+                            <><Text style={[styles.revShareSectionLabel, { marginTop: 8 }]}>Monthly Trend (Last 6 Months)</Text>
+                            <View style={[styles.revShareChartCard, Platform.OS === 'web' && { backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' } as any]}>
+                                <Svg
+                                    width={barChartWidth}
+                                    height={(barHeight + barGap) * monthlyTrend.length + chartPadding * 2}
+                                >
+                                    {monthlyTrend.map((item: any, i: number) => {
+                                        const barWidth = Math.round(((item.amount / maxAmount) * (barChartWidth - labelWidth - 60)));
+                                        const y = chartPadding + i * (barHeight + barGap);
+                                        return (
+                                            <React.Fragment key={item.month}>
+                                                <SvgText
+                                                    x={0}
+                                                    y={y + barHeight - 3}
+                                                    fontSize={11}
+                                                    fill={colors.textMuted}
+                                                    fontWeight="500"
+                                                >
+                                                    {item.month}
+                                                </SvgText>
+                                                <Rect
+                                                    x={labelWidth}
+                                                    y={y}
+                                                    width={barWidth}
+                                                    height={barHeight}
+                                                    rx={4}
+                                                    fill={colors.primary}
+                                                    opacity={0.85}
+                                                />
+                                                <SvgText
+                                                    x={labelWidth + barWidth + 6}
+                                                    y={y + barHeight - 3}
+                                                    fontSize={11}
+                                                    fill={colors.text}
+                                                    fontWeight="600"
+                                                >
+                                                    ${item.amount}
+                                                </SvgText>
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </Svg>
+                            </View>
+                            </>
+                            )}
+
+                            {/* Partner Earnings Breakdown */}
+                            <Text style={[styles.revShareSectionLabel, { marginTop: 8 }]}>Partner Earnings Breakdown</Text>
+
+                            {/* Table Header */}
+                            <View style={styles.revShareTableHeader}>
+                                <Text style={[styles.revShareTableHeaderCell, { flex: 2 }]}>Partner</Text>
+                                <Text style={[styles.revShareTableHeaderCell, { flex: 1 }]}>Category</Text>
+                                <Text style={[styles.revShareTableHeaderCell, { flex: 1, textAlign: 'right' }]}>Redemptions</Text>
+                                <Text style={[styles.revShareTableHeaderCell, { flex: 1, textAlign: 'right' }]}>Earnings</Text>
+                                <Text style={[styles.revShareTableHeaderCell, { width: 50, textAlign: 'right' }]}>%</Text>
+                            </View>
+
+                            {/* Table Rows */}
+                            {[...partnerRevShare]
+                                .sort((a, b) => b.earnings - a.earnings)
+                                .map((partner, idx) => {
+                                    const isExpanded = expandedPartnerId === partner.partnerId;
+                                    const isEven = idx % 2 === 0;
+                                    return (
+                                        <View key={partner.partnerId}>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.revShareTableRow,
+                                                    isEven && styles.revShareTableRowAlt,
+                                                    isExpanded && styles.revShareTableRowExpanded,
+                                                ]}
+                                                onPress={() => {
+                                                    hapticLight();
+                                                    setExpandedPartnerId(isExpanded ? null : partner.partnerId);
+                                                }}
+                                                activeOpacity={0.75}
+                                            >
+                                                <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                    <ChevronRight
+                                                        size={14}
+                                                        color={colors.textMuted}
+                                                        style={{ transform: [{ rotate: isExpanded ? '90deg' : '0deg' }] }}
+                                                    />
+                                                    <Text style={styles.revShareTableCell} numberOfLines={1}>{partner.name}</Text>
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <View style={styles.revShareCategoryBadge}>
+                                                        <Text style={styles.revShareCategoryText} numberOfLines={1}>{partner.category}</Text>
+                                                    </View>
+                                                </View>
+                                                <Text style={[styles.revShareTableCell, { flex: 1, textAlign: 'right' }]}>{partner.redemptions}</Text>
+                                                <Text style={[styles.revShareTableCell, { flex: 1, textAlign: 'right', color: colors.primary, fontWeight: '700' }]}>
+                                                    ${partner.earnings.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                </Text>
+                                                <Text style={[styles.revShareTableCell, { width: 50, textAlign: 'right' }]}>{partner.percentage}%</Text>
+                                            </TouchableOpacity>
+
+                                            {/* Expanded detail */}
+                                            {isExpanded && (
+                                                <View style={styles.revShareExpandedDetail}>
+                                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                                                        <View style={styles.revShareDetailItem}>
+                                                            <Text style={styles.revShareDetailLabel}>Total Redemptions</Text>
+                                                            <Text style={styles.revShareDetailValue}>{partner.redemptions}</Text>
+                                                        </View>
+                                                        <View style={styles.revShareDetailItem}>
+                                                            <Text style={styles.revShareDetailLabel}>Total Earnings</Text>
+                                                            <Text style={[styles.revShareDetailValue, { color: colors.primary }]}>
+                                                                ${partner.earnings.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                            </Text>
+                                                        </View>
+                                                        <View style={styles.revShareDetailItem}>
+                                                            <Text style={styles.revShareDetailLabel}>% of Total</Text>
+                                                            <Text style={styles.revShareDetailValue}>{partner.percentage}%</Text>
+                                                        </View>
+                                                        <View style={styles.revShareDetailItem}>
+                                                            <Text style={styles.revShareDetailLabel}>Last Redemption</Text>
+                                                            <Text style={styles.revShareDetailValue}>{partner.lastRedemptionDate ?? 'N/A'}</Text>
+                                                        </View>
+                                                    </View>
+                                                    {/* Progress bar */}
+                                                    <View style={{ marginTop: 10 }}>
+                                                        <Text style={[styles.revShareDetailLabel, { marginBottom: 4 }]}>Share of Total Revenue</Text>
+                                                        <View style={{ height: 6, backgroundColor: colors.glassBorder, borderRadius: 3, overflow: 'hidden' }}>
+                                                            <View style={{
+                                                                height: 6,
+                                                                width: `${Math.min(partner.percentage, 100)}%` as any,
+                                                                backgroundColor: colors.primary,
+                                                                borderRadius: 3,
+                                                            }} />
+                                                        </View>
+                                                    </View>
+                                                </View>
+                                            )}
+                                        </View>
+                                    );
+                                })
+                            }
+                        </>
+                    )}
+                </ScrollView>
+            </>
+        );
+    };
+
+    const fetchPartnerListings = async () => {
+        if (!activeSubgridId) return;
+        setPartnerListingsLoading(true);
+        try {
+            const data = await communityGet(`/marketplace?subgridId=${activeSubgridId}&admin=true`);
+            setPartnerListings(Array.isArray(data) ? data : (data?.data ?? data?.listings ?? []));
+        } catch (e) {
+            console.error('Failed to load partner listings', e);
+        } finally {
+            setPartnerListingsLoading(false);
+        }
+    };
+
+    const handleToggleListingStatus = async (listing: any) => {
+        setListingActionLoading(true);
+        try {
+            const newStatus = !listing.isActive;
+            await communityPatch(`/marketplace/${listing._id}/admin-status`, { isActive: newStatus });
+            setPartnerListings(prev =>
+                prev.map(l => l._id === listing._id ? { ...l, isActive: newStatus } : l)
+            );
+        } catch (e) {
+            console.error('Failed to toggle listing status', e);
+        } finally {
+            setListingActionLoading(false);
+            setListingActionModalOpen(false);
+            setListingActionTarget(null);
+        }
+    };
+
+    const handleForceRemoveListing = async () => {
+        if (!listingActionTarget) return;
+        setListingActionLoading(true);
+        try {
+            await communityDelete(`/marketplace/${listingActionTarget._id}`);
+            setPartnerListings(prev => prev.filter(l => l._id !== listingActionTarget._id));
+            setListingActionModalOpen(false);
+            setListingActionTarget(null);
+        } catch (e) {
+            console.error('Failed to remove listing', e);
+        } finally {
+            setListingActionLoading(false);
+        }
+    };
+
+    const renderPartnerListingsTab = () => (
+        <ScrollView style={{ flex: 1, padding: 16 }} showsVerticalScrollIndicator={false}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>Partner Listings</Text>
+                <TouchableOpacity onPress={fetchPartnerListings} style={{ padding: 8 }}>
+                    <RefreshCw size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+            </View>
+            {partnerListingsLoading ? (
+                <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+            ) : partnerListings.length === 0 ? (
+                <View style={{ alignItems: 'center', padding: 40 }}>
+                    <ShoppingBag size={48} color={colors.textMuted} />
+                    <Text style={{ color: colors.textMuted, marginTop: 12 }}>No partner listings yet</Text>
+                </View>
+            ) : (
+                partnerListings.map((listing) => (
+                    <View key={listing._id} style={styles.partnerListingCard}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>{listing.title}</Text>
+                                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>{listing.category} • {listing.discountPercent}% off</Text>
+                            </View>
+                            <GlassBadge
+                                label={listing.isActive ? 'Active' : 'Suspended'}
+                                variant={listing.isActive ? 'success' : 'warning'}
+                            />
+                        </View>
+                        {listing.description ? (
+                            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 6, lineHeight: 16 }} numberOfLines={2}>{listing.description}</Text>
+                        ) : null}
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                            <TouchableOpacity
+                                style={[styles.listingActionBtn, { backgroundColor: listing.isActive ? colors.warningBg : colors.successBg }]}
+                                onPress={() => { setListingActionTarget(listing); handleToggleListingStatus(listing); }}
+                            >
+                                <Text style={{ color: listing.isActive ? colors.warningText : colors.successText, fontSize: 12, fontWeight: '600' }}>
+                                    {listing.isActive ? 'Suspend' : 'Restore'}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.listingActionBtn, { backgroundColor: colors.dangerBg }]}
+                                onPress={() => { setListingActionTarget(listing); setListingActionModalOpen(true); }}
+                            >
+                                <Text style={{ color: colors.dangerText, fontSize: 12, fontWeight: '600' }}>Remove</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ))
+            )}
+        </ScrollView>
+    );
+
+    const renderPartnerRequestsTab = () => {
+        const filterTabs: { key: typeof partnerRequestsFilter; label: string }[] = [
+            { key: 'all', label: 'All' },
+            { key: 'pending', label: 'Pending' },
+            { key: 'under_review', label: 'Under Review' },
+            { key: 'approved', label: 'Approved' },
+            { key: 'rejected', label: 'Rejected' },
+        ];
+        const filtered = partnerRequestsFilter === 'all'
+            ? partnershipApplications
+            : partnershipApplications.filter(a => a.status === partnerRequestsFilter);
+
+        const statusColor = (status: string) => {
+            if (status === 'approved') return '#10B981';
+            if (status === 'rejected') return colors.error;
+            if (status === 'under_review') return '#3B82F6';
+            return '#F59E0B';
+        };
+        const statusLabel = (status: string) => {
+            if (status === 'under_review') return 'Under Review';
+            if (status === 'approved') return 'Approved';
+            if (status === 'rejected') return 'Rejected';
+            return 'Pending';
+        };
+        const formatDate = (dateStr: string) => {
+            if (!dateStr) return '';
+            try {
+                return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            } catch {
+                return dateStr;
+            }
+        };
+
+        return (
+            <ScrollView style={{ flex: 1, padding: 16 }} showsVerticalScrollIndicator={false}>
+                {/* Header */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Handshake size={20} color={colors.primary} />
+                        <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>Partnership Requests</Text>
+                        <View style={{
+                            backgroundColor: colors.primary,
+                            borderRadius: 10,
+                            paddingHorizontal: 7,
+                            paddingVertical: 2,
+                            marginLeft: 4,
+                        }}>
+                            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>{partnershipApplications.length}</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity onPress={fetchPartnershipApplications} style={{ padding: 8 }}>
+                        <RefreshCw size={18} color={colors.textMuted} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Filter Tabs */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 16 }}>
+                    {filterTabs.map(tab => (
+                        <TouchableOpacity
+                            key={tab.key}
+                            onPress={() => setPartnerRequestsFilter(tab.key)}
+                            style={{
+                                paddingHorizontal: 14,
+                                paddingVertical: 6,
+                                borderRadius: 20,
+                                backgroundColor: partnerRequestsFilter === tab.key ? colors.primary : colors.glassBg,
+                                borderWidth: 1,
+                                borderColor: partnerRequestsFilter === tab.key ? colors.primary : colors.glassBorder,
+                            }}
+                        >
+                            <Text style={{
+                                fontSize: 12,
+                                fontWeight: '600',
+                                color: partnerRequestsFilter === tab.key ? '#FFFFFF' : colors.textMuted,
+                            }}>
+                                {tab.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+
+                {/* Content */}
+                {partnershipApplicationsLoading ? (
+                    <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+                ) : filtered.length === 0 ? (
+                    <View style={{ alignItems: 'center', padding: 40 }}>
+                        <Handshake size={48} color={colors.textMuted} />
+                        <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 14 }}>
+                            {partnerRequestsFilter === 'all' ? 'No partnership requests yet' : `No ${statusLabel(partnerRequestsFilter).toLowerCase()} requests`}
+                        </Text>
+                    </View>
+                ) : (
+                    filtered.map((app) => {
+                        const appId = app._id || app.id;
+                        const isExpanded = expandedApplicationIds.includes(appId);
+                        const toggleExpand = () => {
+                            setExpandedApplicationIds(prev =>
+                                prev.includes(appId) ? prev.filter(id => id !== appId) : [...prev, appId]
+                            );
+                        };
+                        return (
+                            <View
+                                key={appId}
+                                style={{
+                                    borderWidth: 1,
+                                    borderColor: colors.glassBorder,
+                                    borderRadius: 16,
+                                    padding: 14,
+                                    marginBottom: 12,
+                                    backgroundColor: colors.modalBg,
+                                }}
+                            >
+                                {/* Application header row */}
+                                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                                    <View style={{ flex: 1, marginRight: 8 }}>
+                                        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
+                                            {app.businessName || 'Unnamed Business'}
+                                        </Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                                            {app.partnerName || app.vendorName || 'Unknown Partner'}
+                                        </Text>
+                                        {app.category ? (
+                                            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 1 }}>
+                                                {app.category}
+                                            </Text>
+                                        ) : null}
+                                    </View>
+                                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                                        <View style={{
+                                            backgroundColor: statusColor(app.status) + '22',
+                                            borderRadius: 8,
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 4,
+                                            borderWidth: 1,
+                                            borderColor: statusColor(app.status) + '55',
+                                        }}>
+                                            <Text style={{ color: statusColor(app.status), fontSize: 11, fontWeight: '700' }}>
+                                                {statusLabel(app.status)}
+                                            </Text>
+                                        </View>
+                                        {(app.createdAt || app.submittedAt) ? (
+                                            <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                                                {formatDate(app.createdAt || app.submittedAt)}
+                                            </Text>
+                                        ) : null}
+                                    </View>
+                                </View>
+
+                                {/* View Details toggle */}
+                                <TouchableOpacity
+                                    onPress={toggleExpand}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        paddingVertical: 4,
+                                        marginBottom: isExpanded ? 10 : 0,
+                                    }}
+                                >
+                                    <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>
+                                        {isExpanded ? 'Hide Details' : 'View Details'}
+                                    </Text>
+                                    <ChevronDown
+                                        size={14}
+                                        color={colors.primary}
+                                        style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
+                                    />
+                                </TouchableOpacity>
+
+                                {/* Expanded detail section */}
+                                {isExpanded && (
+                                    <View style={{ marginBottom: 10 }}>
+                                        {(app.proposal || app.proposalText) ? (
+                                            <View style={{
+                                                backgroundColor: colors.glassBg,
+                                                borderRadius: 8,
+                                                padding: 10,
+                                                marginBottom: 8,
+                                                borderWidth: 1,
+                                                borderColor: colors.glassBorder,
+                                            }}>
+                                                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Proposal</Text>
+                                                <Text style={{ color: colors.text, fontSize: 13, lineHeight: 18 }}>
+                                                    {app.proposal || app.proposalText}
+                                                </Text>
+                                            </View>
+                                        ) : null}
+                                        {app.feedback ? (
+                                            <View style={{
+                                                backgroundColor: '#3B82F611',
+                                                borderRadius: 8,
+                                                padding: 10,
+                                                borderWidth: 1,
+                                                borderColor: '#3B82F633',
+                                            }}>
+                                                <Text style={{ color: '#3B82F6', fontSize: 11, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Feedback</Text>
+                                                <Text style={{ color: colors.text, fontSize: 13, lineHeight: 18 }}>{app.feedback}</Text>
+                                            </View>
+                                        ) : null}
+                                    </View>
+                                )}
+
+                                {/* Action buttons */}
+                                <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                                    <TouchableOpacity
+                                        disabled={applicationActionLoading}
+                                        onPress={() => {
+                                            setSelectedApplication(app);
+                                            handleApplicationAction('approved');
+                                        }}
+                                        style={{
+                                            paddingHorizontal: 14,
+                                            paddingVertical: 7,
+                                            borderRadius: 8,
+                                            backgroundColor: '#10B98122',
+                                            borderWidth: 1,
+                                            borderColor: '#10B98144',
+                                        }}
+                                    >
+                                        <Text style={{ color: '#10B981', fontSize: 12, fontWeight: '600' }}>Approve</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        disabled={applicationActionLoading}
+                                        onPress={() => {
+                                            setSelectedApplication(app);
+                                            handleApplicationAction('under_review');
+                                        }}
+                                        style={{
+                                            paddingHorizontal: 14,
+                                            paddingVertical: 7,
+                                            borderRadius: 8,
+                                            backgroundColor: '#3B82F622',
+                                            borderWidth: 1,
+                                            borderColor: '#3B82F644',
+                                        }}
+                                    >
+                                        <Text style={{ color: '#3B82F6', fontSize: 12, fontWeight: '600' }}>Review</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        disabled={applicationActionLoading}
+                                        onPress={() => {
+                                            setSelectedApplication(app);
+                                            handleApplicationAction('rejected');
+                                        }}
+                                        style={{
+                                            paddingHorizontal: 14,
+                                            paddingVertical: 7,
+                                            borderRadius: 8,
+                                            backgroundColor: colors.dangerBg,
+                                            borderWidth: 1,
+                                            borderColor: colors.dangerBg,
+                                        }}
+                                    >
+                                        <Text style={{ color: colors.dangerText, fontSize: 12, fontWeight: '600' }}>Reject</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        );
+                    })
+                )}
+            </ScrollView>
+        );
+    };
+
     return (
         <View style={styles.container}>
-            <View pointerEvents="none" style={styles.gridBackground} />
             {/* Top Navigation - hidden on mobile, shown in mobileTopBar instead */}
             {!isMobile && (
             <View style={styles.topNav}>
@@ -3036,6 +3954,30 @@ const CreditUnionAdminScreen = () => {
                     <TouchableOpacity style={styles.tab} onPress={() => router.push('/admin/contributors')}>
                         <Text style={styles.tabText}>Leaderboard</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                        style={showRevenueView ? styles.tabActive : styles.tab}
+                        onPress={() => { setShowRevenueView(!showRevenueView); setShowEventsView(false); setShowRevShareTab(false); setShowPartnerListingsView(false); setShowPartnerRequestsView(false); }}
+                    >
+                        <Text style={showRevenueView ? styles.tabTextActive : styles.tabText}>Revenue</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={showRevShareTab ? styles.tabActive : styles.tab}
+                        onPress={() => { setShowRevShareTab(!showRevShareTab); setShowRevenueView(false); setShowEventsView(false); setShowPartnerListingsView(false); setShowPartnerRequestsView(false); fetchRevShare(); }}
+                    >
+                        <Text style={showRevShareTab ? styles.tabTextActive : styles.tabText}>RevShare</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={showPartnerListingsView ? styles.tabActive : styles.tab}
+                        onPress={() => { setShowPartnerListingsView(!showPartnerListingsView); setShowRevenueView(false); setShowRevShareTab(false); setShowEventsView(false); setShowPartnerRequestsView(false); fetchPartnerListings(); }}
+                    >
+                        <Text style={showPartnerListingsView ? styles.tabTextActive : styles.tabText}>Listings</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={showPartnerRequestsView ? styles.tabActive : styles.tab}
+                        onPress={() => { setShowPartnerRequestsView(!showPartnerRequestsView); setShowPartnerListingsView(false); setShowRevenueView(false); setShowRevShareTab(false); setShowEventsView(false); fetchPartnershipApplications(); }}
+                    >
+                        <Text style={showPartnerRequestsView ? styles.tabTextActive : styles.tabText}>Partners</Text>
+                    </TouchableOpacity>
                 </ScrollView>
             </View>
             )}
@@ -3043,36 +3985,59 @@ const CreditUnionAdminScreen = () => {
             <View style={styles.mainArea}>
                 {/* Left Icon Rail - hidden on mobile */}
                 {!isMobile && (
-                <View style={styles.iconRail}>
-                    <TouchableOpacity style={[styles.railLogo, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]}>
-                        {activeSubgrid ? (
-                            activeSubgrid.logoUrl ? (
-                                <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
-                            ) : (
-                                <Text style={styles.railLogoText}>
-                                    {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
-                                </Text>
-                            )
-                        ) : null}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.railButton} onPress={() => router.push('/admin/messages')}>
-                        <MessageSquare size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    <View style={{ flex: 1 }} />
-                    <TouchableOpacity style={styles.railButton} onPress={() => router.push('/admin/contributors')}>
-                        <Trophy size={18} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.railButton} onPress={toggleTheme}>
-                        {mode === 'dark' ? (
-                            <Sun size={18} color={colors.textMuted} />
-                        ) : (
-                            <Moon size={18} color={colors.textMuted} />
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.exitButton} onPress={handleLogout}>
-                        <X size={18} color="#FFFFFF" />
-                    </TouchableOpacity>
-                </View>
+                    <GlassRail
+                        serverLogo={{
+                            uri: activeSubgrid?.logoUrl,
+                            name: activeSubgrid?.name,
+                            onPress: () => {},
+                        }}
+                        items={[
+                            {
+                                id: 'messages',
+                                icon: <MessageSquare size={20} color={colors.textMuted} />,
+                                activeIcon: <MessageSquare size={20} color={colors.glassActiveText} />,
+                                onPress: () => router.push('/admin/messages'),
+                                isActive: false,
+                            },
+                            {
+                                id: 'revenue',
+                                icon: <DollarSign size={20} color={showRevenueView ? colors.primary : colors.textMuted} />,
+                                activeIcon: <DollarSign size={20} color={colors.glassActiveText} />,
+                                onPress: () => { setShowRevenueView(!showRevenueView); setShowEventsView(false); setShowRevShareTab(false); },
+                                isActive: showRevenueView,
+                            },
+                            {
+                                id: 'revshare',
+                                icon: <TrendingUp size={20} color={showRevShareTab ? colors.primary : colors.textMuted} />,
+                                activeIcon: <TrendingUp size={20} color={colors.glassActiveText} />,
+                                onPress: () => { setShowRevShareTab(!showRevShareTab); setShowRevenueView(false); setShowEventsView(false); fetchRevShare(); },
+                                isActive: showRevShareTab,
+                            },
+                            {
+                                id: 'partnerlistings',
+                                icon: <ShoppingBag size={20} color={showPartnerListingsView ? colors.primary : colors.textMuted} />,
+                                activeIcon: <ShoppingBag size={20} color={colors.glassActiveText} />,
+                                onPress: () => { setShowPartnerListingsView(!showPartnerListingsView); setShowRevenueView(false); setShowRevShareTab(false); setShowEventsView(false); setShowPartnerRequestsView(false); fetchPartnerListings(); },
+                                isActive: showPartnerListingsView,
+                            },
+                            {
+                                id: 'partnerrequests',
+                                icon: <Handshake size={20} color={showPartnerRequestsView ? colors.primary : colors.textMuted} />,
+                                activeIcon: <Handshake size={20} color={colors.glassActiveText} />,
+                                onPress: () => { setShowPartnerRequestsView(!showPartnerRequestsView); setShowPartnerListingsView(false); setShowRevenueView(false); setShowRevShareTab(false); setShowEventsView(false); fetchPartnershipApplications(); },
+                                isActive: showPartnerRequestsView,
+                            },
+                            {
+                                id: 'leaderboard',
+                                icon: <Trophy size={20} color={colors.textMuted} />,
+                                activeIcon: <Trophy size={20} color={colors.glassActiveText} />,
+                                onPress: () => router.push('/admin/contributors'),
+                                isActive: false,
+                            },
+                        ]}
+                        onToggleTheme={toggleTheme}
+                        onLogout={handleLogout}
+                    />
                 )}
 
                 {/* Channel Sidebar - full width on mobile when not showing content */}
@@ -3130,6 +4095,30 @@ const CreditUnionAdminScreen = () => {
                                 <TouchableOpacity style={styles.mobileNavTab} onPress={() => router.push('/admin/contributors')}>
                                     <Text style={styles.mobileNavTabText}>Leaderboard</Text>
                                 </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={showRevenueView ? styles.mobileNavTabActive : styles.mobileNavTab}
+                                    onPress={() => { setShowRevenueView(!showRevenueView); setShowEventsView(false); setShowRevShareTab(false); setShowPartnerListingsView(false); setShowPartnerRequestsView(false); setMobileShowContent(true); }}
+                                >
+                                    <Text style={showRevenueView ? styles.mobileNavTabTextActive : styles.mobileNavTabText}>Revenue</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={showRevShareTab ? styles.mobileNavTabActive : styles.mobileNavTab}
+                                    onPress={() => { setShowRevShareTab(!showRevShareTab); setShowRevenueView(false); setShowEventsView(false); setShowPartnerListingsView(false); setShowPartnerRequestsView(false); fetchRevShare(); setMobileShowContent(true); }}
+                                >
+                                    <Text style={showRevShareTab ? styles.mobileNavTabTextActive : styles.mobileNavTabText}>RevShare</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={showPartnerListingsView ? styles.mobileNavTabActive : styles.mobileNavTab}
+                                    onPress={() => { setShowPartnerListingsView(!showPartnerListingsView); setShowRevenueView(false); setShowRevShareTab(false); setShowEventsView(false); setShowPartnerRequestsView(false); fetchPartnerListings(); setMobileShowContent(true); }}
+                                >
+                                    <Text style={showPartnerListingsView ? styles.mobileNavTabTextActive : styles.mobileNavTabText}>Listings</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={showPartnerRequestsView ? styles.mobileNavTabActive : styles.mobileNavTab}
+                                    onPress={() => { setShowPartnerRequestsView(!showPartnerRequestsView); setShowPartnerListingsView(false); setShowRevenueView(false); setShowRevShareTab(false); setShowEventsView(false); fetchPartnershipApplications(); setMobileShowContent(true); }}
+                                >
+                                    <Text style={showPartnerRequestsView ? styles.mobileNavTabTextActive : styles.mobileNavTabText}>Partners</Text>
+                                </TouchableOpacity>
                             </ScrollView>
                         </View>
                     )}
@@ -3165,7 +4154,7 @@ const CreditUnionAdminScreen = () => {
                         {/* Events */}
                         <TouchableOpacity
                             style={[styles.eventsButton, showEventsView && styles.eventsButtonActive]}
-                            onPress={() => { setShowEventsView(!showEventsView); if (isMobile) setMobileShowContent(true); }}
+                            onPress={() => { setShowEventsView(!showEventsView); setShowRevenueView(false); if (isMobile) setMobileShowContent(true); }}
                         >
                             <Calendar size={16} color={showEventsView ? colors.text : colors.textMuted} />
                             <Text style={[styles.eventsText, showEventsView && styles.eventsTextActive]}>Events</Text>
@@ -3352,7 +4341,19 @@ const CreditUnionAdminScreen = () => {
                 >
                 <View style={{ flex: 1 }}>
                     {/* Close server menu when tapping outside - handled by onScroll instead */}
-                    {showEventsView ? (
+                    {showPartnerRequestsView ? (
+                        /* Partnership Requests View */
+                        renderPartnerRequestsTab()
+                    ) : showPartnerListingsView ? (
+                        /* Partner Listings View */
+                        renderPartnerListingsTab()
+                    ) : showRevShareTab ? (
+                        /* RevShare Monitor View */
+                        renderRevShareTab()
+                    ) : showRevenueView ? (
+                        /* Revenue View */
+                        renderRevenueTab()
+                    ) : showEventsView ? (
                         /* Events View */
                         <>
                             <View style={[styles.contentHeader, isMobile && { paddingTop: insets.top + 14 }]}>
@@ -3509,7 +4510,7 @@ const CreditUnionAdminScreen = () => {
                         </View>
                     ) : (channelsQuery.isError || subgridsQuery.isError) ? (
                         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-                            <AlertTriangle size={48} color={colors.error || '#EF4444'} />
+                            <AlertTriangle size={48} color={colors.dangerText} />
                             <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600', marginTop: 16 }}>Failed to load server data</Text>
                             <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 8, textAlign: 'center' }}>
                                 {channelsQuery.error?.message || subgridsQuery.error?.message || 'Please check your connection and try again.'}
@@ -3518,7 +4519,7 @@ const CreditUnionAdminScreen = () => {
                                 style={{ marginTop: 16, backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 }}
                                 onPress={() => { channelsQuery.refetch(); subgridsQuery.refetch(); membersQuery.refetch(); }}
                             >
-                                <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
+                                <Text style={{ color: colors.glassActiveText, fontWeight: '600' }}>Retry</Text>
                             </TouchableOpacity>
                         </View>
                     ) : isServerEmpty ? (
@@ -3650,8 +4651,8 @@ const CreditUnionAdminScreen = () => {
                                                             {String(item.senderId || item.authorId) === String(userId) && (
                                                                 item._status === 'failed' ? (
                                                                     <TouchableOpacity onPress={() => handleRetryMessage(item)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                                                        <AlertCircle size={12} color="#EF4444" />
-                                                                        <Text style={{ fontSize: 10, color: '#EF4444', marginLeft: 2 }}>Retry</Text>
+                                                                        <AlertCircle size={12} color={colors.dangerText} />
+                                                                        <Text style={{ fontSize: 10, color: colors.dangerText, marginLeft: 2 }}>Retry</Text>
                                                                     </TouchableOpacity>
                                                                 ) : item._isPending || isTempId(item._id) ? (
                                                                     <Clock size={12} color={colors.textMuted} style={{ marginLeft: 4 }} />
@@ -3833,12 +4834,12 @@ const CreditUnionAdminScreen = () => {
                                                     <Text style={styles.statText}>{commentCount}</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity style={styles.statItem} onPress={() => handleLikeItem(item._id, isPost)}>
-                                                    <Heart size={16} color={userLiked ? '#EF4444' : colors.textMuted} />
-                                                    <Text style={[styles.statText, userLiked && { color: '#EF4444' }]}>{likeCount}</Text>
+                                                    <Heart size={16} color={userLiked ? colors.dangerText : colors.textMuted} />
+                                                    <Text style={[styles.statText, userLiked && { color: colors.dangerText }]}>{likeCount}</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity style={styles.statItem} onPress={() => handleReshareItem(item._id, isPost)}>
-                                                    <Repeat size={16} color={userReshared ? '#22C55E' : colors.textMuted} />
-                                                    <Text style={[styles.statText, userReshared && { color: '#22C55E' }]}>{reshareCount}</Text>
+                                                    <Repeat size={16} color={userReshared ? colors.successText : colors.textMuted} />
+                                                    <Text style={[styles.statText, userReshared && { color: colors.successText }]}>{reshareCount}</Text>
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
@@ -3940,7 +4941,7 @@ const CreditUnionAdminScreen = () => {
                                                 onPress={handleSendMessage}
                                                 disabled={!(messageDraft.trim() || attachments.length > 0)}
                                             >
-                                                <Send size={18} color={(messageDraft.trim() || attachments.length > 0) ? '#FFFFFF' : colors.textMuted} />
+                                                <Send size={18} color={(messageDraft.trim() || attachments.length > 0) ? colors.glassActiveText : colors.textMuted} />
                                             </TouchableOpacity>
                                         </View>
                                     </View>
@@ -4109,7 +5110,7 @@ const CreditUnionAdminScreen = () => {
                                             paddingVertical: 7,
                                             borderRadius: 16,
                                             borderWidth: 1,
-                                            borderColor: !newChannelCategoryId ? colors.primary : colors.border,
+                                            borderColor: !newChannelCategoryId ? colors.primary : colors.glassBorder,
                                             backgroundColor: !newChannelCategoryId ? colors.primary + '18' : 'transparent',
                                         }}
                                         onPress={() => setNewChannelCategoryId('')}
@@ -4124,7 +5125,7 @@ const CreditUnionAdminScreen = () => {
                                                 paddingVertical: 7,
                                                 borderRadius: 16,
                                                 borderWidth: 1,
-                                                borderColor: newChannelCategoryId === cat._id ? colors.primary : colors.border,
+                                                borderColor: newChannelCategoryId === cat._id ? colors.primary : colors.glassBorder,
                                                 backgroundColor: newChannelCategoryId === cat._id ? colors.primary + '18' : 'transparent',
                                             }}
                                             onPress={() => setNewChannelCategoryId(cat._id)}
@@ -4227,7 +5228,7 @@ const CreditUnionAdminScreen = () => {
                                             paddingVertical: 7,
                                             borderRadius: 16,
                                             borderWidth: 1,
-                                            borderColor: !editChannelCategoryId ? colors.primary : colors.border,
+                                            borderColor: !editChannelCategoryId ? colors.primary : colors.glassBorder,
                                             backgroundColor: !editChannelCategoryId ? colors.primary + '18' : 'transparent',
                                         }}
                                         onPress={() => setEditChannelCategoryId('')}
@@ -4242,7 +5243,7 @@ const CreditUnionAdminScreen = () => {
                                                 paddingVertical: 7,
                                                 borderRadius: 16,
                                                 borderWidth: 1,
-                                                borderColor: editChannelCategoryId === cat._id ? colors.primary : colors.border,
+                                                borderColor: editChannelCategoryId === cat._id ? colors.primary : colors.glassBorder,
                                                 backgroundColor: editChannelCategoryId === cat._id ? colors.primary + '18' : 'transparent',
                                             }}
                                             onPress={() => setEditChannelCategoryId(cat._id)}
@@ -4297,8 +5298,8 @@ const CreditUnionAdminScreen = () => {
                                 }
                             }}
                         >
-                            <Trash2 size={18} color="#EF4444" />
-                            <Text style={[styles.channelSettingsText, { color: '#EF4444' }]}>Delete Channel</Text>
+                            <Trash2 size={18} color={colors.dangerText} />
+                            <Text style={[styles.channelSettingsText, { color: colors.dangerText }]}>Delete Channel</Text>
                         </TouchableOpacity>
                         {selectedSettingsChannel?.visibility === 'admin' && (
                             <TouchableOpacity
@@ -4479,9 +5480,9 @@ const CreditUnionAdminScreen = () => {
                             <X size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                         <View style={styles.modalIconWrap}>
-                            <Award size={28} color="#8B5CF6" />
-                            <View style={[styles.modalIconBadge, { backgroundColor: '#8B5CF6' }]}>
-                                <Plus size={10} color="#FFFFFF" />
+                            <Award size={28} color={colors.primary} />
+                            <View style={[styles.modalIconBadge, { backgroundColor: colors.primary }]}>
+                                <Plus size={10} color={colors.glassActiveText} />
                             </View>
                         </View>
                         <Text style={styles.modalTitle}>Invite Stakeholder</Text>
@@ -4628,14 +5629,14 @@ const CreditUnionAdminScreen = () => {
                                 style={[styles.eventTypeOption, newEventType === 'event' && styles.eventTypeOptionActive]}
                                 onPress={() => setNewEventType('event')}
                             >
-                                <Calendar size={18} color={newEventType === 'event' ? '#FFFFFF' : colors.textMuted} />
+                                <Calendar size={18} color={newEventType === 'event' ? colors.glassActiveText : colors.textMuted} />
                                 <Text style={[styles.eventTypeOptionText, newEventType === 'event' && styles.eventTypeOptionTextActive]}>Event</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.eventTypeOption, newEventType === 'announcement' && styles.eventTypeOptionActive]}
                                 onPress={() => setNewEventType('announcement')}
                             >
-                                <Megaphone size={18} color={newEventType === 'announcement' ? '#FFFFFF' : colors.textMuted} />
+                                <Megaphone size={18} color={newEventType === 'announcement' ? colors.glassActiveText : colors.textMuted} />
                                 <Text style={[styles.eventTypeOptionText, newEventType === 'announcement' && styles.eventTypeOptionTextActive]}>Announcement</Text>
                             </TouchableOpacity>
                         </View>
@@ -4769,6 +5770,12 @@ const CreditUnionAdminScreen = () => {
                         >
                             <Text style={[styles.settingsNavText, settingsTab === 'content-moderation' && styles.settingsNavTextActive]}>Content Moderation</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.settingsNavItem, settingsTab === 'partnerships' && styles.settingsNavItemActive]}
+                            onPress={() => { setSettingsTab('partnerships'); if (isMobile) setMobileShowSettingsContent(true); }}
+                        >
+                            <Text style={[styles.settingsNavText, settingsTab === 'partnerships' && styles.settingsNavTextActive]}>Partnerships</Text>
+                        </TouchableOpacity>
                     </View>
                     )}
 
@@ -4791,6 +5798,7 @@ const CreditUnionAdminScreen = () => {
                                  settingsTab === 'invites' ? 'Invites' :
                                  settingsTab === 'bans' ? 'Ban Members' :
                                  settingsTab === 'content-moderation' ? 'Content Moderation' :
+                                 settingsTab === 'partnerships' ? 'Partnerships' :
                                  'Server Settings'}
                             </Text>
                             <TouchableOpacity style={styles.settingsCloseBtn} onPress={() => { setServerSettingsModalOpen(false); setMobileShowSettingsContent(false); }}>
@@ -5320,7 +6328,7 @@ const CreditUnionAdminScreen = () => {
 
                                     {/* Inline Create/Edit Role Form */}
                                     {createRoleModalOpen ? (
-                                        <View style={{ backgroundColor: colors.surfaceHover, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+                                        <View style={{ backgroundColor: colors.glassBgHover, borderRadius: 8, padding: 16, marginBottom: 16 }}>
                                             <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 12 }}>
                                                 {editingRole ? 'Edit Role' : 'Create New Role'}
                                             </Text>
@@ -5350,10 +6358,10 @@ const CreditUnionAdminScreen = () => {
                                                             justifyContent: 'center',
                                                             alignItems: 'center',
                                                             borderWidth: newRoleColor === color ? 3 : 0,
-                                                            borderColor: '#FFFFFF',
+                                                            borderColor: colors.glassActiveText,
                                                         }}
                                                     >
-                                                        {newRoleColor === color && <Check size={18} color="#FFFFFF" />}
+                                                        {newRoleColor === color && <Check size={18} color={colors.glassActiveText} />}
                                                     </TouchableOpacity>
                                                 ))}
                                             </View>
@@ -5367,7 +6375,7 @@ const CreditUnionAdminScreen = () => {
 
                                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                                 <TouchableOpacity
-                                                    style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.border, alignItems: 'center' }}
+                                                    style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: colors.glassBorder, alignItems: 'center' }}
                                                     onPress={() => { setCreateRoleModalOpen(false); setEditingRole(null); setNewRoleName(''); }}
                                                 >
                                                     <Text style={{ color: colors.text, fontWeight: '500' }}>Cancel</Text>
@@ -5378,9 +6386,9 @@ const CreditUnionAdminScreen = () => {
                                                     disabled={!newRoleName.trim() || savingRole}
                                                 >
                                                     {savingRole ? (
-                                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                                        <ActivityIndicator size="small" color={colors.glassActiveText} />
                                                     ) : (
-                                                        <Text style={{ color: '#FFFFFF', fontWeight: '500' }}>{editingRole ? 'Save' : 'Create'}</Text>
+                                                        <Text style={{ color: colors.glassActiveText, fontWeight: '500' }}>{editingRole ? 'Save' : 'Create'}</Text>
                                                     )}
                                                 </TouchableOpacity>
                                             </View>
@@ -5453,12 +6461,12 @@ const CreditUnionAdminScreen = () => {
                                             <View style={{
                                                 flexDirection: 'row',
                                                 alignItems: 'center',
-                                                backgroundColor: colors.inputBg,
+                                                backgroundColor: colors.glassBg,
                                                 borderRadius: 8,
                                                 paddingHorizontal: 12,
                                                 marginTop: 12,
                                                 borderWidth: 1,
-                                                borderColor: colors.border,
+                                                borderColor: colors.glassBorder,
                                             }}>
                                                 <Search size={18} color={colors.textMuted} />
                                                 <TextInput
@@ -5494,7 +6502,7 @@ const CreditUnionAdminScreen = () => {
                                                     .map((member) => (
                                                     <View key={member._id}>
                                                         <TouchableOpacity
-                                                            style={[styles.roleItem, { paddingVertical: 12, cursor: 'pointer', backgroundColor: assigningMember?._id === member._id ? colors.surfaceHover : 'transparent' } as any]}
+                                                            style={[styles.roleItem, { paddingVertical: 12, cursor: 'pointer', backgroundColor: assigningMember?._id === member._id ? colors.glassBgHover : 'transparent' } as any]}
                                                             onPress={() => openAssignRole(member)}
                                                             activeOpacity={0.7}
                                                         >
@@ -5514,7 +6522,7 @@ const CreditUnionAdminScreen = () => {
                                                         </TouchableOpacity>
                                                         {/* Inline Role Selector */}
                                                         {assigningMember?._id === member._id && (
-                                                            <View style={{ backgroundColor: colors.surfaceHover, padding: 12, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, marginBottom: 8 }}>
+                                                            <View style={{ backgroundColor: colors.glassBgHover, padding: 12, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, marginBottom: 8 }}>
                                                                 <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 8, textTransform: 'uppercase' }}>Select Role</Text>
                                                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                                                                     <TouchableOpacity
@@ -5522,13 +6530,13 @@ const CreditUnionAdminScreen = () => {
                                                                             paddingVertical: 6,
                                                                             paddingHorizontal: 12,
                                                                             borderRadius: 16,
-                                                                            backgroundColor: !member.customRole ? colors.primary : colors.surface,
+                                                                            backgroundColor: !member.customRole ? colors.primary : colors.glassBg,
                                                                             borderWidth: 1,
-                                                                            borderColor: !member.customRole ? colors.primary : colors.border,
+                                                                            borderColor: !member.customRole ? colors.primary : colors.glassBorder,
                                                                         }}
                                                                         onPress={() => handleAssignRole(member.userId || member._id, null)}
                                                                     >
-                                                                        <Text style={{ color: !member.customRole ? '#fff' : colors.text, fontSize: 13 }}>No Role</Text>
+                                                                        <Text style={{ color: !member.customRole ? colors.glassActiveText : colors.text, fontSize: 13 }}>No Role</Text>
                                                                     </TouchableOpacity>
                                                                     {customRoles.map((role) => (
                                                                         <TouchableOpacity
@@ -5537,13 +6545,13 @@ const CreditUnionAdminScreen = () => {
                                                                                 paddingVertical: 6,
                                                                                 paddingHorizontal: 12,
                                                                                 borderRadius: 16,
-                                                                                backgroundColor: member.customRole?._id === role._id ? role.color : colors.surface,
+                                                                                backgroundColor: member.customRole?._id === role._id ? role.color : colors.glassBg,
                                                                                 borderWidth: 1,
                                                                                 borderColor: role.color,
                                                                             }}
                                                                             onPress={() => handleAssignRole(member.userId || member._id, role._id)}
                                                                         >
-                                                                            <Text style={{ color: member.customRole?._id === role._id ? '#fff' : role.color, fontSize: 13 }}>{role.name}</Text>
+                                                                            <Text style={{ color: member.customRole?._id === role._id ? colors.glassActiveText : role.color, fontSize: 13 }}>{role.name}</Text>
                                                                         </TouchableOpacity>
                                                                     ))}
                                                                 </View>
@@ -5667,8 +6675,8 @@ const CreditUnionAdminScreen = () => {
                                                     const severity = getSeverityLabel(item.reason);
                                                     const severityColor =
                                                         severity === 'High'
-                                                            ? { bg: '#FEE2E2', text: '#DC2626', dot: '#EF4444' }
-                                                            : { bg: '#FEF3C7', text: '#D97706', dot: '#F59E0B' };
+                                                            ? { bg: colors.dangerBg, text: colors.dangerText, dot: colors.dangerText }
+                                                            : { bg: colors.warningBg, text: colors.warningText, dot: colors.warningText };
                                                     return (
                                                         <View key={item._id} style={styles.moderationRow}>
                                                             <View style={styles.moderationCheckboxCell}>
@@ -5831,7 +6839,7 @@ const CreditUnionAdminScreen = () => {
                                                 >
                                                     <Ban
                                                         size={18}
-                                                        color={localContentModerationAction === 'block' ? '#fff' : colors.textMuted}
+                                                        color={localContentModerationAction === 'block' ? colors.glassActiveText : colors.textMuted}
                                                     />
                                                     <Text style={[
                                                         styles.localContentModerationActionText,
@@ -5851,7 +6859,7 @@ const CreditUnionAdminScreen = () => {
                                                 >
                                                     <Flag
                                                         size={18}
-                                                        color={localContentModerationAction === 'flag' ? '#fff' : colors.textMuted}
+                                                        color={localContentModerationAction === 'flag' ? colors.glassActiveText : colors.textMuted}
                                                     />
                                                     <Text style={[
                                                         styles.localContentModerationActionText,
@@ -5871,7 +6879,7 @@ const CreditUnionAdminScreen = () => {
                                                 >
                                                     <Eye
                                                         size={18}
-                                                        color={localContentModerationAction === 'censor' ? '#fff' : colors.textMuted}
+                                                        color={localContentModerationAction === 'censor' ? colors.glassActiveText : colors.textMuted}
                                                     />
                                                     <Text style={[
                                                         styles.localContentModerationActionText,
@@ -6009,13 +7017,13 @@ const CreditUnionAdminScreen = () => {
                                             ]}>
                                                 <View style={styles.contentModerationTestResultHeader}>
                                                     {contentModerationTestResult.isProhibited ? (
-                                                        <AlertTriangle size={20} color="#DC2626" />
+                                                        <AlertTriangle size={20} color={colors.dangerText} />
                                                     ) : (
-                                                        <CheckCircle size={20} color="#16A34A" />
+                                                        <CheckCircle size={20} color={colors.successText} />
                                                     )}
                                                     <Text style={[
                                                         styles.contentModerationTestResultTitle,
-                                                        { color: contentModerationTestResult.isProhibited ? '#DC2626' : '#16A34A' }
+                                                        { color: contentModerationTestResult.isProhibited ? colors.dangerText : colors.successText }
                                                     ]}>
                                                         {contentModerationTestResult.isProhibited ? 'Content Would Be Filtered' : 'Content Is Allowed'}
                                                     </Text>
@@ -6039,6 +7047,364 @@ const CreditUnionAdminScreen = () => {
                                             </View>
                                         )}
                                     </View>
+                                </View>
+                            )}
+
+                            {settingsTab === 'partnerships' && (
+                                <View style={styles.settingsPanel}>
+                                    {/* Partnership Visibility Section */}
+                                    <View style={styles.settingsCard}>
+                                        <View style={styles.settingsCardHeader}>
+                                            <View>
+                                                <Text style={styles.settingsCardTitle}>Partnership Visibility</Text>
+                                                <Text style={styles.settingsCardSubtitle}>Control how vendors can apply to partner with your community</Text>
+                                            </View>
+                                        </View>
+
+                                        {/* Open Option */}
+                                        <TouchableOpacity
+                                            style={{
+                                                borderWidth: 1.5,
+                                                borderColor: partnershipStatus === 'open' ? colors.primary : colors.glassBorder,
+                                                backgroundColor: partnershipStatus === 'open' ? colors.primary + '15' : colors.glassBg,
+                                                borderRadius: 14,
+                                                padding: 16,
+                                                marginBottom: 10,
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                gap: 12,
+                                            }}
+                                            onPress={() => setPartnershipStatus('open')}
+                                            activeOpacity={0.75}
+                                        >
+                                            <View style={{
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: 10,
+                                                borderWidth: 2,
+                                                borderColor: partnershipStatus === 'open' ? colors.primary : colors.glassBorder,
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                            }}>
+                                                {partnershipStatus === 'open' && (
+                                                    <View style={{
+                                                        width: 10,
+                                                        height: 10,
+                                                        borderRadius: 5,
+                                                        backgroundColor: colors.primary,
+                                                    }} />
+                                                )}
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>Open</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>Any vendor can apply to partner with this community</Text>
+                                            </View>
+                                        </TouchableOpacity>
+
+                                        {/* Invite Only Option */}
+                                        <TouchableOpacity
+                                            style={{
+                                                borderWidth: 1.5,
+                                                borderColor: partnershipStatus === 'invite' ? colors.primary : colors.glassBorder,
+                                                backgroundColor: partnershipStatus === 'invite' ? colors.primary + '15' : colors.glassBg,
+                                                borderRadius: 14,
+                                                padding: 16,
+                                                marginBottom: 10,
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                gap: 12,
+                                            }}
+                                            onPress={() => setPartnershipStatus('invite')}
+                                            activeOpacity={0.75}
+                                        >
+                                            <View style={{
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: 10,
+                                                borderWidth: 2,
+                                                borderColor: partnershipStatus === 'invite' ? colors.primary : colors.glassBorder,
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                            }}>
+                                                {partnershipStatus === 'invite' && (
+                                                    <View style={{
+                                                        width: 10,
+                                                        height: 10,
+                                                        borderRadius: 5,
+                                                        backgroundColor: colors.primary,
+                                                    }} />
+                                                )}
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>Invite Only</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>Only vendors you invite can apply</Text>
+                                            </View>
+                                        </TouchableOpacity>
+
+                                        {/* Closed Option */}
+                                        <TouchableOpacity
+                                            style={{
+                                                borderWidth: 1.5,
+                                                borderColor: partnershipStatus === 'closed' ? colors.primary : colors.glassBorder,
+                                                backgroundColor: partnershipStatus === 'closed' ? colors.primary + '15' : colors.glassBg,
+                                                borderRadius: 14,
+                                                padding: 16,
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                gap: 12,
+                                            }}
+                                            onPress={() => setPartnershipStatus('closed')}
+                                            activeOpacity={0.75}
+                                        >
+                                            <View style={{
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: 10,
+                                                borderWidth: 2,
+                                                borderColor: partnershipStatus === 'closed' ? colors.primary : colors.glassBorder,
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                            }}>
+                                                {partnershipStatus === 'closed' && (
+                                                    <View style={{
+                                                        width: 10,
+                                                        height: 10,
+                                                        borderRadius: 5,
+                                                        backgroundColor: colors.primary,
+                                                    }} />
+                                                )}
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>Closed</Text>
+                                                <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>No new partnership applications accepted</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Current Partners Info Section */}
+                                    <View style={styles.settingsCard}>
+                                        <View style={styles.settingsCardHeader}>
+                                            <View>
+                                                <Text style={styles.settingsCardTitle}>Current Partners</Text>
+                                                <Text style={styles.settingsCardSubtitle}>Manage listings in the Partner Listings panel</Text>
+                                            </View>
+                                        </View>
+                                        <View style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            backgroundColor: colors.modalBg,
+                                            borderRadius: 10,
+                                            padding: 14,
+                                            borderWidth: 1,
+                                            borderColor: colors.glassBorder,
+                                        }}>
+                                            <Text style={{ color: colors.textMuted, fontSize: 14 }}>Active Partners</Text>
+                                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 18 }}>{partnerListings?.length ?? 0}</Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Revenue Share Rate Section */}
+                                    <View style={{
+                                        backgroundColor: colors.modalBg,
+                                        borderRadius: 14,
+                                        borderWidth: 1,
+                                        borderColor: colors.glassBorder,
+                                        padding: 16,
+                                        marginBottom: 16,
+                                    }}>
+                                        <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>Revenue Share Rate</Text>
+                                        <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 16 }}>Set the percentage of marketplace revenue your community earns from partner transactions</Text>
+
+                                        {/* Large centered rate display */}
+                                        <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                                            <Text style={{ color: colors.text, fontSize: 48, fontWeight: '800', letterSpacing: -1 }}>{revShareRate}%</Text>
+                                        </View>
+
+                                        {/* Increment/Decrement controls with track visual */}
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                                            <TouchableOpacity
+                                                onPress={() => setRevShareRate(Math.max(0, revShareRate - 1))}
+                                                activeOpacity={0.7}
+                                                style={{
+                                                    width: 36,
+                                                    height: 36,
+                                                    borderRadius: 18,
+                                                    backgroundColor: colors.glassBg,
+                                                    borderWidth: 1,
+                                                    borderColor: colors.glassBorder,
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                }}
+                                            >
+                                                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '600', lineHeight: 22 }}>−</Text>
+                                            </TouchableOpacity>
+
+                                            {/* Track visual */}
+                                            <View style={{ flex: 1, height: 8, backgroundColor: colors.glassBg, borderRadius: 4, borderWidth: 1, borderColor: colors.glassBorder, overflow: 'hidden' }}>
+                                                <View style={{
+                                                    height: '100%',
+                                                    width: `${(revShareRate / 50) * 100}%`,
+                                                    backgroundColor: colors.primary,
+                                                    borderRadius: 4,
+                                                }} />
+                                            </View>
+
+                                            <TouchableOpacity
+                                                onPress={() => setRevShareRate(Math.min(50, revShareRate + 1))}
+                                                activeOpacity={0.7}
+                                                style={{
+                                                    width: 36,
+                                                    height: 36,
+                                                    borderRadius: 18,
+                                                    backgroundColor: colors.glassBg,
+                                                    borderWidth: 1,
+                                                    borderColor: colors.glassBorder,
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                }}
+                                            >
+                                                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '600', lineHeight: 22 }}>+</Text>
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        <Text style={{ color: colors.textMuted, fontSize: 12, textAlign: 'center', marginBottom: 14 }}>
+                                            Gryd platform retains the remaining {100 - revShareRate}%
+                                        </Text>
+
+                                        <GlassButton
+                                            label={revShareRateSaving ? 'Saving...' : 'Save Rate'}
+                                            onPress={handleSaveRevShareRate}
+                                            variant="primary"
+                                        />
+                                    </View>
+
+                                    {/* Vendor Invite System — only shown in Invite Only mode */}
+                                    {partnershipStatus === 'invite' && (
+                                        <View style={{
+                                            backgroundColor: colors.modalBg,
+                                            borderRadius: 14,
+                                            borderWidth: 1,
+                                            borderColor: colors.glassBorder,
+                                            padding: 16,
+                                            marginBottom: 16,
+                                        }}>
+                                            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>Invite Vendors</Text>
+                                            <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 14 }}>Send direct invitations to specific vendors to apply for partnership</Text>
+
+                                            {/* Email input + Send button row */}
+                                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
+                                                <TextInput
+                                                    style={{
+                                                        flex: 1,
+                                                        backgroundColor: colors.glassBg,
+                                                        borderWidth: 1,
+                                                        borderColor: colors.glassBorder,
+                                                        borderRadius: 10,
+                                                        padding: 12,
+                                                        color: colors.text,
+                                                        fontSize: 14,
+                                                    }}
+                                                    placeholder="vendor@email.com"
+                                                    placeholderTextColor={colors.textMuted}
+                                                    value={vendorInviteEmail}
+                                                    onChangeText={setVendorInviteEmail}
+                                                    keyboardType="email-address"
+                                                    autoCapitalize="none"
+                                                />
+                                                <GlassButton
+                                                    label={vendorInviteSending ? 'Sending...' : 'Send Invite'}
+                                                    onPress={handleSendVendorInvite}
+                                                    variant="primary"
+                                                />
+                                            </View>
+
+                                            {/* Pending Invites list */}
+                                            <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', marginBottom: 10 }}>Pending Invites</Text>
+
+                                            {vendorInvitesLoading ? (
+                                                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+                                            ) : vendorInvites.length === 0 ? (
+                                                <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                                                    <Mail size={28} color={colors.textMuted} />
+                                                    <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 8 }}>No invites sent yet</Text>
+                                                </View>
+                                            ) : (
+                                                vendorInvites.map((invite: any) => (
+                                                    <View
+                                                        key={invite._id}
+                                                        style={{
+                                                            flexDirection: 'row',
+                                                            alignItems: 'center',
+                                                            backgroundColor: colors.glassBg,
+                                                            borderRadius: 10,
+                                                            borderWidth: 1,
+                                                            borderColor: colors.glassBorder,
+                                                            padding: 12,
+                                                            marginBottom: 8,
+                                                            gap: 10,
+                                                        }}
+                                                    >
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={{ color: colors.text, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>{invite.email}</Text>
+                                                            {invite.createdAt && (
+                                                                <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                                                                    Sent {new Date(invite.createdAt).toLocaleDateString()}
+                                                                </Text>
+                                                            )}
+                                                        </View>
+                                                        <View style={{
+                                                            paddingHorizontal: 8,
+                                                            paddingVertical: 3,
+                                                            borderRadius: 6,
+                                                            backgroundColor:
+                                                                invite.status === 'accepted' ? colors.primary + '25' :
+                                                                invite.status === 'revoked' ? colors.error + '25' :
+                                                                colors.glassBg,
+                                                            borderWidth: 1,
+                                                            borderColor:
+                                                                invite.status === 'accepted' ? colors.primary + '60' :
+                                                                invite.status === 'revoked' ? colors.error + '60' :
+                                                                colors.glassBorder,
+                                                        }}>
+                                                            <Text style={{
+                                                                fontSize: 11,
+                                                                fontWeight: '600',
+                                                                color:
+                                                                    invite.status === 'accepted' ? colors.primary :
+                                                                    invite.status === 'revoked' ? colors.error :
+                                                                    colors.textMuted,
+                                                                textTransform: 'capitalize',
+                                                            }}>{invite.status ?? 'pending'}</Text>
+                                                        </View>
+                                                        {invite.status !== 'revoked' && invite.status !== 'accepted' && (
+                                                            <TouchableOpacity
+                                                                onPress={() => handleRevokeVendorInvite(invite._id)}
+                                                                activeOpacity={0.7}
+                                                                style={{
+                                                                    paddingHorizontal: 10,
+                                                                    paddingVertical: 5,
+                                                                    borderRadius: 8,
+                                                                    backgroundColor: colors.error + '18',
+                                                                    borderWidth: 1,
+                                                                    borderColor: colors.error + '40',
+                                                                }}
+                                                            >
+                                                                <Text style={{ color: colors.error, fontSize: 12, fontWeight: '600' }}>Revoke</Text>
+                                                            </TouchableOpacity>
+                                                        )}
+                                                    </View>
+                                                ))
+                                            )}
+                                        </View>
+                                    )}
+
+                                    {/* Save Button */}
+                                    <GlassButton
+                                        label={partnershipStatusSaving ? 'Saving...' : 'Save Partnership Settings'}
+                                        onPress={() => handleSavePartnershipStatus(partnershipStatus)}
+                                        variant="primary"
+                                    />
                                 </View>
                             )}
                         </ScrollView>
@@ -6085,14 +7451,14 @@ const CreditUnionAdminScreen = () => {
                                 style={[styles.visibilityOption, newServerVisibility === 'private' && styles.visibilityOptionActive]}
                                 onPress={() => setNewServerVisibility('private')}
                             >
-                                <Lock size={16} color={newServerVisibility === 'private' ? '#FFFFFF' : colors.textMuted} />
+                                <Lock size={16} color={newServerVisibility === 'private' ? colors.glassActiveText : colors.textMuted} />
                                 <Text style={[styles.visibilityText, newServerVisibility === 'private' && styles.visibilityTextActive]}>Private</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.visibilityOption, newServerVisibility === 'public' && styles.visibilityOptionActive]}
                                 onPress={() => setNewServerVisibility('public')}
                             >
-                                <Globe size={16} color={newServerVisibility === 'public' ? '#FFFFFF' : colors.textMuted} />
+                                <Globe size={16} color={newServerVisibility === 'public' ? colors.glassActiveText : colors.textMuted} />
                                 <Text style={[styles.visibilityText, newServerVisibility === 'public' && styles.visibilityTextActive]}>Public</Text>
                             </TouchableOpacity>
                         </View>
@@ -6478,7 +7844,7 @@ const CreditUnionAdminScreen = () => {
                                             <Text style={styles.toggleDesc}>{opt.desc}</Text>
                                         </View>
                                     </View>
-                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyProfileVisibility === opt.value ? colors.primary : colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyProfileVisibility === opt.value ? colors.primary : colors.glassBorder, alignItems: 'center', justifyContent: 'center' }}>
                                         {privacyProfileVisibility === opt.value && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary }} />}
                                     </View>
                                 </TouchableOpacity>
@@ -6501,7 +7867,7 @@ const CreditUnionAdminScreen = () => {
                                             <Text style={styles.toggleDesc}>{opt.desc}</Text>
                                         </View>
                                     </View>
-                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyAllowDMsFrom === opt.value ? colors.primary : colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyAllowDMsFrom === opt.value ? colors.primary : colors.glassBorder, alignItems: 'center', justifyContent: 'center' }}>
                                         {privacyAllowDMsFrom === opt.value && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary }} />}
                                     </View>
                                 </TouchableOpacity>
@@ -6524,7 +7890,7 @@ const CreditUnionAdminScreen = () => {
                                             <Text style={styles.toggleDesc}>{opt.desc}</Text>
                                         </View>
                                     </View>
-                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyAllowFriendRequestsFrom === opt.value ? colors.primary : colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: privacyAllowFriendRequestsFrom === opt.value ? colors.primary : colors.glassBorder, alignItems: 'center', justifyContent: 'center' }}>
                                         {privacyAllowFriendRequestsFrom === opt.value && <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary }} />}
                                     </View>
                                 </TouchableOpacity>
@@ -6803,8 +8169,8 @@ const CreditUnionAdminScreen = () => {
                                                 style={styles.memberActionMenuItem}
                                                 onPress={() => handleMemberAction(memberId, memberStatus === 'suspended' ? 'unsuspend' : 'suspend')}
                                             >
-                                                {memberStatus === 'suspended' ? <CheckCircle size={18} color={colors.success} /> : <Ban size={18} color={colors.warning} />}
-                                                <Text style={[styles.memberActionMenuText, { color: memberStatus === 'suspended' ? colors.success : colors.warning }]}>
+                                                {memberStatus === 'suspended' ? <CheckCircle size={18} color={colors.successText} /> : <Ban size={18} color={colors.warningText} />}
+                                                <Text style={[styles.memberActionMenuText, { color: memberStatus === 'suspended' ? colors.successText : colors.warningText }]}>
                                                     {memberStatus === 'suspended' ? 'Unsuspend' : 'Suspend'}
                                                 </Text>
                                             </TouchableOpacity>
@@ -6824,8 +8190,8 @@ const CreditUnionAdminScreen = () => {
                                                     style={styles.memberActionMenuItem}
                                                     onPress={() => handleMemberAction(memberId, 'demote')}
                                                 >
-                                                    <ArrowDown size={18} color={colors.warning} />
-                                                    <Text style={[styles.memberActionMenuText, { color: colors.warning }]}>Demote to Member</Text>
+                                                    <ArrowDown size={18} color={colors.warningText} />
+                                                    <Text style={[styles.memberActionMenuText, { color: colors.warningText }]}>Demote to Member</Text>
                                                 </TouchableOpacity>
                                             )}
 
@@ -6835,8 +8201,8 @@ const CreditUnionAdminScreen = () => {
                                                 style={styles.memberActionMenuItem}
                                                 onPress={() => handleMemberAction(memberId, 'remove')}
                                             >
-                                                <UserMinus size={18} color="#EF4444" />
-                                                <Text style={[styles.memberActionMenuText, { color: '#EF4444' }]}>Remove from Server</Text>
+                                                <UserMinus size={18} color={colors.dangerText} />
+                                                <Text style={[styles.memberActionMenuText, { color: colors.dangerText }]}>Remove from Server</Text>
                                             </TouchableOpacity>
                                         </>
                                     )}
@@ -6922,8 +8288,8 @@ const CreditUnionAdminScreen = () => {
                                                 style={[styles.memberDetailActionBtn, memberStatus === 'suspended' ? styles.memberDetailActionBtnSuccess : styles.memberDetailActionBtnWarning]}
                                                 onPress={() => handleMemberAction(memberId, memberStatus === 'suspended' ? 'unsuspend' : 'suspend')}
                                             >
-                                                {memberStatus === 'suspended' ? <CheckCircle size={16} color="#10B981" /> : <Ban size={16} color="#F59E0B" />}
-                                                <Text style={[styles.memberDetailActionText, { color: memberStatus === 'suspended' ? '#10B981' : '#F59E0B' }]}>
+                                                {memberStatus === 'suspended' ? <CheckCircle size={16} color={colors.successText} /> : <Ban size={16} color={colors.warningText} />}
+                                                <Text style={[styles.memberDetailActionText, { color: memberStatus === 'suspended' ? colors.successText : colors.warningText }]}>
                                                     {memberStatus === 'suspended' ? 'Unsuspend' : 'Suspend'}
                                                 </Text>
                                             </TouchableOpacity>
@@ -6943,8 +8309,8 @@ const CreditUnionAdminScreen = () => {
                                                     style={[styles.memberDetailActionBtn, styles.memberDetailActionBtnWarning]}
                                                     onPress={() => handleMemberAction(memberId, 'demote')}
                                                 >
-                                                    <ArrowDown size={16} color="#F59E0B" />
-                                                    <Text style={[styles.memberDetailActionText, { color: '#F59E0B' }]}>Demote</Text>
+                                                    <ArrowDown size={16} color={colors.warningText} />
+                                                    <Text style={[styles.memberDetailActionText, { color: colors.warningText }]}>Demote</Text>
                                                 </TouchableOpacity>
                                             )}
 
@@ -6952,8 +8318,8 @@ const CreditUnionAdminScreen = () => {
                                                 style={[styles.memberDetailActionBtn, styles.memberDetailActionBtnDanger]}
                                                 onPress={() => handleMemberAction(memberId, 'remove')}
                                             >
-                                                <UserMinus size={16} color="#EF4444" />
-                                                <Text style={[styles.memberDetailActionText, { color: '#EF4444' }]}>Remove</Text>
+                                                <UserMinus size={16} color={colors.dangerText} />
+                                                <Text style={[styles.memberDetailActionText, { color: colors.dangerText }]}>Remove</Text>
                                             </TouchableOpacity>
                                         </View>
                                     )}
@@ -7010,40 +8376,46 @@ const CreditUnionAdminScreen = () => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Partner Listing Remove Confirmation */}
+            <Modal visible={listingActionModalOpen} transparent animationType="fade" onRequestClose={() => { setListingActionModalOpen(false); setListingActionTarget(null); }}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Remove Listing?</Text>
+                        <Text style={styles.modalSubtitle}>
+                            This will permanently remove "{listingActionTarget?.title}" from the marketplace. The partner will no longer earn revenue from it.
+                        </Text>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            <TouchableOpacity style={[styles.actionBtn, { flex: 1, backgroundColor: colors.glassBg }]} onPress={() => { setListingActionModalOpen(false); setListingActionTarget(null); }}>
+                                <Text style={{ color: colors.text }}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionBtn, { flex: 1, backgroundColor: colors.dangerText }]} onPress={handleForceRemoveListing}>
+                                {listingActionLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>Remove</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset: number = 0, topInset: number = 0) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], mode: 'light' | 'dark', bottomInset: number = 0, topInset: number = 0) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: 'transparent',
             position: 'relative',
         },
-        gridBackground: {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            ...(Platform.OS === 'web'
-                ? ({
-                    backgroundImage:
-                        'linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px), linear-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.08) 1px, transparent 1px)',
-                    backgroundSize: '24px 24px, 24px 24px, 120px 120px, 120px 120px',
-                    backgroundPosition: '0 0, 0 0, 0 0, 0 0',
-                } as any)
-                : {}),
-        },
+        gridBackground: {},
         topNav: {
             height: 48,
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: 'transparent',
         },
         topNavLeft: {
             flexDirection: 'row',
@@ -7087,9 +8459,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         iconRail: {
             width: 64,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRightWidth: 1,
-            borderRightColor: colors.border,
+            borderRightColor: colors.glassBorder,
             alignItems: 'center',
             paddingVertical: 12,
             gap: 8,
@@ -7098,7 +8470,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 48,
             height: 48,
             borderRadius: 12,
-            backgroundColor: '#1E3A8A',
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 8,
@@ -7106,7 +8478,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         railLogoText: {
             fontSize: 8,
             fontWeight: '700',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         railLogoImage: {
             width: 48,
@@ -7117,7 +8489,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 48,
             height: 48,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -7125,16 +8497,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 36,
             height: 36,
             borderRadius: 18,
-            backgroundColor: '#EF4444',
+            backgroundColor: colors.dangerBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginTop: 8,
         },
         channelSidebar: {
             width: 240,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRightWidth: 1,
-            borderRightColor: colors.border,
+            borderRightColor: colors.glassBorder,
             overflow: 'visible',
             zIndex: 100,
         },
@@ -7148,8 +8520,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingTop: topInset + 12,
             paddingBottom: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: 'transparent',
             gap: 12,
         },
         mobileHeaderBrandRow: {
@@ -7187,7 +8559,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             padding: 10,
             borderRadius: 12,
         },
@@ -7207,7 +8579,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 10,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         mobileNavTabActive: {
             paddingHorizontal: 16,
@@ -7223,7 +8595,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         mobileNavTabTextActive: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         mobileTopBarLogo: {
             width: 36,
@@ -7241,7 +8613,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         mobileTopBarLogoText: {
             fontSize: 11,
             fontWeight: '700',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         mobileTopBarTitle: {
             fontSize: 15,
@@ -7257,17 +8629,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 32,
             height: 32,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         mobileExitButton: {
             width: 28,
             height: 28,
             borderRadius: 14,
-            backgroundColor: '#EF4444',
+            backgroundColor: colors.dangerBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -7279,7 +8651,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingVertical: 8,
             height: 'auto',
-            backgroundColor: colors.surface,
+            backgroundColor: 'transparent',
         },
         topNavTabsMobile: {
             marginLeft: 0,
@@ -7299,7 +8671,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'space-between',
             padding: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         serverHeaderLeft: {
             flexDirection: 'row',
@@ -7316,18 +8688,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             top: '100%',
             left: 0,
             right: 0,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 8,
             padding: 8,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.15,
+            shadowOpacity: 0.4,
             shadowRadius: 12,
             elevation: 1000,
             zIndex: 9999,
-            ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
         },
         dropdownOverlay: {
             position: 'absolute',
@@ -7363,7 +8734,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 6,
         },
         eventsButtonActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         eventsText: {
             fontSize: 14,
@@ -7379,11 +8750,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             gap: 16,
         },
         eventCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 16,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         eventCardHeader: {
             flexDirection: 'row',
@@ -7400,15 +8771,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 12,
         },
         eventTypeBadgeEvent: {
-            backgroundColor: '#3B82F6',
+            backgroundColor: colors.primary,
         },
         eventTypeBadgeAnnouncement: {
-            backgroundColor: '#F59E0B',
+            backgroundColor: colors.warningBg,
         },
         eventTypeBadgeText: {
             fontSize: 11,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         eventDeleteBtn: {
             padding: 4,
@@ -7447,13 +8818,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             marginTop: 12,
         },
         eventStatusCompleted: {
-            backgroundColor: '#22C55E20',
+            backgroundColor: colors.successBg,
         },
         eventStatusCancelled: {
-            backgroundColor: '#EF444420',
+            backgroundColor: colors.dangerBg,
         },
         eventStatusOngoing: {
-            backgroundColor: '#3B82F620',
+            backgroundColor: colors.primary + '20',
         },
         eventStatusText: {
             fontSize: 12,
@@ -7472,7 +8843,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         createEventHeaderBtnText: {
             fontSize: 13,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         eventTypeSelector: {
             flexDirection: 'row',
@@ -7488,7 +8859,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         eventTypeOptionActive: {
             backgroundColor: colors.primary,
@@ -7499,7 +8870,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             color: colors.textMuted,
         },
         eventTypeOptionTextActive: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontWeight: '600',
         },
         channelGroup: {
@@ -7555,18 +8926,21 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             position: 'absolute',
             right: 0,
             top: 22,
-            backgroundColor: '#1f2937',
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
             paddingVertical: 6,
             width: 200,
             borderWidth: 1,
-            borderColor: '#374151',
+            borderColor: colors.glassBorder,
             zIndex: 100,
             shadowColor: '#000',
             shadowOpacity: 0.3,
             shadowRadius: 12,
             shadowOffset: { width: 0, height: 6 },
             elevation: 10,
+            ...(Platform.OS === 'web'
+                ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } as any
+                : {}),
         },
         channelMenuItem: {
             flexDirection: 'row',
@@ -7577,16 +8951,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             gap: 12,
         },
         channelMenuItemPressed: {
-            backgroundColor: '#374151',
+            backgroundColor: colors.glassActiveBg,
         },
         channelMenuText: {
             fontSize: 14,
-            color: '#e5e7eb',
+            color: colors.text,
             fontWeight: '500',
         },
         channelMenuTextDanger: {
             fontSize: 14,
-            color: '#EF4444',
+            color: colors.dangerText,
             fontWeight: '500',
         },
         channelSettingsOverlay: {
@@ -7595,17 +8969,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'center',
             alignItems: 'center',
         },
-        channelSettingsModal: {
-            backgroundColor: colors.cardBg,
+        channelSettingsModalLegacy: {
+            backgroundColor: colors.modalBg,
             borderRadius: 12,
             padding: 8,
             minWidth: 220,
             maxWidth: 280,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.25,
-            shadowRadius: 8,
-            elevation: 10,
+            shadowOpacity: 0.4,
+            shadowRadius: 12,
+            elevation: 12,
         },
         channelSettingsTitle: {
             fontSize: 14,
@@ -7614,7 +8988,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingVertical: 10,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
             marginBottom: 4,
         },
         channelSettingsItem: {
@@ -7632,7 +9006,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         channelSettingsCancel: {
             justifyContent: 'center',
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
             marginTop: 4,
         },
         channelSettingsCancelText: {
@@ -7654,7 +9028,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingTop: 8,
             paddingBottom: bottomInset + 8,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         userAvatarContainer: {
             position: 'relative',
@@ -7671,9 +9045,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 10,
             height: 10,
             borderRadius: 5,
-            backgroundColor: '#22C55E',
+            backgroundColor: colors.successText,
             borderWidth: 2,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         userInfo: {
             flex: 1,
@@ -7685,7 +9059,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         userStatus: {
             fontSize: 11,
-            color: '#22C55E',
+            color: colors.successText,
         },
         userActions: {
             flexDirection: 'row',
@@ -7705,10 +9079,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             bottom: '100%',
             left: -50,
             width: 180,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: 8,
             marginBottom: 8,
             shadowColor: '#000',
@@ -7736,7 +9110,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 4,
         },
         audioDropdownItemActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         audioDropdownText: {
             fontSize: 13,
@@ -7747,7 +9121,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         mainContent: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: 'transparent',
             zIndex: 1,
         },
         contentHeader: {
@@ -7756,8 +9130,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'space-between',
             padding: 14,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: 'transparent',
         },
         contentHeaderLeft: {
             flexDirection: 'row',
@@ -7777,7 +9151,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         headerIcon: {
             padding: 6,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         searchBox: {
             flexDirection: 'row',
@@ -7785,11 +9159,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             gap: 8,
             paddingHorizontal: 14,
             paddingVertical: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 10,
             minWidth: 180,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         searchInput: {
             flex: 1,
@@ -7806,7 +9180,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         // Empty Server Welcome
         emptyServerContainer: {
             flex: 1,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             position: 'relative',
             overflow: 'hidden',
         },
@@ -7824,7 +9198,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: '10%',
             height: 40,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderStyle: 'dotted',
         },
         emptyServerContent: {
@@ -7860,9 +9234,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 20,
             paddingVertical: 16,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 8,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             marginBottom: 12,
         },
         welcomeActionText: {
@@ -7872,7 +9246,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         // Feed
         feedContainer: {
             flex: 1,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         feedContent: {
             padding: 16,
@@ -7881,7 +9255,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingBottom: 20,
         },
         welcomeCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 24,
             alignItems: 'flex-start',
@@ -7890,7 +9264,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 56,
             height: 56,
             borderRadius: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 16,
@@ -7914,7 +9288,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         editChannelText: {
             fontSize: 14,
@@ -7922,7 +9296,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             color: colors.text,
         },
         postCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 16,
             gap: 12,
@@ -7951,10 +9325,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             position: 'absolute',
             top: 24,
             right: 0,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.15,
@@ -7976,7 +9350,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         itemMenuTextDanger: {
             fontSize: 13,
-            color: '#EF4444',
+            color: colors.dangerText,
         },
         // Floating menu styles for proper z-index handling
         floatingMenuOverlay: {
@@ -7990,10 +9364,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         floatingMenuDropdown: {
             position: 'fixed' as any,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.2,
@@ -8016,7 +9390,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         floatingMenuItemTextDanger: {
             fontSize: 14,
-            color: '#EF4444',
+            color: colors.dangerText,
         },
         postAuthorRow: {
             flexDirection: 'row',
@@ -8063,7 +9437,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         stakeholderBadgeSmallText: {
             fontSize: 10,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             textTransform: 'capitalize',
         },
         verifiedBadge: {
@@ -8079,7 +9453,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         postImagePlaceholder: {
             height: 200,
             borderRadius: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -8094,18 +9468,18 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             minHeight: 150,
             maxHeight: 500,
             borderRadius: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         videoPlaceholder: {
             width: '100%',
             height: 200,
             borderRadius: 12,
-            backgroundColor: '#1A1A2E',
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
         videoLabel: {
-            color: '#FFFFFF',
+            color: colors.text,
             fontSize: 12,
             marginTop: 8,
         },
@@ -8116,7 +9490,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 16,
             paddingVertical: 12,
             borderRadius: 20,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         audioLabel: {
             fontSize: 13,
@@ -8129,7 +9503,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingVertical: 10,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             maxWidth: 200,
         },
         fileLabel: {
@@ -8139,10 +9513,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         // Reshare card styles
         reshareCard: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: 12,
             marginTop: 8,
         },
@@ -8192,7 +9566,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: '100%',
             height: 150,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         commentModalOverlay: {
             flex: 1,
@@ -8203,7 +9577,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             backgroundColor: 'rgba(0,0,0,0.5)',
         },
         commentModalContent: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
             maxHeight: '80%',
@@ -8215,7 +9589,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             alignItems: 'center',
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         commentModalTitle: {
             fontSize: 18,
@@ -8286,7 +9660,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         commentBadgeText: {
             fontSize: 10,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             textTransform: 'capitalize',
         },
         verifiedBadgeSmall: {
@@ -8308,11 +9682,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             gap: 12,
             padding: 16,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         commentInput: {
             flex: 1,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 20,
             paddingHorizontal: 16,
             paddingVertical: 10,
@@ -8333,7 +9707,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             opacity: 0.5,
         },
         commentSendText: {
-            color: '#fff',
+            color: colors.glassActiveText,
             fontWeight: '600',
         },
         postStats: {
@@ -8366,12 +9740,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             paddingHorizontal: 14,
             paddingVertical: 10,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         inputIcon: {
             padding: 6,
@@ -8402,22 +9776,22 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             marginLeft: 6,
         },
         sendBtnDisabled: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         voiceMicBtn: {
             width: 44,
             height: 44,
             borderRadius: 22,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             marginLeft: 8,
         },
         membersSidebar: {
             width: 200,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
             padding: 16,
         },
         membersTitle: {
@@ -8440,22 +9814,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             height: 32,
             borderRadius: 16,
         },
-        channelMenuDropdown: {
-            position: 'absolute',
-            top: 24,
-            right: 0,
-            backgroundColor: 'white',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: '#E5E7EB',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.15,
-            shadowRadius: 4,
-            elevation: 8,
-            zIndex: 1000,
-            minWidth: 160,
-        },
         channelSettingsOverlay: {
             flex: 1,
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -8463,25 +9821,27 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             alignItems: 'center',
         },
         channelSettingsModal: {
-            backgroundColor: '#1f2937',
+            backgroundColor: colors.modalBg,
             borderRadius: 12,
             padding: 8,
             minWidth: 220,
             maxWidth: 280,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.25,
-            shadowRadius: 8,
-            elevation: 10,
+            shadowOpacity: 0.4,
+            shadowRadius: 12,
+            elevation: 12,
         },
         channelSettingsTitle: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.text,
             paddingHorizontal: 12,
             paddingVertical: 10,
             borderBottomWidth: 1,
-            borderBottomColor: '#374151',
+            borderBottomColor: colors.glassBorder,
             marginBottom: 4,
         },
         channelSettingsItem: {
@@ -8494,17 +9854,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         channelSettingsText: {
             fontSize: 14,
-            color: '#E5E7EB',
+            color: colors.text,
         },
         channelSettingsCancel: {
             justifyContent: 'center',
             borderTopWidth: 1,
-            borderTopColor: '#374151',
+            borderTopColor: colors.glassBorder,
             marginTop: 4,
         },
         channelSettingsCancelText: {
             fontSize: 14,
-            color: '#9CA3AF',
+            color: colors.textMuted,
             textAlign: 'center',
         },
         memberOnline: {
@@ -8514,9 +9874,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 10,
             height: 10,
             borderRadius: 5,
-            backgroundColor: '#22C55E',
+            backgroundColor: colors.successText,
             borderWidth: 2,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         memberName: {
             fontSize: 14,
@@ -8525,23 +9885,27 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         // Modal styles
         modalOverlay: {
             flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.5)',
+            backgroundColor: 'rgba(0,0,0,0.65)',
             alignItems: 'center',
             justifyContent: 'center',
         },
         modalContent: {
             width: '90%',
             maxWidth: 420,
-            backgroundColor: colors.surface,
-            borderRadius: 12,
+            backgroundColor: colors.modalBg,
+            borderRadius: 16,
             padding: 24,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         permissionModalContent: {
             width: '90%',
             maxWidth: 360,
-            backgroundColor: colors.surface,
-            borderRadius: 12,
+            backgroundColor: colors.modalBg,
+            borderRadius: 16,
             padding: 24,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         modalClose: {
             position: 'absolute',
@@ -8553,7 +9917,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 56,
             height: 56,
             borderRadius: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 16,
@@ -8566,7 +9930,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 18,
             height: 18,
             borderRadius: 9,
-            backgroundColor: '#22C55E',
+            backgroundColor: colors.successBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -8611,7 +9975,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         modalInput: {
             flex: 1,
@@ -8628,12 +9992,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             fontSize: 14,
             color: colors.text,
         },
         disabledInput: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             color: colors.textMuted,
         },
         actionBtn: {
@@ -8645,7 +10009,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         actionBtnText: {
             fontSize: 14,
             fontWeight: '500',
-            color: colors.surface,
+            color: colors.glassBg,
         },
         linkLabel: {
             fontSize: 13,
@@ -8665,7 +10029,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             padding: 8,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             position: 'relative',
         },
         badgePreview: {
@@ -8676,7 +10040,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         badgePreviewText: {
             fontSize: 12,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         badgeCheckmark: {
             position: 'absolute',
@@ -8689,7 +10053,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'center',
         },
         inviteBtn: {
-            backgroundColor: '#8B5CF6',
+            backgroundColor: colors.primary,
             paddingVertical: 12,
             borderRadius: 8,
             alignItems: 'center',
@@ -8699,7 +10063,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             opacity: 0.6,
         },
         inviteBtnText: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontSize: 14,
             fontWeight: '600',
         },
@@ -8712,7 +10076,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         dividerLine: {
             flex: 1,
             height: 1,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
         },
         dividerText: {
             fontSize: 12,
@@ -8723,7 +10087,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             fontSize: 14,
             color: colors.text,
             minHeight: 80,
@@ -8737,7 +10101,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 24,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderStyle: 'dashed',
         },
         uploadBtnText: {
@@ -8751,11 +10115,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             padding: 12,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             marginBottom: 8,
         },
         typeOptionActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
         },
         radioOuter: {
             width: 18,
@@ -8776,7 +10140,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 40,
             height: 40,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -8819,17 +10183,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 44,
             height: 24,
             borderRadius: 12,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             padding: 2,
         },
         toggleActive: {
-            backgroundColor: '#22C55E',
+            backgroundColor: colors.successText,
         },
         toggleKnob: {
             width: 20,
             height: 20,
             borderRadius: 10,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassActiveText,
         },
         toggleKnobActive: {
             marginLeft: 20,
@@ -8844,7 +10208,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 12,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
         },
         cancelBtnText: {
@@ -8862,19 +10226,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         createBtnText: {
             fontSize: 14,
             fontWeight: '500',
-            color: colors.surface,
+            color: colors.glassBg,
         },
         createBtnBlack: {
             flex: 1,
             paddingVertical: 12,
             borderRadius: 8,
-            backgroundColor: '#000000',
+            backgroundColor: colors.primary,
             alignItems: 'center',
         },
         createBtnBlackText: {
             fontSize: 14,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         // Category Modal styles
         categoryLabel: {
@@ -8891,7 +10255,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 12,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         categoryInput: {
             flex: 1,
@@ -8927,21 +10291,21 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         fullWidthBtnText: {
             fontSize: 14,
             fontWeight: '500',
-            color: colors.surface,
+            color: colors.glassBg,
         },
         // Server Settings Full Page Styles
         settingsFullPage: {
             flex: 1,
             flexDirection: 'row',
-            backgroundColor: '#E9E9E9',
+            backgroundColor: 'rgba(0,0,0,0.75)',
             padding: 16,
         },
         settingsSidebar: {
             width: 220,
-            backgroundColor: '#0B0B0C',
+            backgroundColor: colors.modalBg,
             paddingVertical: 16,
             borderRightWidth: 1,
-            borderRightColor: '#E5E7EB',
+            borderRightColor: colors.glassBorder,
             borderTopLeftRadius: 12,
             borderBottomLeftRadius: 12,
         },
@@ -8955,12 +10319,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         settingsSidebarTitle: {
             fontSize: 16,
             fontWeight: '700',
-            color: '#FFFFFF',
+            color: colors.text,
         },
         settingsSectionLabel: {
             fontSize: 11,
             fontWeight: '600',
-            color: '#9CA3AF',
+            color: colors.textMuted,
             paddingHorizontal: 16,
             paddingTop: 16,
             paddingBottom: 8,
@@ -8973,7 +10337,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 6,
         },
         settingsNavItemActive: {
-            backgroundColor: '#1F1F1F',
+            backgroundColor: colors.glassActiveBg,
         },
         settingsNavItemRow: {
             flexDirection: 'row',
@@ -8982,20 +10346,23 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         settingsNavText: {
             fontSize: 14,
-            color: '#B5B5B5',
+            color: colors.textMuted,
         },
         settingsNavTextActive: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontWeight: '500',
         },
         settingsContent: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderTopRightRadius: 12,
             borderBottomRightRadius: 12,
             borderWidth: 1,
-            borderColor: '#E5E7EB',
+            borderColor: colors.glassBorder,
             borderLeftWidth: 0,
+            ...(Platform.OS === 'web'
+                ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } as any
+                : {}),
         },
         settingsContentHeader: {
             flexDirection: 'row',
@@ -9004,7 +10371,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 32,
             paddingVertical: 16,
             borderBottomWidth: 1,
-            borderBottomColor: '#E5E7EB',
+            borderBottomColor: colors.glassBorder,
         },
         settingsContentTitle: {
             fontSize: 20,
@@ -9018,7 +10385,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         settingsCloseBtnText: {
             fontSize: 14,
-            color: '#EF4444',
+            color: colors.dangerText,
         },
         settingsScrollContent: {
             flex: 1,
@@ -9054,14 +10421,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             marginRight: 12,
             paddingVertical: 8,
             paddingHorizontal: 12,
-            backgroundColor: '#EFF6FF',
+            backgroundColor: colors.primary + '15',
             borderRadius: 8,
             gap: 4,
         },
         settingsMobileBackBtnText: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#3B82F6',
+            color: colors.primary,
         },
         settingsPanel: {
             maxWidth: 800,
@@ -9090,9 +10457,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             marginBottom: 12,
         },
         settingsInput: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 8,
             paddingHorizontal: 12,
             paddingVertical: 10,
@@ -9101,13 +10468,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         settingsInputDisabled: {
             opacity: 0.6,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
         },
         engagementCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: '#E5E7EB',
+            borderColor: colors.glassBorder,
             padding: 16,
         },
         engagementSectionTitle: {
@@ -9143,29 +10510,29 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         engagementDivider: {
             height: 1,
-            backgroundColor: '#E5E7EB',
+            backgroundColor: colors.glassBorder,
         },
         engagementSectionDivider: {
             height: 1,
-            backgroundColor: '#E5E7EB',
+            backgroundColor: colors.glassBorder,
             marginVertical: 12,
         },
         engagementToggle: {
             width: 38,
             height: 20,
             borderRadius: 10,
-            backgroundColor: '#E5E7EB',
+            backgroundColor: colors.glassBorder,
             padding: 2,
             justifyContent: 'center',
         },
         engagementToggleOn: {
-            backgroundColor: '#111111',
+            backgroundColor: colors.primary,
         },
         engagementToggleKnob: {
             width: 16,
             height: 16,
             borderRadius: 8,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: colors.glassActiveText,
         },
         engagementToggleKnobOn: {
             marginLeft: 16,
@@ -9188,11 +10555,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         serverPreviewCard: {
             width: 200,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             overflow: 'hidden',
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         serverPreviewBanner: {
             height: 80,
@@ -9203,9 +10570,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 48,
             height: 48,
             borderRadius: 24,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 3,
-            borderColor: colors.surface,
+            borderColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: -24,
@@ -9240,7 +10607,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 8,
             height: 8,
             borderRadius: 4,
-            backgroundColor: '#22C55E',
+            backgroundColor: colors.successText,
             marginRight: 4,
         },
         serverPreviewStatText: {
@@ -9252,7 +10619,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             color: colors.textMuted,
         },
         changeIconBtn: {
-            backgroundColor: '#5865F2',
+            backgroundColor: colors.primary,
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 6,
@@ -9261,7 +10628,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         changeIconBtnText: {
             fontSize: 13,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         serverIconActions: {
             flexDirection: 'row',
@@ -9273,7 +10640,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 6,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         removeIconBtnText: {
             fontSize: 13,
@@ -9294,19 +10661,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderColor: 'transparent',
         },
         bannerOptionSelected: {
-            borderColor: '#5865F2',
+            borderColor: colors.primary,
         },
         // Invite Code Section
         inviteCodeSection: {
             marginTop: 24,
             paddingTop: 24,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         inviteCodeBox: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: colors.surfaceHover,
+            backgroundColor: colors.glassBgHover,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -9323,16 +10690,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         copyCodeBtn: {
             padding: 8,
             borderRadius: 6,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         settingsActions: {
             marginTop: 32,
             paddingTop: 24,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         settingsSaveBtn: {
-            backgroundColor: '#22C55E',
+            backgroundColor: colors.successText,
             paddingHorizontal: 20,
             paddingVertical: 10,
             borderRadius: 6,
@@ -9341,7 +10708,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         settingsSaveBtnText: {
             fontSize: 14,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         serverCrudActions: {
             flexDirection: 'row',
@@ -9354,7 +10721,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 6,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         settingsSecondaryBtnText: {
             fontSize: 13,
@@ -9365,12 +10732,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 6,
-            backgroundColor: '#111111',
+            backgroundColor: colors.dangerBg,
         },
         settingsDangerBtnText: {
             fontSize: 13,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.dangerText,
         },
         visibilityRow: {
             flexDirection: 'row',
@@ -9386,24 +10753,24 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         visibilityOptionActive: {
-            backgroundColor: '#111111',
-            borderColor: '#111111',
+            backgroundColor: colors.glassActiveBg,
+            borderColor: colors.glassActiveBg,
         },
         visibilityText: {
             fontSize: 13,
             color: colors.textMuted,
         },
         visibilityTextActive: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontWeight: '600',
         },
         settingsCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: '#E5E7EB',
+            borderColor: colors.glassBorder,
             borderRadius: 12,
             padding: 16,
         },
@@ -9427,9 +10794,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: '#E5E7EB',
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             paddingHorizontal: 10,
             paddingVertical: 6,
@@ -9445,9 +10812,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 8,
             paddingHorizontal: 12,
         },
@@ -9461,7 +10828,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: '#5865F2',
+            backgroundColor: colors.primary,
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 6,
@@ -9469,7 +10836,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         inviteMemberBtnText: {
             fontSize: 13,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         membersSectionTitle: {
             fontSize: 13,
@@ -9479,24 +10846,24 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         membersTable: {
             borderWidth: 1,
-            borderColor: '#E5E7EB',
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             overflow: 'hidden',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         invitesTable: {
             borderWidth: 1,
-            borderColor: '#E5E7EB',
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             overflow: 'hidden',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         membersTableHeader: {
             flexDirection: 'row',
             alignItems: 'center',
             paddingVertical: 10,
             paddingHorizontal: 12,
-            backgroundColor: '#F4F4F5',
+            backgroundColor: colors.glassBgMuted,
         },
         membersTableHeaderText: {
             fontSize: 11,
@@ -9509,7 +10876,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             paddingHorizontal: 12,
             borderBottomWidth: 1,
-            borderBottomColor: '#E5E7EB',
+            borderBottomColor: colors.glassBorder,
         },
         memberCell: {
             flexDirection: 'row',
@@ -9554,16 +10921,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 999,
         },
         statusBadgeActive: {
-            backgroundColor: '#DCFCE7',
+            backgroundColor: colors.successBg,
         },
         statusBadgePending: {
-            backgroundColor: '#FEF3C7',
+            backgroundColor: colors.warningBg,
         },
         statusBadgeMuted: {
-            backgroundColor: '#FDE68A',
+            backgroundColor: colors.warningBg,
         },
         statusBadgeSuspended: {
-            backgroundColor: '#FEE2E2',
+            backgroundColor: colors.dangerBg,
         },
         statusBadgeText: {
             fontSize: 11,
@@ -9571,16 +10938,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             color: colors.text,
         },
         statusBadgeTextActive: {
-            color: '#16A34A',
+            color: colors.successText,
         },
         statusBadgeTextPending: {
-            color: '#D97706',
+            color: colors.warningText,
         },
         statusBadgeTextMuted: {
-            color: '#B45309',
+            color: colors.warningText,
         },
         statusBadgeTextSuspended: {
-            color: '#DC2626',
+            color: colors.dangerText,
         },
         memberActions: {
             alignItems: 'flex-end',
@@ -9619,7 +10986,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             paddingVertical: 12,
             paddingHorizontal: 16,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderRadius: 8,
             marginBottom: 8,
         },
@@ -9636,7 +11003,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 12,
             paddingHorizontal: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         memberListItemLeft: {
             flex: 1,
@@ -9689,7 +11056,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: '#5865F2',
+            backgroundColor: colors.primary,
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 6,
@@ -9699,11 +11066,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         createRoleBtnText: {
             fontSize: 13,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         rolesList: {
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 8,
             overflow: 'hidden',
         },
@@ -9712,7 +11079,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             alignItems: 'center',
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         roleColor: {
             width: 16,
@@ -9749,13 +11116,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             marginBottom: 4,
         },
         roleSelectItemActive: {
-            backgroundColor: colors.surfaceHover,
+            backgroundColor: colors.glassBgHover,
         },
         createInviteBtn: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: '#111111',
+            backgroundColor: colors.primary,
             paddingHorizontal: 14,
             paddingVertical: 8,
             borderRadius: 16,
@@ -9763,7 +11130,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         createInviteBtnText: {
             fontSize: 13,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         invitesListEmpty: {
             alignItems: 'center',
@@ -9784,7 +11151,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: '#5865F2',
+            backgroundColor: colors.primary,
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 6,
@@ -9794,7 +11161,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         uploadEmojiBtnText: {
             fontSize: 13,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         emojiListEmpty: {
             alignItems: 'center',
@@ -9844,11 +11211,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         reportModalCard: {
             width: '90%',
             maxWidth: 420,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderRadius: 16,
             padding: 20,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         reportModalHeader: {
             flexDirection: 'row',
@@ -9876,19 +11243,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             borderRadius: 14,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         reportReasonOptionActive: {
-            borderColor: '#111111',
-            backgroundColor: '#111111',
+            borderColor: colors.glassActiveBg,
+            backgroundColor: colors.glassActiveBg,
         },
         reportReasonText: {
             fontSize: 12,
             color: colors.text,
         },
         reportReasonTextActive: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontWeight: '600',
         },
         reportNotesWrap: {
@@ -9903,11 +11270,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         reportNotesInput: {
             minHeight: 80,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             padding: 12,
             color: colors.text,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             textAlignVertical: 'top',
         },
         reportModalActions: {
@@ -9921,7 +11288,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 18,
             borderRadius: 18,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         reportCancelText: {
             fontSize: 13,
@@ -9931,24 +11298,24 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             paddingHorizontal: 18,
             borderRadius: 18,
-            backgroundColor: '#111111',
+            backgroundColor: colors.primary,
         },
         reportSubmitBtnDisabled: {
             opacity: 0.6,
         },
         reportSubmitText: {
             fontSize: 13,
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontWeight: '600',
         },
         moderationErrorText: {
             fontSize: 12,
-            color: '#EF4444',
+            color: colors.dangerText,
             marginBottom: 12,
         },
         moderationTable: {
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
             overflow: 'hidden',
         },
@@ -9958,8 +11325,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingVertical: 10,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: colors.glassBgMuted,
         },
         moderationHeaderText: {
             fontSize: 12,
@@ -9972,7 +11339,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         moderationCell: {
             justifyContent: 'center',
@@ -10032,7 +11399,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 4,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             alignSelf: 'flex-start',
         },
         typeBadgeText: {
@@ -10043,10 +11410,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             position: 'absolute',
             top: 24,
             right: 0,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.15,
@@ -10084,11 +11451,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         moderationDetailCard: {
             width: '90%',
             maxWidth: 520,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderRadius: 16,
             padding: 20,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         moderationDetailHeader: {
             flexDirection: 'row',
@@ -10124,7 +11491,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             color: colors.textMuted,
         },
         moderationDetailMessage: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderRadius: 12,
             padding: 12,
         },
@@ -10147,19 +11514,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 18,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         moderationActionBtnDisabled: {
             opacity: 0.6,
         },
         moderationActionRemove: {
-            backgroundColor: '#111111',
-            borderColor: '#111111',
+            backgroundColor: colors.dangerBg,
+            borderColor: colors.dangerBg,
         },
         moderationActionWarn: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
         },
         moderationActionText: {
             fontSize: 12,
@@ -10169,7 +11536,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         moderationActionTextOnDark: {
             fontSize: 12,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.dangerText,
         },
         moderationActionWarnText: {
             fontSize: 12,
@@ -10202,7 +11569,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         attachmentItem: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderRadius: 8,
             padding: 8,
             gap: 8,
@@ -10217,7 +11584,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 40,
             height: 40,
             borderRadius: 4,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -10234,7 +11601,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             margin: 16,
             borderRadius: 8,
             padding: 12,
@@ -10248,7 +11615,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 12,
             height: 12,
             borderRadius: 6,
-            backgroundColor: '#EF4444',
+            backgroundColor: colors.dangerText,
         },
         recordingText: {
             fontSize: 14,
@@ -10263,7 +11630,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             padding: 8,
         },
         recordingStopBtn: {
-            backgroundColor: '#EF4444',
+            backgroundColor: colors.dangerBg,
             borderRadius: 8,
             padding: 10,
         },
@@ -10274,9 +11641,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'flex-end',
         },
         emojiPickerContainer: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderTopLeftRadius: 16,
             borderTopRightRadius: 16,
+            borderTopWidth: 1,
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+            borderColor: colors.glassBorder,
             maxHeight: '50%',
         },
         emojiPickerHeader: {
@@ -10285,7 +11656,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'space-between',
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         emojiPickerTitle: {
             fontSize: 16,
@@ -10320,12 +11691,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         callCard: {
             width: '100%',
             maxWidth: 400,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderRadius: 24,
             padding: 24,
             alignItems: 'center',
             gap: 20,
             position: 'relative',
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         callCloseButton: {
             position: 'absolute',
@@ -10340,7 +11713,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         callError: {
             fontSize: 13,
-            color: '#EF4444',
+            color: colors.dangerText,
         },
         audioCallContainer: {
             alignItems: 'center',
@@ -10351,10 +11724,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             height: 140,
             borderRadius: 70,
             borderWidth: 3,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
         },
         callAvatar: {
             width: 120,
@@ -10372,7 +11745,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 16,
             overflow: 'hidden',
             position: 'relative',
-            backgroundColor: '#1a1a1a',
+            backgroundColor: colors.glassBg,
         },
         mainVideoWrap: {
             flex: 1,
@@ -10387,7 +11760,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         videoParticipantName: {
             fontSize: 16,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             marginTop: 16,
         },
         selfVideoWrap: {
@@ -10397,11 +11770,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 110,
             height: 150,
             borderRadius: 12,
-            backgroundColor: '#2a2a2a',
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 2,
-            borderColor: '#3a3a3a',
+            borderColor: colors.glassBorder,
         },
         selfVideoAvatar: {
             width: 60,
@@ -10411,7 +11784,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         selfVideoName: {
             fontSize: 12,
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             marginTop: 8,
         },
         callActions: {
@@ -10424,7 +11797,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 26,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
         },
         endCallButton: {
             width: 60,
@@ -10432,7 +11805,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 30,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#EF4444',
+            backgroundColor: colors.dangerBg,
         },
         // Success Modal Styles
         successModalOverlay: {
@@ -10443,8 +11816,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             padding: 20,
         },
         successModalContent: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderRadius: 20,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             padding: 32,
             alignItems: 'center',
             maxWidth: 340,
@@ -10459,7 +11834,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 100,
             height: 100,
             borderRadius: 50,
-            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            backgroundColor: colors.successBg,
             justifyContent: 'center',
             alignItems: 'center',
             marginBottom: 20,
@@ -10479,14 +11854,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             lineHeight: 22,
         },
         successModalButton: {
-            backgroundColor: '#22C55E',
+            backgroundColor: colors.successText,
             paddingVertical: 14,
             paddingHorizontal: 48,
             borderRadius: 12,
             minWidth: 160,
         },
         successModalButtonText: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontSize: 16,
             fontWeight: '600',
             textAlign: 'center',
@@ -10500,8 +11875,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             padding: 20,
         },
         deleteModalContent: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
             borderRadius: 20,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             padding: 32,
             alignItems: 'center',
             maxWidth: 380,
@@ -10516,7 +11893,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 90,
             height: 90,
             borderRadius: 45,
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            backgroundColor: colors.dangerBg,
             justifyContent: 'center',
             alignItems: 'center',
             marginBottom: 20,
@@ -10539,7 +11916,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.background,
+            backgroundColor: colors.glassBg,
             paddingVertical: 10,
             paddingHorizontal: 16,
             borderRadius: 10,
@@ -10559,9 +11936,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flex: 1,
             paddingVertical: 14,
             borderRadius: 12,
-            backgroundColor: colors.background,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         deleteModalCancelText: {
             color: colors.text,
@@ -10577,21 +11954,21 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             gap: 8,
             paddingVertical: 14,
             borderRadius: 12,
-            backgroundColor: '#EF4444',
+            backgroundColor: colors.dangerBg,
         },
         deleteModalConfirmText: {
-            color: '#FFFFFF',
+            color: colors.dangerText,
             fontSize: 16,
             fontWeight: '600',
         },
         // Stakeholder Management Styles
         stakeholderCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 16,
             marginBottom: 12,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         stakeholderHeader: {
             flexDirection: 'row',
@@ -10620,7 +11997,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 12,
         },
         stakeholderBadgeText: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontSize: 11,
             fontWeight: '600',
         },
@@ -10645,7 +12022,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             gap: 24,
             paddingVertical: 12,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
             marginBottom: 12,
         },
         stakeholderDetailRow: {
@@ -10674,9 +12051,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingVertical: 8,
             borderRadius: 8,
-            backgroundColor: colors.background,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         stakeholderActionBtnPrimary: {
             backgroundColor: colors.primary,
@@ -10684,7 +12061,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         stakeholderActionBtnDanger: {
             backgroundColor: 'transparent',
-            borderColor: '#EF4444',
+            borderColor: colors.dangerText,
         },
         stakeholderActionBtnText: {
             fontSize: 13,
@@ -10693,12 +12070,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         stakeholderActionBtnTextPrimary: {
             fontSize: 13,
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
             fontWeight: '500',
         },
         stakeholderActionBtnTextDanger: {
             fontSize: 13,
-            color: '#EF4444',
+            color: colors.dangerText,
             fontWeight: '500',
         },
         memberAvatarLarge: {
@@ -10712,13 +12089,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 12,
         },
         statusActive: {
-            backgroundColor: '#22C55E20',
+            backgroundColor: colors.successBg,
         },
         statusMuted: {
-            backgroundColor: '#F59E0B20',
+            backgroundColor: colors.warningBg,
         },
         statusBanned: {
-            backgroundColor: '#EF444420',
+            backgroundColor: colors.dangerBg,
         },
         statusBadgeText: {
             fontSize: 11,
@@ -10733,7 +12110,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             marginTop: 16,
             paddingTop: 16,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         stakeholderDetailItem: {
             flexDirection: 'row',
@@ -10771,7 +12148,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         memberActionMenuDivider: {
             height: 1,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             marginVertical: 4,
         },
         memberActionMenuNote: {
@@ -10801,7 +12178,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             marginTop: 16,
             paddingTop: 16,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         memberDetailItem: {
             flexDirection: 'row',
@@ -10828,25 +12205,25 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 8,
             paddingHorizontal: 12,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         memberDetailActionBtnPrimary: {
             borderColor: colors.primary + '40',
             backgroundColor: colors.primary + '10',
         },
         memberDetailActionBtnWarning: {
-            borderColor: '#F59E0B40',
-            backgroundColor: '#F59E0B10',
+            borderColor: colors.warningBg,
+            backgroundColor: colors.warningBg,
         },
         memberDetailActionBtnSuccess: {
-            borderColor: '#10B98140',
-            backgroundColor: '#10B98110',
+            borderColor: colors.successBg,
+            backgroundColor: colors.successBg,
         },
         memberDetailActionBtnDanger: {
-            borderColor: '#EF444440',
-            backgroundColor: '#EF444410',
+            borderColor: colors.dangerBg,
+            backgroundColor: colors.dangerBg,
         },
         memberDetailActionText: {
             fontSize: 13,
@@ -10888,7 +12265,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 48,
             height: 26,
             borderRadius: 13,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             padding: 3,
         },
         toggleSwitchActive: {
@@ -10898,7 +12275,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 20,
             height: 20,
             borderRadius: 10,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: colors.glassActiveText,
         },
         toggleKnobActive: {
             transform: [{ translateX: 22 }],
@@ -10913,8 +12290,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             padding: 16,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         localContentModerationActionBtnActive: {
             backgroundColor: colors.primary,
@@ -10927,7 +12304,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             marginTop: 8,
         },
         localContentModerationActionTextActive: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         localContentModerationActionHint: {
             fontSize: 11,
@@ -10936,16 +12313,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             textAlign: 'center',
         },
         localContentModerationActionHintActive: {
-            color: 'rgba(255,255,255,0.8)',
+            color: colors.textMuted,
         },
         contentModerationInput: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderRadius: 8,
             padding: 12,
             fontSize: 14,
             color: colors.text,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             minHeight: 80,
             textAlignVertical: 'top',
         },
@@ -10960,7 +12337,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         contentModerationSaveBtnText: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         contentModerationAddWord: {
             flexDirection: 'row',
@@ -10969,13 +12346,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         contentModerationWordInput: {
             flex: 1,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderRadius: 8,
             padding: 12,
             fontSize: 14,
             color: colors.text,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         contentModerationAddBtn: {
             flexDirection: 'row',
@@ -10989,7 +12366,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         contentModerationAddBtnText: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         contentModerationWordList: {
             marginBottom: 12,
@@ -11017,13 +12394,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         contentModerationWordTag: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             paddingVertical: 6,
             paddingLeft: 12,
             paddingRight: 6,
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         contentModerationWordTagText: {
             fontSize: 13,
@@ -11044,13 +12421,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         contentModerationTestInput: {
             flex: 1,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBgMuted,
             borderRadius: 8,
             padding: 12,
             fontSize: 14,
             color: colors.text,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             minHeight: 60,
             textAlignVertical: 'top',
         },
@@ -11058,7 +12435,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: '#10B981',
+            backgroundColor: colors.successText,
             paddingVertical: 12,
             paddingHorizontal: 16,
             borderRadius: 8,
@@ -11067,21 +12444,21 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         contentModerationTestBtnText: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         contentModerationTestResult: {
             borderRadius: 12,
             padding: 16,
         },
         contentModerationTestResultBlocked: {
-            backgroundColor: '#FEE2E2',
+            backgroundColor: colors.dangerBg,
             borderWidth: 1,
-            borderColor: '#FECACA',
+            borderColor: colors.dangerText + '40',
         },
         contentModerationTestResultAllowed: {
-            backgroundColor: '#DCFCE7',
+            backgroundColor: colors.successBg,
             borderWidth: 1,
-            borderColor: '#BBF7D0',
+            borderColor: colors.successText + '40',
         },
         contentModerationTestResultHeader: {
             flexDirection: 'row',
@@ -11099,12 +12476,140 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         contentModerationTestResultLabel: {
             fontSize: 12,
             fontWeight: '500',
-            color: '#6B7280',
+            color: colors.textMuted,
             marginBottom: 4,
         },
         contentModerationTestResultValue: {
             fontSize: 13,
-            color: '#374151',
+            color: colors.text,
+        },
+
+        // RevShare Monitor styles
+        revShareSectionLabel: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.textMuted,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 8,
+        },
+        revShareStatCard: {
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 16,
+            padding: 16,
+            minWidth: 140,
+            gap: 6,
+        },
+        revShareStatLabel: {
+            fontSize: 11,
+            fontWeight: '500',
+            color: colors.textMuted,
+            letterSpacing: 0.3,
+        },
+        revShareStatValue: {
+            fontSize: 22,
+            fontWeight: '800',
+            color: colors.text,
+            letterSpacing: -0.5,
+        },
+        revShareChartCard: {
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 16,
+            padding: 16,
+            marginBottom: 4,
+            overflow: 'hidden',
+        },
+        revShareTableHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            backgroundColor: colors.glassBorder,
+            borderRadius: 10,
+            marginBottom: 2,
+        },
+        revShareTableHeaderCell: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: colors.textMuted,
+            textTransform: 'uppercase',
+            letterSpacing: 0.4,
+        },
+        revShareTableRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 12,
+            borderRadius: 10,
+            gap: 4,
+        },
+        revShareTableRowAlt: {
+            backgroundColor: colors.glassBg,
+        },
+        revShareTableRowExpanded: {
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.glassBorder,
+        },
+        revShareTableCell: {
+            fontSize: 13,
+            color: colors.text,
+            fontWeight: '500',
+        },
+        revShareCategoryBadge: {
+            backgroundColor: colors.primary + '20',
+            borderRadius: 6,
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            alignSelf: 'flex-start',
+        },
+        revShareCategoryText: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: colors.primary,
+        },
+        revShareExpandedDetail: {
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderTopWidth: 0,
+            borderColor: colors.glassBorder,
+            borderBottomLeftRadius: 10,
+            borderBottomRightRadius: 10,
+            padding: 16,
+            gap: 8,
+            marginBottom: 2,
+        },
+        revShareDetailItem: {
+            gap: 2,
+        },
+        revShareDetailLabel: {
+            fontSize: 11,
+            fontWeight: '500',
+            color: colors.textMuted,
+            letterSpacing: 0.3,
+        },
+        revShareDetailValue: {
+            fontSize: 15,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        partnerListingCard: {
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 12,
+            padding: 14,
+            marginBottom: 10,
+            backgroundColor: colors.glassBg,
+        },
+        listingActionBtn: {
+            paddingHorizontal: 14,
+            paddingVertical: 7,
+            borderRadius: 8,
         },
     });
 

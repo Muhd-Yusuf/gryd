@@ -238,7 +238,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         shell: {
             flexGrow: 1,
@@ -247,7 +247,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         leftPanel: {
             flex: 1,
-            backgroundColor: '#000000',
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 32,
             paddingTop: 26,
             paddingBottom: 80,
@@ -313,11 +313,11 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         rightPanel: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
             padding: 48,
             justifyContent: 'center',
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
         },
         themeToggle: {
             position: 'absolute',
@@ -325,7 +325,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             right: 20,
             padding: 10,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         formCard: {
             maxWidth: 360,
@@ -364,11 +364,11 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         avatarPlaceholder: {
             width: '100%',
             height: '100%',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 32,
         },
         avatarText: {
@@ -427,7 +427,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         scrollContent: {
             padding: 30,
@@ -444,7 +444,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         header: {
             marginBottom: 40,
@@ -482,11 +482,11 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         avatarPlaceholder: {
             width: '100%',
             height: '100%',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 40,
         },
         avatarText: {

@@ -282,7 +282,7 @@ const NotificationsScreen = () => {
 const createStyles = (colors: any, isCompact: boolean) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.appBg,
+        backgroundColor: 'transparent',
         padding: isCompact ? 16 : 24,
     },
     header: {
@@ -316,10 +316,10 @@ const createStyles = (colors: any, isCompact: boolean) => StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 16,
         borderRadius: 20,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.glassBg,
         marginRight: 8,
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.glassBorder,
     },
     tabBtnActive: {
         backgroundColor: colors.text,
@@ -331,28 +331,31 @@ const createStyles = (colors: any, isCompact: boolean) => StyleSheet.create({
         fontWeight: '500',
     },
     tabTextActive: {
-        color: colors.surface,
+        color: colors.glassBg,
     },
 
     // List
     listContainer: {
-        backgroundColor: colors.surface,
+        backgroundColor: colors.glassBg,
         borderRadius: 12,
         padding: 8,
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.glassBorder,
         minHeight: 200,
     },
     itemRow: {
         flexDirection: 'row',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        borderBottomColor: colors.glassBorder,
         alignItems: 'flex-start',
         gap: 12,
+        backgroundColor: colors.glassBg,
+        borderRadius: 8,
+        marginBottom: 4,
     },
     itemRowUnread: {
-        backgroundColor: colors.primaryBg || '#EFF6FF',
+        backgroundColor: colors.glassActiveBg,
     },
     iconBox: {
         width: 36,

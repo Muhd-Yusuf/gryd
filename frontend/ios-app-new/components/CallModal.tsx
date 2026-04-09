@@ -281,13 +281,13 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: '#000000',
+            backgroundColor: '#000000', // Call screen is intentionally pure black
         },
 
         // Incoming call
         incomingContainer: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
             justifyContent: 'space-between',
             paddingVertical: 80,
         },
@@ -304,7 +304,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             height: 160,
             borderRadius: 80,
             borderWidth: 4,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         incomingName: {
             fontSize: 28,
@@ -342,7 +342,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         videoPlaceholderAvatar: {
             width: 140,
@@ -350,7 +350,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             borderRadius: 70,
             marginBottom: 20,
             borderWidth: 3,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         videoPlaceholderName: {
             fontSize: 24,
@@ -372,7 +372,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             height: 160,
             borderRadius: 12,
             overflow: 'hidden',
-            backgroundColor: '#1a1a1a',
+            backgroundColor: 'rgba(255,255,255,0.06)',
             borderWidth: 2,
             borderColor: 'rgba(255,255,255,0.3)',
             elevation: 10, // Android: ensure above SurfaceView
@@ -385,7 +385,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#1a1a1a',
+            backgroundColor: 'rgba(255,255,255,0.06)',
         },
         switchCameraBtn: {
             position: 'absolute',
@@ -419,7 +419,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
         // Audio call
         audioContainer: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         audioContent: {
             flex: 1,
@@ -432,7 +432,7 @@ const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>
             height: 180,
             borderRadius: 90,
             borderWidth: 4,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             marginBottom: 20,
         },
         audioName: {

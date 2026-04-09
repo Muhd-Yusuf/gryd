@@ -86,7 +86,6 @@ export {
     Calendar,
 
     // Interface
-    Home,
     Heart,
     Star,
     Bookmark,

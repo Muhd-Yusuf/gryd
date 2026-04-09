@@ -1,13 +1,16 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../lib/theme';
 
 const LeadsScreen = () => {
+    const { colors } = useTheme();
+
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        <SafeAreaView style={[styles.container, { backgroundColor: 'transparent' }]} edges={['top', 'left', 'right']}>
             <View style={styles.content}>
-                <Text style={styles.title}>Leads</Text>
-                <Text style={styles.subtitle}>Coming soon</Text>
+                <Text style={[styles.title, { color: colors.text }]}>Leads</Text>
+                <Text style={[styles.subtitle, { color: colors.textMuted }]}>Coming soon</Text>
             </View>
         </SafeAreaView>
     );
@@ -16,7 +19,7 @@ const LeadsScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FAFAFA',
+        backgroundColor: 'transparent',
     },
     content: {
         flex: 1,
@@ -27,12 +30,10 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 22,
         fontWeight: '700',
-        color: '#111827',
         marginBottom: 8,
     },
     subtitle: {
         fontSize: 14,
-        color: '#6B7280',
     },
 });
 

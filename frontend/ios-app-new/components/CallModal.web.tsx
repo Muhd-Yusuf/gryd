@@ -12,12 +12,12 @@ import {
     View,
     Text,
     Modal,
-    TouchableOpacity,
 } from 'react-native';
 import { Phone, Video, VideoOff, Mic, MicOff, PhoneOff, Volume2, VolumeX, SwitchCamera, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '../lib/theme';
 import { CallState, CallType, IncomingCall, CallSession } from '../hooks';
 import UserAvatar from './UserAvatar';
+import { GlassButton, GlassIconButton } from './glass';
 
 interface CallModalProps {
     visible: boolean;
@@ -189,27 +189,33 @@ export const CallModal: React.FC<CallModalProps> = ({
                         <Text style={styles.incomingName}>{incomingCall?.callerName || peerName}</Text>
                         <View style={styles.pulseContainer}>
                             {incomingCall?.callType === 'video' ? (
-                                <Video size={24} color="#22C55E" />
+                                <Video size={24} color={colors.successText} />
                             ) : (
-                                <Phone size={24} color="#22C55E" />
+                                <Phone size={24} color={colors.successText} />
                             )}
                         </View>
                     </View>
                     <View style={styles.incomingActions}>
                         <View style={styles.actionButtonWrap}>
-                            <TouchableOpacity style={styles.declineButton} onPress={onDecline}>
-                                <PhoneOff size={32} color="#FFFFFF" />
-                            </TouchableOpacity>
+                            <GlassIconButton
+                                icon={<PhoneOff size={32} color={colors.dangerText} />}
+                                onPress={onDecline}
+                                variant="danger"
+                                size="lg"
+                            />
                             <Text style={styles.actionLabel}>Decline</Text>
                         </View>
                         <View style={styles.actionButtonWrap}>
-                            <TouchableOpacity style={styles.answerButton} onPress={onAnswer}>
-                                {incomingCall?.callType === 'video' ? (
+                            <GlassIconButton
+                                icon={incomingCall?.callType === 'video' ? (
                                     <Video size={32} color="#FFFFFF" />
                                 ) : (
                                     <Phone size={32} color="#FFFFFF" />
                                 )}
-                            </TouchableOpacity>
+                                onPress={onAnswer}
+                                variant="active"
+                                size="lg"
+                            />
                             <Text style={styles.actionLabel}>Answer</Text>
                         </View>
                     </View>
@@ -247,7 +253,7 @@ export const CallModal: React.FC<CallModalProps> = ({
                             <View style={styles.localVideoContainer}>
                                 <div
                                     ref={localVideoRef}
-                                    style={{ width: '100%', height: '100%', borderRadius: 12, overflow: 'hidden', backgroundColor: '#333' }}
+                                    style={{ width: '100%', height: '100%', borderRadius: 12, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.06)' }}
                                 />
                             </View>
                         )}
@@ -276,54 +282,62 @@ export const CallModal: React.FC<CallModalProps> = ({
 
                 <View style={styles.controls}>
                     <View style={styles.controlsRow}>
-                        <TouchableOpacity
-                            style={[styles.controlButton, isMuted && styles.controlButtonActive]}
-                            onPress={onToggleMute}
-                        >
-                            {isMuted ? (
-                                <MicOff size={28} color="#EF4444" />
+                        <GlassIconButton
+                            icon={isMuted ? (
+                                <MicOff size={28} color={colors.dangerText} />
                             ) : (
-                                <Mic size={28} color="#FFFFFF" />
+                                <Mic size={28} color={colors.text} />
                             )}
-                        </TouchableOpacity>
+                            onPress={onToggleMute}
+                            variant={isMuted ? 'danger' : 'default'}
+                            size="lg"
+                        />
                         {isVideoCall && (
-                            <TouchableOpacity
-                                style={[styles.controlButton, !isVideoEnabled && styles.controlButtonActive]}
-                                onPress={onToggleVideo}
-                            >
-                                {isVideoEnabled ? (
-                                    <Video size={28} color="#FFFFFF" />
+                            <GlassIconButton
+                                icon={isVideoEnabled ? (
+                                    <Video size={28} color={colors.text} />
                                 ) : (
-                                    <VideoOff size={28} color="#EF4444" />
+                                    <VideoOff size={28} color={colors.dangerText} />
                                 )}
-                            </TouchableOpacity>
+                                onPress={onToggleVideo}
+                                variant={!isVideoEnabled ? 'danger' : 'default'}
+                                size="lg"
+                            />
                         )}
                         {!isVideoCall && (
-                            <TouchableOpacity
-                                style={[styles.controlButton, isSpeakerOn && styles.controlButtonActive]}
-                                onPress={onToggleSpeaker}
-                            >
-                                {isSpeakerOn ? (
-                                    <Volume2 size={28} color="#FFFFFF" />
+                            <GlassIconButton
+                                icon={isSpeakerOn ? (
+                                    <Volume2 size={28} color={colors.text} />
                                 ) : (
-                                    <VolumeX size={28} color="#FFFFFF" />
+                                    <VolumeX size={28} color={colors.text} />
                                 )}
-                            </TouchableOpacity>
+                                onPress={onToggleSpeaker}
+                                variant={isSpeakerOn ? 'active' : 'default'}
+                                size="lg"
+                            />
                         )}
                         {isVideoCall && (
-                            <TouchableOpacity style={styles.controlButton} onPress={onSwitchCamera}>
-                                <SwitchCamera size={28} color="#FFFFFF" />
-                            </TouchableOpacity>
+                            <GlassIconButton
+                                icon={<SwitchCamera size={28} color={colors.text} />}
+                                onPress={onSwitchCamera}
+                                variant="default"
+                                size="lg"
+                            />
                         )}
                     </View>
-                    <TouchableOpacity style={styles.hangupButton} onPress={onHangup}>
-                        <PhoneOff size={36} color="#FFFFFF" />
-                    </TouchableOpacity>
+                    <GlassButton
+                        label="End Call"
+                        onPress={onHangup}
+                        variant="danger"
+                        size="lg"
+                        icon={<PhoneOff size={22} color={colors.dangerText} />}
+                        style={styles.hangupButton}
+                    />
                 </View>
 
                 {error && (
                     <View style={styles.errorContainer}>
-                        <AlertCircle size={20} color="#EF4444" />
+                        <AlertCircle size={20} color={colors.error} />
                         <Text style={styles.errorText}>{error}</Text>
                     </View>
                 )}
@@ -334,40 +348,36 @@ export const CallModal: React.FC<CallModalProps> = ({
 
 const createStyles = (colors: ReturnType<typeof import('../lib/theme').useTheme>['colors']) =>
     StyleSheet.create({
-        container: { flex: 1, backgroundColor: '#1A1A2E' },
-        incomingContainer: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.95)', justifyContent: 'space-between', paddingVertical: 60 },
+        container: { flex: 1, backgroundColor: colors.glassBg },
+        incomingContainer: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'space-between', paddingVertical: 60 },
         incomingContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-        incomingLabel: { fontSize: 18, color: 'rgba(255, 255, 255, 0.7)', marginBottom: 32 },
-        incomingAvatar: { width: 140, height: 140, borderRadius: 70, borderWidth: 4, borderColor: '#22C55E' },
-        incomingName: { fontSize: 32, fontWeight: '700', color: '#FFFFFF', marginTop: 24 },
-        pulseContainer: { marginTop: 24, width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(34, 197, 94, 0.2)', justifyContent: 'center', alignItems: 'center' },
+        incomingLabel: { fontSize: 18, color: colors.textMuted, marginBottom: 32 },
+        incomingAvatar: { width: 140, height: 140, borderRadius: 70, borderWidth: 4, borderColor: colors.successText },
+        incomingName: { fontSize: 32, fontWeight: '700', color: colors.text, marginTop: 24 },
+        pulseContainer: { marginTop: 24, width: 60, height: 60, borderRadius: 30, backgroundColor: colors.successBg, justifyContent: 'center', alignItems: 'center' },
         incomingActions: { flexDirection: 'row', justifyContent: 'center', gap: 60, paddingBottom: 40 },
-        actionButtonWrap: { alignItems: 'center' },
-        declineButton: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
-        answerButton: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#22C55E', justifyContent: 'center', alignItems: 'center' },
-        actionLabel: { color: '#FFFFFF', fontSize: 14, marginTop: 8 },
+        actionButtonWrap: { alignItems: 'center', gap: 8 },
+        actionLabel: { color: colors.text, fontSize: 14, marginTop: 8 },
         videoContainer: { flex: 1, backgroundColor: '#000' },
-        videoPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A2E' },
+        videoPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.glassBg },
         videoPlaceholderAvatar: { width: 140, height: 140, borderRadius: 70, marginBottom: 16 },
-        videoPlaceholderName: { fontSize: 24, fontWeight: '600', color: '#FFFFFF', marginBottom: 8 },
-        localVideoContainer: { position: 'absolute', top: 20, right: 20, width: 120, height: 160, borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.3)' },
+        videoPlaceholderName: { fontSize: 24, fontWeight: '600', color: colors.text, marginBottom: 8 },
+        localVideoContainer: { position: 'absolute', top: 20, right: 20, width: 120, height: 160, borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: colors.glassBorder },
         statusOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
-        statusTextLarge: { fontSize: 20, color: '#FFFFFF', fontWeight: '500' },
-        audioContainer: { flex: 1, backgroundColor: '#1A1A2E', justifyContent: 'center', alignItems: 'center' },
+        statusTextLarge: { fontSize: 20, color: colors.text, fontWeight: '500' },
+        audioContainer: { flex: 1, backgroundColor: colors.glassBg, justifyContent: 'center', alignItems: 'center' },
         audioContent: { alignItems: 'center' },
         audioAvatar: { width: 160, height: 160, borderRadius: 80, marginBottom: 24, borderWidth: 4, borderColor: colors.primary },
-        audioName: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginBottom: 8 },
-        audioStatus: { fontSize: 16, color: 'rgba(255, 255, 255, 0.7)' },
+        audioName: { fontSize: 28, fontWeight: '700', color: colors.text, marginBottom: 8 },
+        audioStatus: { fontSize: 16, color: colors.textMuted },
         waveformContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 32 },
         waveformBar: { width: 4, backgroundColor: colors.primary, borderRadius: 2 },
-        statusText: { fontSize: 16, color: 'rgba(255, 255, 255, 0.7)', marginTop: 8 },
-        controls: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingVertical: 24, paddingHorizontal: 20, backgroundColor: 'rgba(0, 0, 0, 0.7)' },
+        statusText: { fontSize: 16, color: colors.textMuted, marginTop: 8 },
+        controls: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingVertical: 24, paddingHorizontal: 20, backgroundColor: colors.glassNavBg, borderTopWidth: 1, borderTopColor: colors.glassBorder },
         controlsRow: { flexDirection: 'row', justifyContent: 'center', gap: 24, marginBottom: 24 },
-        controlButton: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
-        controlButtonActive: { backgroundColor: 'rgba(255, 255, 255, 0.3)' },
-        hangupButton: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', alignSelf: 'center' },
-        errorContainer: { position: 'absolute', top: 60, left: 20, right: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(239, 68, 68, 0.2)', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, gap: 8 },
-        errorText: { color: '#EF4444', fontSize: 14, flex: 1 },
+        hangupButton: { alignSelf: 'center' },
+        errorContainer: { position: 'absolute', top: 60, left: 20, right: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.dangerBg, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, gap: 8, borderWidth: 1, borderColor: colors.glassBorder },
+        errorText: { color: colors.error, fontSize: 14, flex: 1 },
     });
 
 export default CallModal;

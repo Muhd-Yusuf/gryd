@@ -13,13 +13,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sun, Moon, ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { authVerifyOtp, authSendOtp } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 
 export default function VerifyOtpScreen() {
     const router = useRouter();
-    const { colors, mode, toggleTheme } = useTheme();
+    const { colors } = useTheme();
     const { width } = useWindowDimensions();
     const isWeb = Platform.OS === 'web';
     const isMobileView = !isWeb || width < 768;
@@ -193,13 +193,6 @@ export default function VerifyOtpScreen() {
                             <TouchableOpacity style={mobileStyles.backButton} onPress={handleBack}>
                                 <ArrowLeft color={colors.text} size={24} />
                             </TouchableOpacity>
-                            <TouchableOpacity style={mobileStyles.themeToggle} onPress={toggleTheme}>
-                                {mode === 'dark' ? (
-                                    <Sun color={colors.text} size={22} />
-                                ) : (
-                                    <Moon color={colors.text} size={22} />
-                                )}
-                            </TouchableOpacity>
                         </View>
 
                         <View style={mobileStyles.header}>
@@ -287,13 +280,6 @@ export default function VerifyOtpScreen() {
                     </View>
 
                     <View style={webStyles.rightPanel}>
-                        <TouchableOpacity style={webStyles.themeToggle} onPress={toggleTheme}>
-                            {mode === 'dark' ? (
-                                <Sun color={colors.text} size={20} />
-                            ) : (
-                                <Moon color={colors.text} size={20} />
-                            )}
-                        </TouchableOpacity>
                         <View style={webStyles.formCard}>
                             <Text style={webStyles.title}>Verify Your Email</Text>
                             <Text style={webStyles.subtitle}>
@@ -350,7 +336,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         shell: {
             flexGrow: 1,
@@ -359,7 +345,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         leftPanel: {
             flex: 1,
-            backgroundColor: '#000000',
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 32,
             paddingTop: 26,
             paddingBottom: 80,
@@ -425,11 +411,11 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         rightPanel: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
             padding: 48,
             justifyContent: 'center',
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
         },
         themeToggle: {
             position: 'absolute',
@@ -437,7 +423,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             right: 20,
             padding: 10,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         formCard: {
             maxWidth: 360,
@@ -470,22 +456,23 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 36,
             height: 40,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 10,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             fontSize: 12,
             fontFamily: 'Inter_600SemiBold',
             textAlign: 'center',
             color: colors.text,
         },
         otpInputFilled: {
-            borderColor: colors.text,
+            borderColor: 'rgba(100,168,255,0.75)',
+            backgroundColor: 'rgba(59,130,246,0.15)',
         },
         otpInputError: {
-            borderColor: '#DC2626',
+            borderColor: colors.error,
         },
         errorText: {
-            color: '#DC2626',
+            color: colors.error,
             fontSize: 11,
             fontFamily: 'Inter_500Medium',
             marginBottom: 12,
@@ -548,7 +535,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         scrollContent: {
             padding: 30,
@@ -565,7 +552,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         header: {
             marginBottom: 40,
@@ -597,17 +584,17 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 48,
             height: 56,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             fontSize: 24,
             fontWeight: '600',
             textAlign: 'center',
             color: colors.text,
         },
         otpInputFilled: {
-            borderColor: colors.primary,
-            backgroundColor: colors.appBg,
+            borderColor: 'rgba(100,168,255,0.75)',
+            backgroundColor: 'rgba(59,130,246,0.15)',
         },
         otpInputError: {
             borderColor: colors.error,

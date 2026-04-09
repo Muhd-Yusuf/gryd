@@ -59,6 +59,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../lib/theme';
+import { GlassBadge } from './glass';
 import {
     communityGet,
     communityPost,
@@ -88,6 +89,7 @@ import { ImageViewer } from './ImageViewer';
 import { ErrorRetry } from './ErrorRetry';
 import { MessageSkeleton } from './SkeletonLoader';
 import { MessageBubble, MessageComposer } from './messaging';
+import { GlassButton, GlassIconButton, GlassRail } from './glass';
 import {
     useSubgrids,
     useFriends,
@@ -1643,33 +1645,29 @@ export default function DirectMessagesScreen() {
             <View style={styles.mainContent}>
                 {/* Icon Rail - hidden on mobile */}
                 {!isMobile && (
-                    <View style={styles.iconRail}>
-                        <TouchableOpacity style={[styles.serverIcon, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]} onPress={() => router.push('/admin')}>
-                            {activeSubgrid ? (
-                                activeSubgrid.logoUrl ? (
-                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} cachePolicy="memory-disk" />
-                                ) : (
-                                    <Text style={styles.serverIconText}>
-                                        {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
-                                    </Text>
-                                )
-                            ) : null}
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
-                            <MessageSquare size={18} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <View style={{ flex: 1 }} />
-                        <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
-                            <Award size={18} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
-                            {mode === 'dark' ? (
-                                <Sun size={18} color={colors.textMuted} />
-                            ) : (
-                                <Moon size={18} color={colors.textMuted} />
-                            )}
-                        </TouchableOpacity>
-                    </View>
+                    <GlassRail
+                        serverLogo={{
+                            uri: activeSubgrid?.logoUrl,
+                            name: activeSubgrid?.name,
+                            onPress: () => router.push('/admin'),
+                        }}
+                        items={[
+                            {
+                                id: 'messages',
+                                icon: <MessageSquare size={20} color={colors.textMuted} />,
+                                activeIcon: <MessageSquare size={20} color={colors.glassActiveText} />,
+                                onPress: () => router.push('/admin/messages'),
+                                isActive: true,
+                            },
+                            {
+                                id: 'leaderboard',
+                                icon: <Award size={20} color={colors.textMuted} />,
+                                onPress: () => router.push('/admin/contributors'),
+                                isActive: false,
+                            },
+                        ]}
+                        onToggleTheme={toggleTheme}
+                    />
                 )}
 
                 {/* Friends Sidebar - full width on mobile, hidden when viewing content */}
@@ -2186,16 +2184,13 @@ export default function DirectMessagesScreen() {
                                                     </>
                                                 )}
                                                 {/* Send button - always visible on mobile when there's content */}
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.inputSendBtn,
-                                                        !(newMessage.trim() || attachments.length > 0) && styles.inputSendBtnDisabled
-                                                    ]}
+                                                <GlassIconButton
+                                                    icon={<Send size={18} color={newMessage.trim() || attachments.length > 0 ? '#FFFFFF' : colors.textMuted} />}
                                                     onPress={handleSendMessage}
+                                                    variant={newMessage.trim() || attachments.length > 0 ? 'active' : 'default'}
                                                     disabled={!(newMessage.trim() || attachments.length > 0)}
-                                                >
-                                                    <Send size={18} color={newMessage.trim() || attachments.length > 0 ? '#FFFFFF' : colors.textMuted} />
-                                                </TouchableOpacity>
+                                                    size="sm"
+                                                />
                                             </View>
                                         </View>
                                         {/* Voice recording button - only on mobile when no content */}
@@ -2398,24 +2393,24 @@ export default function DirectMessagesScreen() {
                             </View>
                         </View>
                         <View style={styles.incomingCallActions}>
-                            <TouchableOpacity
-                                style={[styles.incomingCallButton, styles.declineButton]}
+                            <GlassButton
+                                label="Decline"
                                 onPress={handleDeclineCall}
-                            >
-                                <PhoneOff size={24} color="#FFFFFF" />
-                                <Text style={styles.incomingCallButtonText}>Decline</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.incomingCallButton, styles.acceptButton]}
+                                variant="danger"
+                                size="md"
+                                icon={<PhoneOff size={20} color={colors.dangerText} />}
+                            />
+                            <GlassButton
+                                label="Accept"
                                 onPress={handleAcceptCall}
-                            >
-                                {incomingCall.callType === 'video' ? (
-                                    <Video size={24} color="#FFFFFF" />
+                                variant="primary"
+                                size="md"
+                                icon={incomingCall.callType === 'video' ? (
+                                    <Video size={20} color="#FFFFFF" />
                                 ) : (
-                                    <Phone size={24} color="#FFFFFF" />
+                                    <Phone size={20} color="#FFFFFF" />
                                 )}
-                                <Text style={styles.incomingCallButtonText}>Accept</Text>
-                            </TouchableOpacity>
+                            />
                         </View>
                     </View>
                 </Animated.View>
@@ -2457,14 +2452,14 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         topNav: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassNavBg,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
             paddingHorizontal: 16,
             height: 56,
         },
@@ -2508,53 +2503,17 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             flex: 1,
             flexDirection: 'row',
         },
-        iconRail: {
-            width: 72,
-            backgroundColor: colors.surface,
-            borderRightWidth: 1,
-            borderRightColor: colors.border,
-            paddingTop: 12,
-            alignItems: 'center',
-        },
-        serverIcon: {
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            backgroundColor: '#1E3A5F',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 8,
-        },
-        serverIconText: {
-            fontSize: 10,
-            fontWeight: '700',
-            color: '#FFFFFF',
-        },
-        serverIconImage: {
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-        },
-        railIconBtn: {
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            backgroundColor: colors.surface,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 8,
-        },
         divider: {
             width: 32,
             height: 2,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             marginVertical: 8,
         },
         friendsSidebar: {
             width: 240,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassNavBg,
             borderRightWidth: 1,
-            borderRightColor: colors.border,
+            borderRightColor: colors.glassBorder,
         },
         sidebarHeader: {
             flexDirection: 'row',
@@ -2562,7 +2521,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             justifyContent: 'space-between',
             padding: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         sidebarHeaderLeft: {
             flexDirection: 'row',
@@ -2599,7 +2558,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             marginBottom: 2,
         },
         friendItemActive: {
-            backgroundColor: colors.primary + '15',
+            backgroundColor: colors.glassActiveBg,
         },
         friendAvatar: {
             width: 48,
@@ -2643,7 +2602,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         friendBadgeText: {
             fontSize: 9,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         friendLastMsgTime: {
             fontSize: 11,
@@ -2664,7 +2623,8 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             paddingTop: 8,
             paddingBottom: bottomInset + 8,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
+            backgroundColor: colors.glassNavBg,
         },
         userAvatarContainer: {
             position: 'relative',
@@ -2683,7 +2643,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             borderRadius: 5,
             backgroundColor: '#22C55E',
             borderWidth: 2,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         userInfo: {
             flex: 1,
@@ -2709,7 +2669,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         },
         chatArea: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: 'transparent',
         },
         chatHeader: {
             flexDirection: 'row',
@@ -2717,7 +2677,8 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             justifyContent: 'space-between',
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: colors.glassNavBg,
         },
         chatHeaderLeft: {
             flexDirection: 'row',
@@ -2743,7 +2704,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         chatHeaderBadgeText: {
             fontSize: 10,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         chatHeaderIcons: {
             flexDirection: 'row',
@@ -2766,13 +2727,15 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         profileBanner: {
             padding: 24,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         profileAvatarLarge: {
             width: 80,
             height: 80,
             borderRadius: 40,
-            backgroundColor: '#FBD8D3',
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 16,
@@ -2802,7 +2765,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         profileBadgeText: {
             fontSize: 12,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         profileUsername: {
             fontSize: 14,
@@ -2840,8 +2803,8 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             paddingHorizontal: 16,
             paddingVertical: 8,
             borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: 4,
+            borderColor: colors.glassBorder,
+            borderRadius: 8,
             marginRight: 8,
         },
         removeButtonText: {
@@ -2851,12 +2814,14 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         blockButton: {
             paddingHorizontal: 16,
             paddingVertical: 8,
-            backgroundColor: colors.text,
-            borderRadius: 4,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 8,
         },
         blockButtonText: {
             fontSize: 14,
-            color: colors.surface,
+            color: colors.text,
         },
         messagesContainer: {
             padding: 16,
@@ -2869,7 +2834,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         dateLine: {
             flex: 1,
             height: 1,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
         },
         dateText: {
             paddingHorizontal: 16,
@@ -2904,7 +2869,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             borderBottomRightRadius: 4,
         },
         messageBubbleOther: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             borderBottomLeftRadius: 4,
         },
         messageSenderName: {
@@ -2919,7 +2886,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             lineHeight: 20,
         },
         messageTextSelf: {
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         messageTimeStamp: {
             fontSize: 10,
@@ -2974,7 +2941,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             borderRadius: 20,
             paddingHorizontal: 14,
             paddingVertical: 10,
@@ -3000,8 +2969,10 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.surfaceMuted,
-            borderRadius: 8,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 12,
             paddingHorizontal: 12,
             paddingVertical: 10,
             marginTop: 8,
@@ -3018,7 +2989,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             alignItems: 'center',
             paddingVertical: 12,
             paddingHorizontal: 16,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
             marginBottom: 12,
             gap: 12,
@@ -3027,7 +3000,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -3054,7 +3029,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -3106,7 +3083,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             padding: 6,
         },
         inputSendBtn: {
-            backgroundColor: '#5865F2',
+            backgroundColor: colors.glassActiveBg,
             borderRadius: 18,
             width: 36,
             height: 36,
@@ -3115,22 +3092,24 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             marginLeft: 4,
         },
         inputSendBtnDisabled: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         inputMicBtn: {
             width: 44,
             height: 44,
             borderRadius: 22,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             justifyContent: 'center',
             alignItems: 'center',
             marginLeft: 8,
         },
         profileSidebar: {
             width: 280,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassNavBg,
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
         },
         profileHeaderBanner: {
             height: 160,
@@ -3152,7 +3131,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 32,
             height: 32,
             borderRadius: 16,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -3168,7 +3149,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 80,
             height: 80,
             borderRadius: 40,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
+            borderWidth: 2,
+            borderColor: colors.glassBorder,
             padding: 4,
             marginBottom: 12,
         },
@@ -3189,8 +3172,10 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             marginBottom: 16,
         },
         sidebarSection: {
-            backgroundColor: colors.surfaceMuted,
-            borderRadius: 8,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 12,
             padding: 12,
             marginBottom: 12,
         },
@@ -3238,7 +3223,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         addFriendModal: {
             width: '100%',
             maxWidth: 420,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             borderRadius: 16,
             padding: 16,
             maxHeight: 480,
@@ -3260,13 +3247,17 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         addFriendSearch: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             paddingHorizontal: 12,
             height: 40,
@@ -3311,7 +3302,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         addFriendActionDisabled: {
             opacity: 0.6,
@@ -3327,7 +3320,8 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             alignItems: 'center',
             padding: 12,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
+            backgroundColor: colors.glassNavBg,
         },
         userAvatar: {
             width: 32,
@@ -3399,7 +3393,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 80,
             height: 80,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             position: 'relative',
             alignItems: 'center',
             justifyContent: 'center',
@@ -3443,8 +3439,10 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: colors.surfaceMuted,
-            borderRadius: 8,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 12,
             paddingHorizontal: 16,
             paddingVertical: 12,
             flex: 1,
@@ -3473,7 +3471,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             padding: 8,
         },
         stopRecordingBtn: {
-            backgroundColor: '#5865F2',
+            backgroundColor: colors.glassActiveBg,
             borderRadius: 6,
             padding: 8,
         },
@@ -3487,7 +3485,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         emojiPickerContainer: {
             width: 320,
             maxHeight: 400,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.modalBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             borderRadius: 16,
             overflow: 'hidden',
         },
@@ -3497,7 +3497,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             justifyContent: 'space-between',
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         emojiPickerTitle: {
             fontSize: 16,
@@ -3532,7 +3532,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             paddingHorizontal: 20,
         },
         incomingCallCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             padding: 20,
             width: '100%',
@@ -3543,7 +3543,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             shadowRadius: 8,
             elevation: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         incomingCallHeader: {
             flexDirection: 'row',
@@ -3593,7 +3593,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         incomingCallButtonText: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         // Mobile responsive styles
         topNavMobile: {
@@ -3618,8 +3618,8 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             paddingTop: topInset + 12,
             paddingBottom: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: colors.glassNavBg,
             gap: 12,
         },
         mobileHeaderBrandRow: {
@@ -3636,11 +3636,11 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 28,
             height: 28,
             borderRadius: 6,
-            borderWidth: 2,
-            borderColor: colors.primary,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: colors.primary + '15',
+            backgroundColor: colors.glassBg,
         },
         mobileGrydLogoHash: {
             fontSize: 14,
@@ -3668,22 +3668,26 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 32,
             height: 32,
             borderRadius: 8,
-            backgroundColor: colors.primary,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
         mobileTopBarLogoText: {
             fontSize: 10,
             fontWeight: '700',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         mobileServerInfoRow: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 10,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             padding: 10,
-            borderRadius: 10,
+            borderRadius: 12,
         },
         mobileServerInfoText: {
             flex: 1,
@@ -3706,13 +3710,15 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 10,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         mobileNavTabActive: {
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 10,
-            backgroundColor: colors.primary,
+            backgroundColor: colors.glassActiveBg,
         },
         mobileNavTabText: {
             fontSize: 14,
@@ -3722,7 +3728,7 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
         mobileNavTabTextActive: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         mobileTopBarRight: {
             flexDirection: 'row',
@@ -3733,7 +3739,9 @@ const createStyles = (colors: any, bottomInset: number = 0, topInset: number = 0
             width: 34,
             height: 34,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },

@@ -14,6 +14,7 @@ import {
     Animated,
 } from 'react-native';
 import { Play, Pause } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAudioPlayer, AudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { useTheme } from '../lib/theme';
 
@@ -249,12 +250,19 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
                 onPress={handlePlayPause}
                 disabled={isLoading}
             >
+                <LinearGradient
+                    colors={isPlaying
+                        ? ['rgba(120,175,255,0.45)', 'rgba(59,130,246,0.32)', 'rgba(37,99,235,0.24)']
+                        : ['rgba(255,255,255,0.20)', 'rgba(255,255,255,0.10)', 'rgba(255,255,255,0.05)']
+                    }
+                    style={StyleSheet.absoluteFill}
+                />
                 {isLoading ? (
                     <View style={styles.loadingDot} />
                 ) : isPlaying ? (
-                    <Pause size={compact ? 20 : 24} color={colors.primary} />
+                    <Pause size={compact ? 18 : 22} color={isPlaying ? '#FFFFFF' : colors.primary} />
                 ) : (
-                    <Play size={compact ? 20 : 24} color={colors.primary} />
+                    <Play size={compact ? 18 : 22} color={colors.primary} />
                 )}
             </TouchableOpacity>
 
@@ -305,8 +313,8 @@ const createStyles = (
         container: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: colors.surfaceMuted,
-            borderRadius: compact ? 16 : 20,
+            backgroundColor: (colors as any).glassBg ?? 'rgba(255,255,255,0.08)',
+            borderRadius: compact ? 14 : 16,
             paddingHorizontal: compact ? 8 : 12,
             paddingVertical: compact ? 6 : 10,
             gap: compact ? 8 : 10,
@@ -321,12 +329,14 @@ const createStyles = (
             elevation: 4,
         },
         playButton: {
-            width: compact ? 28 : 36,
-            height: compact ? 28 : 36,
-            borderRadius: compact ? 14 : 18,
-            backgroundColor: colors.surface,
+            width: compact ? 30 : 38,
+            height: compact ? 30 : 38,
+            borderRadius: compact ? 10 : 12,
+            borderWidth: 1,
+            borderColor: (colors as any).glassBorder ?? 'rgba(255,255,255,0.22)',
             justifyContent: 'center',
             alignItems: 'center',
+            overflow: 'hidden',
         },
         loadingDot: {
             width: 8,

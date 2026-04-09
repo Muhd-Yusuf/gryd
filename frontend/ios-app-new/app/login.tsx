@@ -16,6 +16,7 @@ import { ArrowLeft, Sun, Moon } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '../lib/theme';
 import { authLoginOtpRequest, authLoginOtpVerify, setAuthUser } from '../lib/api';
+import { GradientBackground } from '../components/glass';
 
 type LoginStep = 'email' | 'otp';
 
@@ -187,7 +188,8 @@ const LoginScreen = () => {
 
     if (isMobileView) {
         return (
-            <SafeAreaView style={mobileStyles.container}>
+            <GradientBackground style={{ flex: 1 }}>
+                <SafeAreaView style={mobileStyles.container}>
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={mobileStyles.container}
@@ -339,11 +341,13 @@ const LoginScreen = () => {
                         </View>
                     </ScrollView>
                 </KeyboardAvoidingView>
-            </SafeAreaView>
+                </SafeAreaView>
+            </GradientBackground>
         );
     }
 
     return (
+        <GradientBackground style={{ flex: 1 }}>
         <SafeAreaView style={webStyles.container}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -499,6 +503,7 @@ const LoginScreen = () => {
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
+        </GradientBackground>
     );
 };
 
@@ -506,7 +511,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         shell: {
             flexGrow: 1,
@@ -590,17 +595,17 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         rightPanel: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'rgba(255,255,255,0.04)',
             padding: 48,
             justifyContent: 'center',
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
         },
         rightPanelStacked: {
             paddingTop: 32,
             borderLeftWidth: 0,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         themeToggle: {
             position: 'absolute',
@@ -608,7 +613,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             right: 20,
             padding: 10,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         formCard: {
             maxWidth: 360,
@@ -642,9 +647,9 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             marginBottom: 8,
         },
         input: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             height: 40,
             paddingHorizontal: 12,
@@ -654,7 +659,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             outlineStyle: 'none',
         },
         inputReadOnly: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             color: colors.textMuted,
         },
         otpContainer: {
@@ -666,9 +671,9 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 36,
             height: 40,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 10,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             fontSize: 12,
             fontFamily: 'Inter_600SemiBold',
             textAlign: 'center',
@@ -744,7 +749,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         scrollContent: {
             padding: 30,
@@ -761,7 +766,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         header: {
             marginBottom: 40,
@@ -793,9 +798,9 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.text,
         },
         input: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 16,
             height: 56,
             paddingHorizontal: 16,
@@ -803,7 +808,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.text,
         },
         inputReadOnly: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             color: colors.textMuted,
         },
         otpContainer: {
@@ -815,9 +820,9 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 48,
             height: 56,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             fontSize: 24,
             fontWeight: '600',
             textAlign: 'center',
@@ -825,7 +830,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         otpInputFilled: {
             borderColor: colors.primary,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'rgba(59,130,246,0.15)',
         },
         otpInputError: {
             borderColor: colors.error,

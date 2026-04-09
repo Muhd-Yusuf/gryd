@@ -8,6 +8,7 @@ import {
     ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../lib/theme';
 
 type UserAvatarProps = {
@@ -59,7 +60,9 @@ const UserAvatar = ({
                     width,
                     height,
                     borderRadius: radius,
-                    backgroundColor: colors.surfaceMuted,
+                    borderWidth: 1,
+                    borderColor: colors.glassBorder,
+                    backgroundColor: colors.glassBg,
                 },
                 style,
             ]}
@@ -71,9 +74,15 @@ const UserAvatar = ({
                     cachePolicy="memory-disk"
                 />
             ) : (
-                <Text style={[styles.initials, { color: colors.textMuted, fontSize }, textStyle]}>
-                    {initials}
-                </Text>
+                <>
+                    <LinearGradient
+                        colors={['rgba(99,155,255,0.22)', 'rgba(59,130,246,0.12)', 'rgba(255,255,255,0.04)']}
+                        style={[StyleSheet.absoluteFillObject, { borderRadius: radius }]}
+                    />
+                    <Text style={[styles.initials, { color: colors.text, fontSize }, textStyle]}>
+                        {initials}
+                    </Text>
+                </>
             )}
         </View>
     );

@@ -26,6 +26,7 @@ import { formatRelativeTime, formatMessageDate, Attachment, twemojiUrl } from '.
 import { cacheMessages, removeMessageFromCache, addMessageToCache, getCachedFriends, cacheFriends, getCachedSubgrids, cacheSubgrids } from '../../../lib/userCache';
 import { createOptimisticMessage, markMessageSent, markMessageFailed, isTempId, saveDraft, getDraft, clearDraft } from '../../../lib/messageQueue';
 import UserAvatar from '../../../components/UserAvatar';
+import { GlassRail } from '../../../components/glass';
 import VoiceMessagePlayer from '../../../components/VoiceMessagePlayer';
 import { useAgoraCall } from '../../../hooks';
 import { useCallContext } from '../../../contexts/CallContext';
@@ -196,7 +197,7 @@ const DirectMessagesScreen = () => {
     const isMobile = width < 900;
     // Calculate bottom padding for composer (handles iOS home indicator + Android nav buttons)
     const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
-    const styles = useMemo(() => createStyles(colors, bottomInset), [colors, bottomInset]);
+    const styles = useMemo(() => createStyles(colors, mode, bottomInset), [colors, mode, bottomInset]);
     const showCenterPanel = !isMobile;
     const router = useRouter();
     const params = useLocalSearchParams();
@@ -1167,7 +1168,7 @@ const DirectMessagesScreen = () => {
     }, [messages]);
 
     return (
-        <SafeAreaView style={styles.safe}>
+        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
             <KeyboardAvoidingView
                 style={[styles.page, isMobile && styles.pageMobile]}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1175,56 +1176,28 @@ const DirectMessagesScreen = () => {
             >
                 <View style={[styles.grid, isMobile && styles.gridMobile]}>
                     <View style={[styles.leftPanel, isCompact && styles.panelCompact]}>
-                        <View style={styles.leftRail}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.railLogo,
-                                    activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }
-                                ]}
-                                onPress={handleBack}
-                            >
-                                {activeSubgrid ? (
-                                    activeSubgrid.logoUrl ? (
-                                        <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.railLogoImage} cachePolicy="memory-disk" />
-                                    ) : (
-                                        <Text style={styles.railLogoText}>
-                                            {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
-                                        </Text>
-                                    )
-                                ) : null}
-                            </TouchableOpacity>
-                            {railItems.map((item) => {
+                        <GlassRail
+                            serverLogo={{
+                                uri: activeSubgrid?.logoUrl,
+                                name: activeSubgrid?.name,
+                                onPress: handleBack,
+                            }}
+                            items={railItems.map((item) => {
                                 const isActive = activeRail === item.id;
-                                const IconComponent = item.Icon;
-                                return (
-                                    <TouchableOpacity
-                                        key={item.id}
-                                        style={[styles.railButton, isActive && styles.railButtonActive]}
-                                        onPress={() => {
-                                            setActiveRail(item.id);
-                                            item.onPress?.();
-                                        }}
-                                    >
-                                        <IconComponent size={18} color={isActive ? colors.text : colors.textMuted} />
-                                    </TouchableOpacity>
-                                );
+                                return {
+                                    id: item.id,
+                                    icon: <item.Icon size={20} color={colors.textMuted} />,
+                                    activeIcon: <item.Icon size={20} color={colors.glassActiveText} />,
+                                    onPress: () => {
+                                        setActiveRail(item.id);
+                                        item.onPress?.();
+                                    },
+                                    isActive,
+                                };
                             })}
-                            <View style={styles.railDivider} />
-                            <TouchableOpacity
-                                style={styles.railButton}
-                                onPress={toggleTheme}
-                            >
-                                {mode === 'dark' ? (
-                                    <Sun size={18} color={colors.textMuted} />
-                                ) : (
-                                    <Moon size={18} color={colors.textMuted} />
-                                )}
-                            </TouchableOpacity>
-                            <View style={{ flex: 1 }} />
-                            <TouchableOpacity style={styles.exitButton} onPress={handleBack}>
-                                <X size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        </View>
+                            onToggleTheme={toggleTheme}
+                            onLogout={handleBack}
+                        />
 
                         <View style={styles.dmPanel}>
                             <Text style={styles.panelTitle}>Direct Messages</Text>
@@ -1852,15 +1825,15 @@ const DirectMessagesScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset: number = 0) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], mode: 'light' | 'dark', bottomInset: number = 0) =>
     StyleSheet.create({
         safe: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         page: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         pageMobile: {
             padding: 0,
@@ -1875,7 +1848,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         leftPanel: {
             flexDirection: 'row',
             width: 380,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         panelCompact: {
             width: '100%',
@@ -1886,13 +1859,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             alignItems: 'center',
             gap: 12,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         railLogo: {
             width: 48,
             height: 48,
             borderRadius: 12,
-            backgroundColor: '#1E3A8A',
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 8,
@@ -1913,15 +1888,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 12,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         railButtonActive: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         railDivider: {
             width: 32,
             height: 1,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             marginVertical: 8,
         },
         exitButton: {
@@ -1935,6 +1910,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         dmPanel: {
             flex: 1,
             paddingVertical: 20,
+            paddingLeft: 16,
             paddingRight: 20,
             gap: 16,
         },
@@ -1954,7 +1930,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 12,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         addFriendsBtn: {
             flex: 1,
@@ -1965,8 +1941,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             height: 48,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         addFriendsText: {
             fontSize: 14,
@@ -1981,8 +1957,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
             marginTop: 12,
         },
         searchTextInput: {
@@ -2016,7 +1992,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 7,
             backgroundColor: '#6B7280',
             borderWidth: 2,
-            borderColor: colors.appBg,
+            borderColor: 'transparent',
         },
         avatarStatusOnline: {
             backgroundColor: '#22C55E',
@@ -2046,7 +2022,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingVertical: 12,
             borderRadius: 16,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         requestInfo: {
             flex: 1,
@@ -2071,8 +2047,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         dmRow: {
             flexDirection: 'row',
@@ -2081,9 +2057,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 12,
             paddingHorizontal: 12,
             borderRadius: 16,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         dmRowActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassActiveBg,
+            borderColor: colors.primary,
         },
         onlineIndicatorWrap: {
             position: 'relative',
@@ -2102,7 +2082,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 7,
             backgroundColor: '#6B7280',
             borderWidth: 2,
-            borderColor: colors.appBg,
+            borderColor: 'transparent',
         },
         onlineIndicatorActive: {
             backgroundColor: '#22C55E',
@@ -2136,15 +2116,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingVertical: 10,
             borderRadius: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         unblockButton: {
             paddingHorizontal: 12,
             paddingVertical: 6,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         unblockText: {
             fontSize: 11,
@@ -2153,10 +2133,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         centerPanel: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 24,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             margin: 16,
             overflow: 'hidden',
         },
@@ -2166,7 +2146,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'space-between',
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         chatHeaderLeft: {
             flexDirection: 'row',
@@ -2193,7 +2173,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 18,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         messageList: {
             flex: 1,
@@ -2225,15 +2205,18 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         },
         messageBubble: {
             maxWidth: '70%',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 18,
             borderBottomLeftRadius: 4,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             padding: 14,
         },
         messageBubbleMe: {
-            backgroundColor: '#3B82F6',
+            backgroundColor: colors.primary,
             borderBottomLeftRadius: 18,
             borderBottomRightRadius: 4,
+            borderColor: 'transparent',
         },
         messageText: {
             fontSize: 14,
@@ -2264,7 +2247,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             alignItems: 'center',
             paddingVertical: 12,
             paddingHorizontal: 16,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             marginBottom: 12,
             gap: 12,
@@ -2273,7 +2256,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -2300,7 +2283,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -2320,7 +2303,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
             paddingHorizontal: 12,
             paddingVertical: 10,
@@ -2340,7 +2323,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 12,
             paddingBottom: bottomInset + 12,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
         },
         composerIcon: {
             width: 40,
@@ -2356,7 +2339,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         sendButton: {
             width: 40,
@@ -2364,7 +2347,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 20,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#3B82F6',
+            backgroundColor: colors.primary,
         },
         modalOverlay: {
             flex: 1,
@@ -2380,10 +2363,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: '100%',
             maxWidth: 400,
             maxHeight: '80%',
-            backgroundColor: colors.surface,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderRadius: 24,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: 20,
             gap: 16,
         },
@@ -2403,18 +2386,18 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 18,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         modalSearch: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 10,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
             paddingHorizontal: 14,
             paddingVertical: 10,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         modalSearchInput: {
             flex: 1,
@@ -2432,7 +2415,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             paddingHorizontal: 12,
             borderRadius: 14,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         modalAvatar: {
             width: 40,
@@ -2448,8 +2431,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 8,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         modalActionDisabled: {
             opacity: 0.6,
@@ -2471,13 +2454,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 18,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         // Outgoing call modal styles
         outgoingCallCard: {
             width: '100%',
             maxWidth: 400,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 24,
             padding: 24,
             alignItems: 'center',
@@ -2508,10 +2491,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             height: 140,
             borderRadius: 70,
             borderWidth: 3,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         callAvatarLarge: {
             width: 120,
@@ -2533,7 +2516,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 16,
             overflow: 'hidden',
             position: 'relative',
-            backgroundColor: '#1a1a1a',
+            backgroundColor: 'rgba(255,255,255,0.06)',
         },
         mainVideoWrap: {
             flex: 1,
@@ -2558,11 +2541,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 100,
             height: 140,
             borderRadius: 12,
-            backgroundColor: '#2a2a2a',
+            backgroundColor: 'rgba(255,255,255,0.06)',
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 2,
-            borderColor: '#3a3a3a',
+            borderColor: colors.glassBorder,
         },
         selfVideoAvatar: {
             width: 50,
@@ -2585,7 +2568,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             borderRadius: 26,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         endCallBtn: {
             width: 60,
@@ -2598,7 +2581,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         // Composer container
         composerContainer: {
             borderTopWidth: 1,
-            borderTopColor: colors.border,
+            borderTopColor: colors.glassBorder,
             paddingTop: 12,
             paddingHorizontal: 12,
             paddingBottom: bottomInset + 12,
@@ -2614,7 +2597,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 70,
             height: 70,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             position: 'relative',
             alignItems: 'center',
             justifyContent: 'center',
@@ -2659,7 +2642,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -2702,8 +2685,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
         emojiModalCard: {
             width: 320,
             maxHeight: 400,
-            backgroundColor: colors.surface,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             overflow: 'hidden',
         },
         emojiModalHeader: {
@@ -2712,7 +2697,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'space-between',
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         emojiModalTitle: {
             fontSize: 16,
@@ -2751,10 +2736,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: '100%',
             maxWidth: 400,
             maxHeight: '80%',
-            backgroundColor: colors.surface,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderRadius: 24,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: 20,
         },
         settingsModalHeader: {
@@ -2785,7 +2770,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             justifyContent: 'space-between',
             paddingVertical: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         settingsToggleInfo: {
             flexDirection: 'row',
@@ -2807,23 +2792,23 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             width: 44,
             height: 24,
             borderRadius: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             padding: 2,
         },
         settingsToggleActive: {
-            backgroundColor: '#3B82F6',
+            backgroundColor: colors.primary,
         },
         settingsToggleKnob: {
             width: 20,
             height: 20,
             borderRadius: 10,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         settingsToggleKnobActive: {
             transform: [{ translateX: 20 }],
         },
         settingsSaveBtn: {
-            backgroundColor: '#3B82F6',
+            backgroundColor: colors.primary,
             borderRadius: 12,
             paddingVertical: 14,
             alignItems: 'center',
@@ -2840,7 +2825,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 24,
             paddingHorizontal: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
             marginBottom: 16,
         },
         profileAvatarWrap: {
@@ -2898,8 +2883,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomInset
             paddingVertical: 10,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         removeButtonText: {
             fontSize: 13,

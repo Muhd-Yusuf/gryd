@@ -67,12 +67,12 @@ export default function CreditUnionServerPage() {
     }, [userQuery.data, myRoleQuery.data]);
 
     if (loading) {
-        return <View style={[styles.container, { backgroundColor: colors.appBg }]} />;
+        return <View style={[styles.container, { backgroundColor: 'transparent' }]} />;
     }
 
     if (!hasAccess) {
         return (
-            <View style={[styles.container, { backgroundColor: colors.appBg }]}>
+            <View style={[styles.container, { backgroundColor: 'transparent' }]}>
                 <Text style={[styles.title, { color: colors.text }]}>Access Denied</Text>
                 <Text style={[styles.subtitle, { color: colors.textMuted }]}>
                     You don't have permission to access the admin dashboard.

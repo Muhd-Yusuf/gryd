@@ -315,7 +315,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         header: {
             flexDirection: 'row',
@@ -332,7 +332,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         logoContainer: {
             flexDirection: 'row',
@@ -352,7 +352,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 10,
             height: 10,
             borderRadius: 5,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
         },
         stepActive: {
             backgroundColor: colors.primary,
@@ -363,13 +363,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         stepLine: {
             width: 20,
             height: 2,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
         },
         stepLineCompleted: {
             backgroundColor: '#22C55E',
         },
         logoutButton: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 16,
             paddingVertical: 8,
             borderRadius: 8,
@@ -388,7 +388,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         card: {
             width: '100%',
             maxWidth: 500,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             padding: 32,
         },
@@ -421,11 +421,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         avatarPlaceholder: {
             width: '100%',
             height: '100%',
-            backgroundColor: colors.appBg,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 50,
         },
         avatarText: {
@@ -434,13 +434,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.textMuted,
         },
         editImageButton: {
-            backgroundColor: colors.text,
+            backgroundColor: colors.primary,
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 10,
         },
         editImageText: {
-            color: colors.appBg,
+            color: colors.primaryText,
             fontSize: 14,
             fontWeight: '600',
         },
@@ -457,14 +457,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             marginBottom: 8,
         },
         fieldInput: {
-            backgroundColor: colors.appBg,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
             paddingHorizontal: 16,
             paddingVertical: 14,
             fontSize: 16,
-            color: colors.textMuted,
+            color: colors.text,
         },
         badgeContainer: {
             flexDirection: 'row',
@@ -480,7 +480,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             fontWeight: '600',
         },
         errorContainer: {
-            backgroundColor: colors.appBg,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
             borderColor: colors.error,
             padding: 12,

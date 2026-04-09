@@ -16,6 +16,7 @@ import {
     RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { ArrowLeft, Heart, MessageCircle, Mic, MicOff, MoreHorizontal, Paperclip, Repeat2, Search, Send, Smile, Sticker, Trash2, X, Calendar, BadgeCheck, Megaphone, Clock, MapPin, PlayCircle, File, Flag, Check, CheckCheck, AlertCircle } from 'lucide-react-native';
@@ -178,13 +179,13 @@ const normalizeAttachments = (attachments?: Array<Attachment | string>) => {
 const REPORT_REASONS = ['Spam', 'Harassment', 'Hate speech', 'Scam', 'Nudity', 'Other'];
 
 const SubChannelScreen = () => {
-    const { colors } = useTheme();
+    const { colors, mode } = useTheme();
     const { width } = useWindowDimensions();
     const insets = useSafeAreaInsets();
     const isMobile = width < 768;
     // Calculate bottom padding for composer (handles iOS home indicator + Android nav buttons)
     const bottomInset = Platform.OS !== 'web' && isMobile ? Math.max(insets.bottom, 12) : 0;
-    const styles = useMemo(() => createStyles(colors, isMobile, bottomInset), [colors, isMobile, bottomInset]);
+    const styles = useMemo(() => createStyles(colors, mode, isMobile, bottomInset), [colors, mode, isMobile, bottomInset]);
     const router = useRouter();
     const navigation = useNavigation();
     const params = useLocalSearchParams();
@@ -1478,8 +1479,7 @@ const SubChannelScreen = () => {
     }, [channelId, startTyping, stopTyping]);
 
     return (
-        <SafeAreaView style={styles.safe}>
-            <View pointerEvents="none" style={styles.gridBackground} />
+        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
             <KeyboardAvoidingView
                 style={styles.page}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1487,21 +1487,39 @@ const SubChannelScreen = () => {
             >
                 <View style={styles.card}>
                     <View style={styles.header}>
-                        <TouchableOpacity style={styles.iconButton} onPress={handleBack}>
+                        <TouchableOpacity style={[styles.iconButton, { overflow: 'hidden' }]} onPress={handleBack}>
+                            <LinearGradient
+                                colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 0, y: 1 }}
+                            />
                             <ArrowLeft size={18} color={colors.text} />
                         </TouchableOpacity>
                         <Text style={styles.title}>{showEventsView ? 'Events' : `# ${channelName || 'general'}`}</Text>
                         <View style={styles.headerActions}>
                             <TouchableOpacity
-                                style={[styles.iconButton, showEventsView && styles.iconButtonActive]}
+                                style={[styles.iconButton, showEventsView && styles.iconButtonActive, { overflow: 'hidden' }]}
                                 onPress={() => setShowEventsView(!showEventsView)}
                             >
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 <Calendar size={16} color={showEventsView ? colors.primary : colors.textMuted} />
                                 {events.length > 0 && !showEventsView && (
                                     <View style={styles.eventDot} />
                                 )}
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.iconButton}>
+                            <TouchableOpacity style={[styles.iconButton, { overflow: 'hidden' }]}>
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 <Search size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
@@ -1849,7 +1867,13 @@ const SubChannelScreen = () => {
                     {!showEventsView && (
                         recording ? (
                             <View style={styles.recordingContainer}>
-                                <TouchableOpacity style={styles.recordingCancelButton} onPress={handleCancelRecording}>
+                                <TouchableOpacity style={[styles.recordingCancelButton, { overflow: 'hidden' }]} onPress={handleCancelRecording}>
+                                    <LinearGradient
+                                        colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                        style={StyleSheet.absoluteFill}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 0, y: 1 }}
+                                    />
                                     <X size={20} color={colors.dangerText} />
                                 </TouchableOpacity>
                                 <View style={styles.recordingInfo}>
@@ -1867,7 +1891,13 @@ const SubChannelScreen = () => {
                                         ))}
                                     </View>
                                 </View>
-                                <TouchableOpacity style={styles.recordingSendButton} onPress={handleStopRecording}>
+                                <TouchableOpacity style={[styles.recordingSendButton, { overflow: 'hidden' }]} onPress={handleStopRecording}>
+                                    <LinearGradient
+                                        colors={['rgba(59,130,246,0.45)', 'rgba(59,130,246,0.25)', 'rgba(37,99,235,0.18)']}
+                                        style={StyleSheet.absoluteFill}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 0, y: 1 }}
+                                    />
                                     <Send size={18} color="#FFF" />
                                 </TouchableOpacity>
                             </View>
@@ -1875,7 +1905,13 @@ const SubChannelScreen = () => {
                             <View style={styles.composer}>
                                 {/* Only show emoji/sticker buttons on web - mobile users can use native keyboard emoji */}
                                 {Platform.OS === 'web' && (
-                                    <TouchableOpacity style={styles.composerIcon} onPress={() => setEmojiOpen(true)}>
+                                    <TouchableOpacity style={[styles.composerIcon, { overflow: 'hidden' }]} onPress={() => setEmojiOpen(true)}>
+                                        <LinearGradient
+                                            colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                            style={StyleSheet.absoluteFill}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 0, y: 1 }}
+                                        />
                                         <Smile size={18} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 )}
@@ -1888,26 +1924,54 @@ const SubChannelScreen = () => {
                                     multiline
                                 />
                                 {/* Attach button - always visible */}
-                                <TouchableOpacity style={styles.composerIcon} onPress={handleAttachPress}>
+                                <TouchableOpacity style={[styles.composerIcon, { overflow: 'hidden' }]} onPress={handleAttachPress}>
+                                    <LinearGradient
+                                        colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                        style={StyleSheet.absoluteFill}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 0, y: 1 }}
+                                    />
                                     <Paperclip size={18} color={colors.textMuted} />
                                 </TouchableOpacity>
                                 {/* Voice recording - only on web (mobile has dedicated mic button below) */}
                                 {Platform.OS === 'web' && (
-                                    <TouchableOpacity style={styles.composerIcon} onPress={handleStartRecording}>
+                                    <TouchableOpacity style={[styles.composerIcon, { overflow: 'hidden' }]} onPress={handleStartRecording}>
+                                        <LinearGradient
+                                            colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                            style={StyleSheet.absoluteFill}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 0, y: 1 }}
+                                        />
                                         <Mic size={18} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 )}
                                 {/* Send button - always visible */}
                                 <TouchableOpacity
-                                    style={[styles.sendButton, !draft.trim() && !attachments.length && styles.sendButtonDisabled]}
+                                    style={[styles.sendButton, !draft.trim() && !attachments.length && styles.sendButtonDisabled, { overflow: 'hidden' }]}
                                     onPress={handleSend}
                                     disabled={!draft.trim() && !attachments.length}
                                 >
+                                    <LinearGradient
+                                        colors={
+                                            draft.trim() || attachments.length
+                                                ? ['rgba(59,130,246,0.45)', 'rgba(59,130,246,0.25)', 'rgba(37,99,235,0.18)']
+                                                : ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)']
+                                        }
+                                        style={StyleSheet.absoluteFill}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 0, y: 1 }}
+                                    />
                                     <Send size={16} color={draft.trim() || attachments.length ? colors.primaryText : colors.textMuted} />
                                 </TouchableOpacity>
                                 {/* Voice mic - only on mobile when no content */}
                                 {Platform.OS !== 'web' && !draft.trim() && !attachments.length && (
-                                    <TouchableOpacity style={styles.voiceMicButton} onPress={handleStartRecording}>
+                                    <TouchableOpacity style={[styles.voiceMicButton, { overflow: 'hidden' }]} onPress={handleStartRecording}>
+                                        <LinearGradient
+                                            colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                            style={StyleSheet.absoluteFill}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 0, y: 1 }}
+                                        />
                                         <Mic size={18} color={colors.textMuted} />
                                     </TouchableOpacity>
                                 )}
@@ -1923,7 +1987,13 @@ const SubChannelScreen = () => {
                     <View style={styles.reportCard}>
                         <View style={styles.reportHeader}>
                             <Text style={styles.reportTitle}>Report content</Text>
-                            <TouchableOpacity onPress={() => setReportModalOpen(false)}>
+                            <TouchableOpacity style={[styles.iconButton, { overflow: 'hidden' }]} onPress={() => setReportModalOpen(false)}>
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 <X size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
@@ -1955,14 +2025,26 @@ const SubChannelScreen = () => {
                             </View>
                         )}
                         <View style={styles.reportActions}>
-                            <TouchableOpacity style={styles.reportCancelBtn} onPress={() => setReportModalOpen(false)}>
+                            <TouchableOpacity style={[styles.reportCancelBtn, { overflow: 'hidden' }]} onPress={() => setReportModalOpen(false)}>
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 <Text style={styles.reportCancelText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.reportSubmitBtn, reportSubmitting && styles.reportSubmitBtnDisabled]}
+                                style={[styles.reportSubmitBtn, reportSubmitting && styles.reportSubmitBtnDisabled, { overflow: 'hidden' }]}
                                 onPress={submitReport}
                                 disabled={reportSubmitting}
                             >
+                                <LinearGradient
+                                    colors={['rgba(59,130,246,0.45)', 'rgba(59,130,246,0.25)', 'rgba(37,99,235,0.18)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 <Text style={styles.reportSubmitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
                             </TouchableOpacity>
                         </View>
@@ -1977,7 +2059,13 @@ const SubChannelScreen = () => {
                     <View style={styles.commentModalContent}>
                         <View style={styles.commentModalHeader}>
                             <Text style={styles.commentModalTitle}>Comments</Text>
-                            <TouchableOpacity onPress={() => setCommentModalOpen(false)}>
+                            <TouchableOpacity style={[styles.iconButton, { overflow: 'hidden' }]} onPress={() => setCommentModalOpen(false)}>
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 <X size={20} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
@@ -2034,10 +2122,16 @@ const SubChannelScreen = () => {
                                 multiline
                             />
                             <TouchableOpacity
-                                style={[styles.commentSendBtn, (!commentText.trim() || commentLoading) && styles.commentSendBtnDisabled]}
+                                style={[styles.commentSendBtn, (!commentText.trim() || commentLoading) && styles.commentSendBtnDisabled, { overflow: 'hidden' }]}
                                 onPress={handleSubmitComment}
                                 disabled={!commentText.trim() || commentLoading}
                             >
+                                <LinearGradient
+                                    colors={['rgba(59,130,246,0.45)', 'rgba(59,130,246,0.25)', 'rgba(37,99,235,0.18)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 {commentLoading ? (
                                     <Text style={styles.commentSendText}>...</Text>
                                 ) : (
@@ -2059,7 +2153,13 @@ const SubChannelScreen = () => {
                     <View style={styles.pickerCard}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Emoji</Text>
-                            <TouchableOpacity style={styles.iconButton} onPress={() => setEmojiOpen(false)}>
+                            <TouchableOpacity style={[styles.iconButton, { overflow: 'hidden' }]} onPress={() => setEmojiOpen(false)}>
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 <X size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
@@ -2095,7 +2195,13 @@ const SubChannelScreen = () => {
                     <View style={styles.pickerCard}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Stickers</Text>
-                            <TouchableOpacity style={styles.iconButton} onPress={() => setStickerOpen(false)}>
+                            <TouchableOpacity style={[styles.iconButton, { overflow: 'hidden' }]} onPress={() => setStickerOpen(false)}>
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                />
                                 <X size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
@@ -2160,38 +2266,24 @@ const SubChannelScreen = () => {
     );
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: boolean = false, bottomInset: number = 0) =>
+const createStyles = (colors: ReturnType<typeof useTheme>['colors'], mode: 'light' | 'dark', isMobile: boolean = false, bottomInset: number = 0) =>
     StyleSheet.create({
         safe: {
             flex: 1,
-            backgroundColor: isMobile ? colors.surface : colors.appBg,
+            backgroundColor: 'transparent',
             position: 'relative',
         },
         page: {
             flex: 1,
             padding: isMobile ? 0 : 16,
-            backgroundColor: isMobile ? colors.surface : colors.appBg,
-        },
-        gridBackground: {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            ...(Platform.OS === 'web' && !isMobile
-                ? (({
-                    backgroundImage:
-                        'linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px), linear-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, 0.08) 1px, transparent 1px)',
-                    backgroundSize: '24px 24px, 24px 24px, 120px 120px, 120px 120px',
-                } as any))
-                : {}),
+            backgroundColor: 'transparent',
         },
         card: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: isMobile ? 0 : 24,
             borderWidth: isMobile ? 0 : 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: isMobile ? 12 : 16,
             gap: 12,
         },
@@ -2202,12 +2294,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             marginBottom: 8,
             paddingHorizontal: isMobile ? 4 : 0,
             paddingTop: isMobile ? 16 : 0,
+            backgroundColor: (colors as any).glassNavBg || colors.glassBg,
+            borderBottomWidth: isMobile ? 1 : 0,
+            borderBottomColor: colors.glassBorder,
         },
         title: {
             fontSize: isMobile ? 18 : 16,
             fontWeight: '700',
             color: colors.text,
             flex: 1,
+            marginLeft: 8,
         },
         headerActions: {
             flexDirection: 'row',
@@ -2220,8 +2316,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             position: 'relative',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.22)',
         },
         iconButtonActive: {
             backgroundColor: colors.primary + '20',
@@ -2256,9 +2354,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             textAlign: 'center',
         },
         mobileEventCard: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 14,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         mobileEventCardHeader: {
             flexDirection: 'row',
@@ -2345,10 +2445,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
         feedCard: {
             borderRadius: 18,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             padding: 16,
             gap: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             overflow: 'visible',
         },
         feedHeader: {
@@ -2371,10 +2471,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             position: 'absolute',
             top: 28,
             right: 0,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.15,
@@ -2410,10 +2510,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
         },
         floatingMenuDropdown: {
             position: 'fixed' as any,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.2,
@@ -2526,7 +2626,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             backgroundColor: 'rgba(0,0,0,0.5)',
         },
         commentModalContent: {
-            backgroundColor: colors.glassBg,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
             maxHeight: '80%',
@@ -2535,11 +2635,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             borderLeftWidth: 1,
             borderRightWidth: 1,
             borderColor: colors.glassBorder,
-            ...(Platform.OS === 'web' ? {
-                // @ts-ignore
-                backdropFilter: 'blur(28px)',
-                WebkitBackdropFilter: 'blur(28px)',
-            } : {}),
         },
         commentModalHeader: {
             flexDirection: 'row',
@@ -2658,6 +2753,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             backgroundColor: colors.primary,
             alignItems: 'center',
             justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.22)',
         },
         commentSendBtnDisabled: {
             opacity: 0.5,
@@ -2667,7 +2764,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             fontWeight: '600',
         },
         reshareCard: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             padding: 12,
             marginTop: 8,
@@ -2736,7 +2833,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             width: '100%',
             height: 180,
             borderRadius: 16,
-            backgroundColor: '#1A1A2E',
+            backgroundColor: 'rgba(255,255,255,0.05)',
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -2752,7 +2849,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             paddingHorizontal: 12,
             paddingVertical: 10,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             maxWidth: 200,
         },
         fileLabel: {
@@ -2767,7 +2864,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             borderRadius: 14,
             paddingHorizontal: 12,
             paddingVertical: 8,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         audioDot: {
             width: 8,
@@ -2795,8 +2892,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         recordingText: {
             fontSize: 11,
@@ -2835,6 +2932,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.22)',
         },
         sendButton: {
             width: 36,
@@ -2843,18 +2942,22 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: colors.primary,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.22)',
         },
         sendButtonDisabled: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         voiceMicButton: {
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginLeft: 8,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.22)',
         },
         attachmentPreview: {
             flexDirection: 'row',
@@ -2877,9 +2980,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             paddingHorizontal: 10,
             paddingVertical: 8,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             maxWidth: 120,
         },
         attachmentPreviewFileName: {
@@ -2904,10 +3007,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             gap: 12,
             paddingVertical: 8,
             paddingHorizontal: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 24,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             height: 48,
             marginBottom: bottomInset,
         },
@@ -2917,7 +3020,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             borderRadius: 18,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.22)',
         },
         recordingInfo: {
             flex: 1,
@@ -2956,6 +3061,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: colors.primary,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.22)',
         },
         recordingIndicator: {
             flexDirection: 'row',
@@ -2963,7 +3070,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             gap: 8,
             paddingVertical: 8,
             paddingHorizontal: 12,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             borderRadius: 8,
         },
         recordingDot: {
@@ -2990,7 +3097,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
         reportCard: {
             width: '100%',
             maxWidth: 420,
-            backgroundColor: colors.glassBg,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderRadius: 16,
             padding: 20,
             borderWidth: 1,
@@ -3032,12 +3139,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             paddingHorizontal: 12,
             borderRadius: 14,
             borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
+            borderColor: colors.glassBorder,
+            backgroundColor: colors.glassBg,
         },
         reportReasonChipActive: {
-            backgroundColor: '#111111',
-            borderColor: '#111111',
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
         },
         reportReasonText: {
             fontSize: 12,
@@ -3060,11 +3167,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
         reportNotesInput: {
             minHeight: 80,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             padding: 12,
             color: colors.text,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
             textAlignVertical: 'top',
         },
         reportActions: {
@@ -3078,7 +3185,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             paddingHorizontal: 18,
             borderRadius: 18,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
         },
         reportCancelText: {
             fontSize: 12,
@@ -3088,7 +3195,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             paddingVertical: 10,
             paddingHorizontal: 18,
             borderRadius: 18,
-            backgroundColor: '#111111',
+            backgroundColor: colors.primary,
         },
         reportSubmitBtnDisabled: {
             opacity: 0.6,
@@ -3121,7 +3228,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
         pickerCard: {
             width: '100%',
             maxWidth: 360,
-            backgroundColor: colors.glassBg,
+            backgroundColor: mode === 'dark' ? 'rgba(10,12,24,0.97)' : 'rgba(248,249,255,0.97)',
             borderRadius: 20,
             borderWidth: 1,
             borderColor: colors.glassBorder,
@@ -3149,7 +3256,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], isMobile: b
             borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
         },
         pickerImage: {
             width: 28,

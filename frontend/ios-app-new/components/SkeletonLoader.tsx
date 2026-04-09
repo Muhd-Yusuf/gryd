@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet } from 'react-native';
+import { View, Animated, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../lib/theme';
 
 interface SkeletonProps {
@@ -25,7 +25,7 @@ const SkeletonItem: React.FC<SkeletonProps> = ({ width = '100%', height = 16, bo
     }, [opacity]);
 
     return (
-        <Animated.View style={[{ width: width as any, height, borderRadius, backgroundColor: colors.border, opacity }, style]} />
+        <Animated.View style={[{ width: width as any, height, borderRadius, backgroundColor: colors.glassBg, opacity }, style]} />
     );
 };
 
@@ -47,35 +47,41 @@ export const ChannelSkeleton: React.FC = () => (
     </View>
 );
 
-export const CardSkeleton: React.FC = () => (
-    <View style={skStyles.card}>
-        <SkeletonItem width="60%" height={16} />
-        <SkeletonItem width="100%" height={12} style={{ marginTop: 8 }} />
-        <SkeletonItem width="40%" height={12} style={{ marginTop: 4 }} />
-    </View>
-);
+export const CardSkeleton: React.FC = () => {
+    const { colors } = useTheme();
+    return (
+        <View style={[skStyles.card, { backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder }]}>
+            <SkeletonItem width="60%" height={16} />
+            <SkeletonItem width="100%" height={12} style={{ marginTop: 8 }} />
+            <SkeletonItem width="40%" height={12} style={{ marginTop: 4 }} />
+        </View>
+    );
+};
 
-export const FeedSkeleton: React.FC<{ count?: number }> = ({ count = 3 }) => (
-    <View style={skStyles.feedContainer}>
-        {Array.from({ length: count }).map((_, i) => (
-            <View key={i} style={skStyles.feedItem}>
-                <View style={skStyles.feedHeader}>
-                    <SkeletonItem width={40} height={40} borderRadius={20} />
-                    <View style={{ flex: 1, gap: 4 }}>
-                        <SkeletonItem width={120} height={14} />
-                        <SkeletonItem width={80} height={10} />
+export const FeedSkeleton: React.FC<{ count?: number }> = ({ count = 3 }) => {
+    const { colors } = useTheme();
+    return (
+        <View style={skStyles.feedContainer}>
+            {Array.from({ length: count }).map((_, i) => (
+                <View key={i} style={[skStyles.feedItem, { backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder }]}>
+                    <View style={skStyles.feedHeader}>
+                        <SkeletonItem width={40} height={40} borderRadius={20} />
+                        <View style={{ flex: 1, gap: 4 }}>
+                            <SkeletonItem width={120} height={14} />
+                            <SkeletonItem width={80} height={10} />
+                        </View>
+                    </View>
+                    <SkeletonItem width="100%" height={60} style={{ marginTop: 12 }} borderRadius={8} />
+                    <View style={skStyles.feedActions}>
+                        <SkeletonItem width={60} height={12} />
+                        <SkeletonItem width={60} height={12} />
+                        <SkeletonItem width={60} height={12} />
                     </View>
                 </View>
-                <SkeletonItem width="100%" height={60} style={{ marginTop: 12 }} borderRadius={8} />
-                <View style={skStyles.feedActions}>
-                    <SkeletonItem width={60} height={12} />
-                    <SkeletonItem width={60} height={12} />
-                    <SkeletonItem width={60} height={12} />
-                </View>
-            </View>
-        ))}
-    </View>
-);
+            ))}
+        </View>
+    );
+};
 
 const skStyles = StyleSheet.create({
     messageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, paddingHorizontal: 16 },

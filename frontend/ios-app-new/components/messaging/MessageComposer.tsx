@@ -20,6 +20,7 @@ import {
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Trash2, Send, File, X, Plus, Smile, Mic } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync } from 'expo-audio';
 import { useTheme } from '../../lib/theme';
 
@@ -196,14 +197,18 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                     <View style={styles.recordingRow}>
                         {/* Cancel button */}
                         <TouchableOpacity
-                            style={[styles.recordingBtn, { backgroundColor: colors.surfaceMuted }]}
+                            style={[styles.recordingBtn, { borderColor: 'rgba(239,68,68,0.45)' }]}
                             onPress={() => stopRecording(false)}
                         >
-                            <Trash2 size={24} color="#EF4444" />
+                            <LinearGradient
+                                colors={['rgba(239,68,68,0.28)', 'rgba(220,38,38,0.18)']}
+                                style={StyleSheet.absoluteFill}
+                            />
+                            <Trash2 size={22} color="#EF4444" />
                         </TouchableOpacity>
 
                         {/* Waveform or indicator */}
-                        <View style={[styles.waveformContainer, { backgroundColor: colors.surfaceMuted }]}>
+                        <View style={[styles.waveformContainer, { backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder }]}>
                             {showWaveform ? (
                                 <View style={styles.waveformBars}>
                                     {waveformAnims.map((anim, i) => (
@@ -234,10 +239,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
                         {/* Send button */}
                         <TouchableOpacity
-                            style={[styles.recordingBtn, { backgroundColor: '#22C55E' }]}
+                            style={[styles.recordingBtn, { borderColor: 'rgba(34,197,94,0.55)' }]}
                             onPress={() => stopRecording(true)}
                         >
-                            <Send size={24} color="#FFFFFF" />
+                            <LinearGradient
+                                colors={['rgba(74,222,128,0.40)', 'rgba(34,197,94,0.30)', 'rgba(22,163,74,0.22)']}
+                                style={StyleSheet.absoluteFill}
+                            />
+                            <Send size={22} color="#22C55E" />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -260,7 +269,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                             {att.type.startsWith('image/') ? (
                                 <Image source={{ uri: att.uri }} style={styles.attachmentThumb} cachePolicy="memory-disk" />
                             ) : (
-                                <View style={[styles.attachmentFileThumb, { backgroundColor: colors.surfaceMuted }]}>
+                                <View style={[styles.attachmentFileThumb, { backgroundColor: colors.glassBg }]}>
                                     <File size={24} color={colors.textMuted} />
                                 </View>
                             )}
@@ -282,16 +291,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 {/* Add attachment button */}
                 {(onAttachImage || onAttachFile) && (
                     <TouchableOpacity
-                        style={[styles.iconButton, { backgroundColor: colors.surfaceMuted }]}
+                        style={styles.iconButton}
                         onPress={onAttachFile || onAttachImage}
                         disabled={disabled}
                     >
-                        <Plus size={24} color={colors.textMuted} />
+                        <LinearGradient
+                            colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)']}
+                            style={StyleSheet.absoluteFill}
+                        />
+                        <Plus size={22} color={colors.textMuted} />
                     </TouchableOpacity>
                 )}
 
                 {/* Input wrapper */}
-                <View style={[styles.inputWrapper, { backgroundColor: colors.surfaceMuted }]}>
+                <View style={[styles.inputWrapper, { backgroundColor: colors.glassBg }]}>
                     {/* Text input - uses native keyboard with emoji support */}
                     <TextInput
                         ref={inputRef}
@@ -315,36 +328,47 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                     <TouchableOpacity
                         style={[
                             styles.inlineSendButton,
-                            { backgroundColor: hasContent ? colors.primary : colors.surfaceMuted }
+                            { borderColor: hasContent ? 'rgba(100,168,255,0.55)' : 'rgba(255,255,255,0.14)' },
                         ]}
                         onPress={handleSend}
                         disabled={disabled || !hasContent}
                     >
-                        <Send
-                            size={20}
-                            color={hasContent ? '#FFFFFF' : colors.textMuted}
+                        <LinearGradient
+                            colors={hasContent
+                                ? ['rgba(120,175,255,0.45)', 'rgba(59,130,246,0.35)', 'rgba(37,99,235,0.28)']
+                                : ['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.06)']}
+                            style={StyleSheet.absoluteFill}
                         />
+                        <Send size={18} color={hasContent ? '#FFFFFF' : colors.textSubtle} />
                     </TouchableOpacity>
                 </View>
 
                 {/* Mic button for voice recording - only on mobile when no content */}
                 {Platform.OS !== 'web' && !hasContent && enableVoiceRecording && (
                     <TouchableOpacity
-                        style={[styles.iconButton, { backgroundColor: colors.surfaceMuted }]}
+                        style={styles.iconButton}
                         onPress={startRecording}
                         disabled={disabled}
                     >
-                        <Mic size={24} color={colors.textMuted} />
+                        <LinearGradient
+                            colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)']}
+                            style={StyleSheet.absoluteFill}
+                        />
+                        <Mic size={22} color={colors.textMuted} />
                     </TouchableOpacity>
                 )}
 
                 {/* Send button - only show on web */}
                 {Platform.OS === 'web' && hasContent && (
                     <TouchableOpacity
-                        style={[styles.sendButton, { backgroundColor: colors.primary }]}
+                        style={styles.sendButton}
                         onPress={handleSend}
                         disabled={disabled}
                     >
+                        <LinearGradient
+                            colors={['rgba(120,175,255,0.45)', 'rgba(59,130,246,0.35)', 'rgba(37,99,235,0.28)']}
+                            style={StyleSheet.absoluteFill}
+                        />
                         <Send size={20} color="#FFFFFF" />
                     </TouchableOpacity>
                 )}
@@ -353,15 +377,15 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             {/* iOS InputAccessoryView - keeps send button visible above keyboard */}
             {Platform.OS === 'ios' && (
                 <InputAccessoryView nativeID={inputAccessoryViewID}>
-                    <View style={[styles.accessoryContainer, { backgroundColor: colors.appBg, borderTopColor: colors.border }]}>
-                        <View style={[styles.accessoryInputWrapper, { backgroundColor: colors.surfaceMuted }]}>
+                    <View style={[styles.accessoryContainer, { backgroundColor: 'transparent', borderTopColor: colors.glassBorder }]}>
+                        <View style={[styles.accessoryInputWrapper, { backgroundColor: colors.glassBg }]}>
                             <Text style={[styles.accessoryPreview, { color: colors.textMuted }]} numberOfLines={1}>
                                 {message || placeholder}
                             </Text>
                             <TouchableOpacity
                                 style={[
                                     styles.accessorySendButton,
-                                    { backgroundColor: hasContent ? colors.primary : colors.surfaceMuted }
+                                    { backgroundColor: hasContent ? colors.primary : colors.glassBg }
                                 ]}
                                 onPress={handleSend}
                                 disabled={disabled || !hasContent}
@@ -402,11 +426,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomPaddi
         iconButton: {
             width: 44,
             height: 44,
-            borderRadius: 22,
+            borderRadius: 14,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 1,
-            borderColor: colors.glassBorder,
+            borderColor: 'rgba(255,255,255,0.28)',
+            overflow: 'hidden',
         },
         inputWrapper: {
             flex: 1,
@@ -440,18 +465,23 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomPaddi
         sendButton: {
             width: 44,
             height: 44,
-            borderRadius: 22,
+            borderRadius: 14,
             justifyContent: 'center',
             alignItems: 'center',
+            borderWidth: 1,
+            borderColor: 'rgba(100,168,255,0.55)',
+            overflow: 'hidden',
         },
         inlineSendButton: {
             width: 36,
             height: 36,
-            borderRadius: 18,
+            borderRadius: 11,
             justifyContent: 'center',
             alignItems: 'center',
             marginRight: 4,
             marginBottom: 6,
+            borderWidth: 1,
+            overflow: 'hidden',
         },
         // Attachment preview
         attachmentPreview: {
@@ -498,9 +528,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors'], bottomPaddi
         recordingBtn: {
             width: 44,
             height: 44,
-            borderRadius: 22,
+            borderRadius: 14,
             justifyContent: 'center',
             alignItems: 'center',
+            borderWidth: 1,
+            overflow: 'hidden',
         },
         waveformContainer: {
             flex: 1,

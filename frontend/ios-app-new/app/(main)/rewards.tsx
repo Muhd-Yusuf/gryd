@@ -1,12 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     StyleSheet,
     Text,
     View,
-    TextInput,
     TouchableOpacity,
     ScrollView,
-    Platform,
     useWindowDimensions
 } from 'react-native';
 import {
@@ -15,92 +13,98 @@ import {
     MousePointerClick,
     Users,
     CreditCard,
-    Copy,
     ChevronDown
 } from 'lucide-react-native';
 import ResponsiveLayout from '../../components/ResponsiveLayout';
+import { useTheme } from '../../lib/theme';
 
 const RewardsScreen = () => {
+    const { colors } = useTheme();
     const { width } = useWindowDimensions();
     const isCompact = width < 768;
-    const gridLineStyle = isCompact ? [styles.gridLine, styles.gridLineCompact] : styles.gridLine;
+    const s = useMemo(() => createStyles(colors), [colors]);
+    const gridLineStyle = isCompact ? [s.gridLine, s.gridLineCompact] : s.gridLine;
 
     return (
         <ResponsiveLayout>
-            <View style={[styles.container, isCompact && styles.containerCompact]}>
+            <View style={[s.container, isCompact && s.containerCompact]}>
                 {/* Header */}
-                <View style={[styles.header, isCompact && styles.headerCompact]}>
-                    <Text style={styles.pageTitle}>Affiliate Program</Text>
-                    <TouchableOpacity style={[styles.addBtn, isCompact && styles.addBtnCompact]}>
+                <View style={[s.header, isCompact && s.headerCompact]}>
+                    <Text style={s.pageTitle}>Affiliate Program</Text>
+                    <TouchableOpacity style={[s.addBtn, isCompact && s.addBtnCompact]}>
                         <Plus size={16} color="#FFF" />
-                        <Text style={styles.addBtnText}>Add Payment method</Text>
+                        <Text style={s.addBtnText}>Add Payment method</Text>
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
 
-                    <Text style={styles.sectionTitle}>Your Referral Stats</Text>
+                    <Text style={s.sectionTitle}>Your Referral Stats</Text>
 
                     {/* Stats Row */}
-                    <View style={[styles.statsRow, isCompact && styles.statsRowCompact]}>
+                    <View style={[s.statsRow, isCompact && s.statsRowCompact]}>
                         <StatsCard
+                            colors={colors}
                             title="Total Earnings"
                             value="$250.00"
                             icon={DollarSign}
-                            iconBg="#000"
+                            iconBg={colors.primary}
                             iconColor="#FFF"
                             isCompact={isCompact}
                         />
                         <StatsCard
+                            colors={colors}
                             title="Clicks"
                             value="120"
                             icon={MousePointerClick}
-                            iconBg="#F3F4F6"
-                            iconColor="#374151"
+                            iconBg={colors.glassBg}
+                            iconColor={colors.text}
                             isCompact={isCompact}
                         />
                         <StatsCard
+                            colors={colors}
                             title="Total Referrals"
                             value="50"
                             icon={Users}
-                            iconBg="#F3F4F6"
-                            iconColor="#374151"
+                            iconBg={colors.glassBg}
+                            iconColor={colors.text}
                             isCompact={isCompact}
                         />
                         <StatsCard
+                            colors={colors}
                             title="Next Payout"
                             value="$50.00"
                             icon={CreditCard}
-                            iconBg="#F3F4F6"
-                            iconColor="#374151"
+                            iconBg={colors.glassBg}
+                            iconColor={colors.text}
                             isCompact={isCompact}
                         />
                     </View>
 
                     {/* Main Grid */}
-                    <View style={[styles.gridRow, !isCompact && styles.gridRowTall, isCompact && styles.gridRowCompact]}>
+                    <View style={[s.gridRow, !isCompact && s.gridRowTall, isCompact && s.gridRowCompact]}>
                         {/* Left: Referral Chart Mock */}
-                        <View style={[styles.card, isCompact && styles.cardCompact, !isCompact && { flex: 1.5 }]}>
-                            <View style={[styles.cardHeader, isCompact && styles.cardHeaderCompact]}>
-                                <Text style={styles.cardTitle}>Referral Overview</Text>
-                                <TouchableOpacity style={styles.dropdownBtn}>
-                                    <Text style={styles.dropdownText}>This week</Text>
-                                    <ChevronDown size={14} color="#374151" />
+                        <View style={[s.card, isCompact && s.cardCompact, !isCompact && { flex: 1.5 }]}>
+                            <View style={[s.cardHeader, isCompact && s.cardHeaderCompact]}>
+                                <Text style={s.cardTitle}>Referral Overview</Text>
+                                <TouchableOpacity style={s.dropdownBtn}>
+                                    <Text style={s.dropdownText}>This week</Text>
+                                    <ChevronDown size={14} color={colors.textMuted} />
                                 </TouchableOpacity>
                             </View>
 
-                            <View style={[styles.chartContainer, isCompact && styles.chartContainerCompact]}>
+                            <View style={[s.chartContainer, isCompact && s.chartContainerCompact]}>
                                 {/* Y-Axis Labels */}
-                                <View style={styles.yAxis}>
-                                    <Text style={styles.axisText}>25</Text>
-                                    <Text style={styles.axisText}>20</Text>
-                                    <Text style={styles.axisText}>15</Text>
-                                    <Text style={styles.axisText}>10</Text>
-                                    <Text style={styles.axisText}>5</Text>
-                                    <Text style={styles.axisText}>0</Text>
+                                <View style={s.yAxis}>
+                                    <Text style={s.axisText}>25</Text>
+                                    <Text style={s.axisText}>20</Text>
+                                    <Text style={s.axisText}>15</Text>
+                                    <Text style={s.axisText}>10</Text>
+                                    <Text style={s.axisText}>5</Text>
+                                    <Text style={s.axisText}>0</Text>
                                 </View>
                                 {/* Chart Area */}
-                                <View style={styles.graphArea}>
+                                <View style={s.graphArea}>
                                     <View style={gridLineStyle} />
                                     <View style={gridLineStyle} />
                                     <View style={gridLineStyle} />
@@ -109,52 +113,52 @@ const RewardsScreen = () => {
                                     <View style={gridLineStyle} />
 
                                     {/* Mock Line */}
-                                    <View style={[styles.mockLine, isCompact && styles.mockLineCompact]} />
+                                    <View style={[s.mockLine, isCompact && s.mockLineCompact]} />
 
                                     {/* X-Axis Labels */}
-                                    <View style={styles.xAxis}>
-                                        <Text style={styles.axisText}>Mon</Text>
-                                        <Text style={styles.axisText}>Tue</Text>
-                                        <Text style={styles.axisText}>Wed</Text>
-                                        <Text style={styles.axisText}>Thu</Text>
-                                        <Text style={styles.axisText}>Fri</Text>
-                                        <Text style={styles.axisText}>Sat</Text>
-                                        <Text style={styles.axisText}>Sun</Text>
+                                    <View style={s.xAxis}>
+                                        <Text style={s.axisText}>Mon</Text>
+                                        <Text style={s.axisText}>Tue</Text>
+                                        <Text style={s.axisText}>Wed</Text>
+                                        <Text style={s.axisText}>Thu</Text>
+                                        <Text style={s.axisText}>Fri</Text>
+                                        <Text style={s.axisText}>Sat</Text>
+                                        <Text style={s.axisText}>Sun</Text>
                                     </View>
                                 </View>
                             </View>
                         </View>
 
                         {/* Right: Payout History */}
-                        <View style={[styles.card, isCompact && styles.cardCompact, !isCompact && { flex: 1 }]}>
-                            <View style={[styles.cardHeader, isCompact && styles.cardHeaderCompact]}>
-                                <Text style={styles.cardTitle}>Payout History</Text>
+                        <View style={[s.card, isCompact && s.cardCompact, !isCompact && { flex: 1 }]}>
+                            <View style={[s.cardHeader, isCompact && s.cardHeaderCompact]}>
+                                <Text style={s.cardTitle}>Payout History</Text>
                             </View>
-                            <View style={styles.historyList}>
-                                <HistoryItem amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Pending" isCompact={isCompact} />
-                                <HistoryItem amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
-                                <HistoryItem amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
-                                <HistoryItem amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
-                                <HistoryItem amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
-                                <HistoryItem amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
+                            <View style={s.historyList}>
+                                <HistoryItem colors={colors} amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Pending" isCompact={isCompact} />
+                                <HistoryItem colors={colors} amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
+                                <HistoryItem colors={colors} amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
+                                <HistoryItem colors={colors} amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
+                                <HistoryItem colors={colors} amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
+                                <HistoryItem colors={colors} amount="$50.00" date="10 Nov 2025, 11:48 AM" status="Paid" isCompact={isCompact} />
                             </View>
                         </View>
                     </View>
 
                     {/* Invite Link Footer */}
-                    <View style={styles.inviteSection}>
-                        <Text style={styles.inviteTitle}>Invite a friend and earn up to $200</Text>
-                        <Text style={styles.inviteSub}>
+                    <View style={s.inviteSection}>
+                        <Text style={s.inviteTitle}>Invite a friend and earn up to $200</Text>
+                        <Text style={s.inviteSub}>
                             Earn $200 through our referral program./ Invite your friends and get $5 for each referral when they verify their account.
                         </Text>
 
-                        <View style={[styles.copyRow, isCompact && styles.copyRowCompact]}>
-                            <Text style={styles.copyLabel}>Referral Link</Text>
-                            <View style={[styles.linkBox, isCompact && styles.linkBoxCompact]}>
-                                <Text style={styles.linkText}>https://referral.syphor.com/wiz80/?referral_code=prugbol2120</Text>
+                        <View style={[s.copyRow, isCompact && s.copyRowCompact]}>
+                            <Text style={s.copyLabel}>Referral Link</Text>
+                            <View style={[s.linkBox, isCompact && s.linkBoxCompact]}>
+                                <Text style={s.linkText}>https://referral.syphor.com/wiz80/?referral_code=prugbol2120</Text>
                             </View>
-                            <TouchableOpacity style={[styles.copyBtn, isCompact && styles.copyBtnCompact]}>
-                                <Text style={styles.copyBtnText}>Copy</Text>
+                            <TouchableOpacity style={[s.copyBtn, isCompact && s.copyBtnCompact]}>
+                                <Text style={s.copyBtnText}>Copy</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -165,34 +169,40 @@ const RewardsScreen = () => {
     );
 };
 
-const StatsCard = ({ title, value, icon: Icon, iconBg, iconColor, isCompact }: any) => (
-    <View style={[styles.statCard, isCompact && styles.statCardCompact]}>
-        <View style={[styles.statIcon, { backgroundColor: iconBg }]}>
-            <Icon size={20} color={iconColor} />
+const StatsCard = ({ title, value, icon: Icon, iconBg, iconColor, isCompact, colors }: any) => {
+    const s = useMemo(() => createStyles(colors), [colors]);
+    return (
+        <View style={[s.statCard, isCompact && s.statCardCompact]}>
+            <View style={[s.statIcon, { backgroundColor: iconBg }]}>
+                <Icon size={20} color={iconColor} />
+            </View>
+            <View>
+                <Text style={s.statTitle}>{title}</Text>
+                <Text style={s.statValue}>{value}</Text>
+            </View>
         </View>
-        <View>
-            <Text style={styles.statTitle}>{title}</Text>
-            <Text style={styles.statValue}>{value}</Text>
-        </View>
-    </View>
-);
+    );
+};
 
-const HistoryItem = ({ amount, date, status, isCompact }: any) => (
-    <View style={[styles.historyItem, isCompact && styles.historyItemCompact]}>
-        <Text style={[styles.histAmount, isCompact && styles.histAmountCompact]}>{amount}</Text>
-        <Text style={[styles.histDate, isCompact && styles.histDateCompact]}>{date}</Text>
-        <View style={[styles.badge, status === 'Pending' ? styles.badgePending : styles.badgePaid]}>
-            <Text style={[styles.badgeText, status === 'Pending' ? styles.textPending : styles.textPaid]}>
-                {status}
-            </Text>
+const HistoryItem = ({ amount, date, status, isCompact, colors }: any) => {
+    const s = useMemo(() => createStyles(colors), [colors]);
+    return (
+        <View style={[s.historyItem, isCompact && s.historyItemCompact]}>
+            <Text style={[s.histAmount, isCompact && s.histAmountCompact]}>{amount}</Text>
+            <Text style={[s.histDate, isCompact && s.histDateCompact]}>{date}</Text>
+            <View style={[s.badge, status === 'Pending' ? s.badgePending : s.badgePaid]}>
+                <Text style={[s.badgeText, status === 'Pending' ? s.textPending : s.textPaid]}>
+                    {status}
+                </Text>
+            </View>
         </View>
-    </View>
-);
+    );
+};
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: 'transparent',
         padding: 32,
     },
     containerCompact: {
@@ -212,10 +222,10 @@ const styles = StyleSheet.create({
     pageTitle: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#111827',
+        color: colors.text,
     },
     addBtn: {
-        backgroundColor: '#000',
+        backgroundColor: colors.primary,
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
@@ -227,10 +237,10 @@ const styles = StyleSheet.create({
         alignSelf: 'stretch',
         justifyContent: 'center',
     },
-    addBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+    addBtnText: { color: colors.primaryText, fontWeight: 'bold', fontSize: 13 },
 
     scrollContent: { paddingBottom: 40 },
-    sectionTitle: { fontSize: 14, fontWeight: '600', color: '#6B7280', marginBottom: 16 },
+    sectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textMuted, marginBottom: 16 },
 
     // Stats
     statsRow: {
@@ -244,22 +254,22 @@ const styles = StyleSheet.create({
     },
     statCard: {
         flex: 1,
-        backgroundColor: '#FFF',
+        backgroundColor: colors.glassBg,
         borderRadius: 12,
         padding: 20,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 16,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: colors.glassBorder,
     },
     statCardCompact: {
         width: '100%',
         flexBasis: '100%',
     },
     statIcon: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-    statTitle: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
-    statValue: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+    statTitle: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
+    statValue: { fontSize: 18, fontWeight: 'bold', color: colors.text },
 
     // Grid
     gridRow: {
@@ -275,11 +285,11 @@ const styles = StyleSheet.create({
         gap: 16,
     },
     card: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.glassBg,
         borderRadius: 12,
         padding: 24,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: colors.glassBorder,
     },
     cardCompact: {
         padding: 20,
@@ -295,9 +305,19 @@ const styles = StyleSheet.create({
         flexDirection: 'column',
         gap: 8,
     },
-    cardTitle: { fontSize: 14, fontWeight: 'bold', color: '#111827' },
-    dropdownBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 4, gap: 6 },
-    dropdownText: { fontSize: 12, color: '#374151' },
+    cardTitle: { fontSize: 14, fontWeight: 'bold', color: colors.text },
+    dropdownBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.glassBorder,
+        borderRadius: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        gap: 6,
+        backgroundColor: colors.glassBg,
+    },
+    dropdownText: { fontSize: 12, color: colors.textMuted },
 
     // Chart
     chartContainer: { flex: 1, flexDirection: 'row' },
@@ -305,13 +325,13 @@ const styles = StyleSheet.create({
         minHeight: 220,
     },
     yAxis: { justifyContent: 'space-between', paddingRight: 12, paddingBottom: 24 },
-    axisText: { fontSize: 10, color: '#9CA3AF' },
+    axisText: { fontSize: 10, color: colors.textSubtle },
     graphArea: { flex: 1, position: 'relative' },
     gridLine: {
         height: 1,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: colors.glassBorder,
         width: '100%',
-        marginBottom: (300 - 24) / 6 // approx spacing
+        marginBottom: (300 - 24) / 6,
     },
     gridLineCompact: {
         marginBottom: 20,
@@ -323,9 +343,9 @@ const styles = StyleSheet.create({
         right: 0,
         height: 100,
         borderTopWidth: 2,
-        borderColor: '#000',
-        borderRadius: 100, // curve
-        opacity: 0.2, // faint line for demo
+        borderColor: colors.primary,
+        borderRadius: 100,
+        opacity: 0.4,
     },
     mockLineCompact: {
         height: 70,
@@ -346,33 +366,33 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#F9FAFB',
+        borderBottomColor: colors.glassBorder,
     },
     historyItemCompact: {
         flexDirection: 'column',
         alignItems: 'flex-start',
         gap: 4,
     },
-    histAmount: { width: 80, fontSize: 13, fontWeight: '600', color: '#111827' },
+    histAmount: { width: 80, fontSize: 13, fontWeight: '600', color: colors.text },
     histAmountCompact: {
         width: 'auto',
     },
-    histDate: { flex: 1, fontSize: 12, color: '#6B7280' },
+    histDate: { flex: 1, fontSize: 12, color: colors.textMuted },
     histDateCompact: {
         flex: 0,
     },
     badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
-    badgePending: { backgroundColor: '#FEF3C7' },
-    badgePaid: { backgroundColor: '#DCFCE7' },
-    textPending: { fontSize: 10, color: '#D97706', fontWeight: '600' },
-    textPaid: { fontSize: 10, color: '#166534', fontWeight: '600' },
+    badgePending: { backgroundColor: 'rgba(245, 158, 11, 0.15)' },
+    badgePaid: { backgroundColor: 'rgba(34, 197, 94, 0.15)' },
+    textPending: { fontSize: 10, color: '#F59E0B', fontWeight: '600' },
+    textPaid: { fontSize: 10, color: '#22C55E', fontWeight: '600' },
 
     // Footer
     inviteSection: {
         marginTop: 8,
     },
-    inviteTitle: { fontSize: 14, fontWeight: 'bold', color: '#111827', marginBottom: 8 },
-    inviteSub: { fontSize: 12, color: '#6B7280', marginBottom: 16 },
+    inviteTitle: { fontSize: 14, fontWeight: 'bold', color: colors.text, marginBottom: 8 },
+    inviteSub: { fontSize: 12, color: colors.textMuted, marginBottom: 16 },
     copyRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -382,12 +402,12 @@ const styles = StyleSheet.create({
         flexDirection: 'column',
         alignItems: 'flex-start',
     },
-    copyLabel: { fontSize: 12, fontWeight: '600', color: '#374151' },
+    copyLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
     linkBox: {
         flex: 1,
-        backgroundColor: '#F9FAFB',
+        backgroundColor: colors.glassBg,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: colors.glassBorder,
         borderRadius: 6,
         paddingHorizontal: 12,
         paddingVertical: 8,
@@ -395,14 +415,18 @@ const styles = StyleSheet.create({
     linkBoxCompact: {
         width: '100%',
     },
-    linkText: { fontSize: 12, color: '#6B7280' },
-    copyBtn: { backgroundColor: '#000', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 },
+    linkText: { fontSize: 12, color: colors.textMuted },
+    copyBtn: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 6,
+    },
     copyBtnCompact: {
         width: '100%',
         alignItems: 'center',
     },
-    copyBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-
+    copyBtnText: { color: colors.primaryText, fontSize: 12, fontWeight: 'bold' },
 });
 
 export default RewardsScreen;

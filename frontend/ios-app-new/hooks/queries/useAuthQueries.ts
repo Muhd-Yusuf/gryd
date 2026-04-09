@@ -361,3 +361,41 @@ export const useUpdatePrivacySettings = () => {
         },
     });
 };
+
+// ==================
+// WEB3 — WALLET & ENS
+// ==================
+
+export const useWalletMutation = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (walletAddress: string | null) => {
+            const response = await communityPatch('/users/me', { walletAddress });
+            return response?.data;
+        },
+        onSuccess: (_data, walletAddress) => {
+            queryClient.setQueryData(queryKeys.users.me, (old: any) => {
+                if (!old) return old;
+                return { ...old, walletAddress: walletAddress ?? undefined };
+            });
+        },
+    });
+};
+
+export const useEnsMutation = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (ensDomain: string | null) => {
+            const response = await communityPatch('/users/me', { ensDomain });
+            return response?.data;
+        },
+        onSuccess: (_data, ensDomain) => {
+            queryClient.setQueryData(queryKeys.users.me, (old: any) => {
+                if (!old) return old;
+                return { ...old, ensDomain: ensDomain ?? undefined };
+            });
+        },
+    });
+};

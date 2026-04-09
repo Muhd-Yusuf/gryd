@@ -13,6 +13,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../lib/theme';
 import { GradientBackground } from './glass';
 
@@ -69,7 +70,11 @@ const ResponsiveLayout = ({ children, title, action }: LayoutProps) => {
                                 style={styles.menuBtn}
                                 onPress={() => setSidebarOpen(true)}
                             >
-                                <Menu size={24} color={colors.text} />
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)']}
+                                    style={StyleSheet.absoluteFill}
+                                />
+                                <Menu size={20} color={colors.text} />
                                 <Text style={styles.menuText}>Menu</Text>
                             </TouchableOpacity>
                         </BlurView>
@@ -121,7 +126,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         width: 280,
         height: '100%',
         borderRightWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.glassBorder,
     },
     mainContent: {
         flex: 1,
@@ -154,12 +159,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: colors.surface,
         paddingVertical: 8,
         paddingHorizontal: 12,
-        borderRadius: 8,
+        borderRadius: 12,
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: 'rgba(255,255,255,0.28)',
+        overflow: 'hidden',
     },
     menuText: {
         fontWeight: 'bold',
@@ -187,11 +192,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         maxWidth: 320,
         height: '100%',
         overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 2, height: 0 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 16,
+        shadowColor: 'rgba(0,0,0,0.8)',
+        shadowOffset: { width: 4, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 32,
+        elevation: 24,
+        borderRightWidth: 1,
+        borderRightColor: colors.glassBorder,
     },
 });
 

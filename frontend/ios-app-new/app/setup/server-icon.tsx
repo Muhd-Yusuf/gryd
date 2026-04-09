@@ -11,6 +11,8 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { useTheme } from '../../lib/theme';
+import { GlassButton } from '../../components/glass';
 
 const BANNER_COLORS = [
     '#EC4899', // Pink
@@ -22,6 +24,7 @@ const BANNER_COLORS = [
 
 export default function ServerIconScreen() {
     const router = useRouter();
+    const { colors } = useTheme();
     const params = useLocalSearchParams<{
         token: string;
         tenant: string;
@@ -80,6 +83,8 @@ export default function ServerIconScreen() {
         });
     };
 
+    const styles = createStyles(colors);
+
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
@@ -125,12 +130,21 @@ export default function ServerIconScreen() {
                             <View style={styles.inputGroup}>
                                 <Text style={styles.label}>Icon</Text>
                                 <Text style={styles.helperText}>We recommend an image of at least 512x512</Text>
-                                <TouchableOpacity
-                                    style={styles.addIconButton}
-                                    onPress={handlePickIcon}
-                                >
-                                    <Text style={styles.addIconText}>Add Icon</Text>
-                                </TouchableOpacity>
+                                <View style={styles.addIconArea}>
+                                    {iconUri ? (
+                                        <Image
+                                            source={{ uri: iconUri }}
+                                            style={styles.addIconPreview}
+                                            cachePolicy="memory-disk"
+                                        />
+                                    ) : null}
+                                    <GlassButton
+                                        label={iconUri ? 'Change Icon' : 'Add Icon'}
+                                        onPress={handlePickIcon}
+                                        variant="secondary"
+                                        size="sm"
+                                    />
+                                </View>
                             </View>
 
                             <View style={styles.inputGroup}>
@@ -150,12 +164,12 @@ export default function ServerIconScreen() {
                                 </View>
                             </View>
 
-                            <TouchableOpacity
-                                style={styles.button}
+                            <GlassButton
+                                label="Next"
                                 onPress={handleNext}
-                            >
-                                <Text style={styles.buttonText}>Next</Text>
-                            </TouchableOpacity>
+                                variant="primary"
+                                size="md"
+                            />
                         </View>
 
                         {/* Right Side - Preview */}
@@ -186,213 +200,206 @@ export default function ServerIconScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F5F5F5',
-    },
-    header: {
-        backgroundColor: '#000000',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-    },
-    headerTitle: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    scrollContent: {
-        flexGrow: 1,
-        justifyContent: 'center',
-        padding: 24,
-    },
-    card: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        padding: 24,
-        maxWidth: 700,
-        width: '100%',
-        alignSelf: 'center',
-    },
-    stepRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 32,
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    stepItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    stepDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#E5E7EB',
-    },
-    stepDotActive: {
-        backgroundColor: '#000000',
-    },
-    stepDotCompleted: {
-        backgroundColor: '#22C55E',
-    },
-    stepLabel: {
-        fontSize: 12,
-        color: '#9CA3AF',
-    },
-    stepLabelActive: {
-        color: '#000000',
-        fontWeight: '500',
-    },
-    stepLine: {
-        width: 24,
-        height: 1,
-        backgroundColor: '#E5E7EB',
-    },
-    stepLineCompleted: {
-        backgroundColor: '#22C55E',
-    },
-    logoutButton: {
-        marginLeft: 'auto',
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 6,
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-    },
-    logoutText: {
-        fontSize: 12,
-        color: '#374151',
-    },
-    contentRow: {
-        flexDirection: Platform.OS === 'web' ? 'row' : 'column',
-        gap: 32,
-    },
-    formContainer: {
-        flex: 1,
-        maxWidth: 320,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#111827',
-        marginBottom: 4,
-    },
-    subtitle: {
-        fontSize: 13,
-        color: '#6B7280',
-        marginBottom: 24,
-    },
-    inputGroup: {
-        marginBottom: 24,
-    },
-    label: {
-        fontSize: 13,
-        fontWeight: '500',
-        color: '#374151',
-        marginBottom: 4,
-    },
-    helperText: {
-        fontSize: 11,
-        color: '#9CA3AF',
-        marginBottom: 12,
-    },
-    addIconButton: {
-        backgroundColor: '#000000',
-        borderRadius: 6,
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        alignSelf: 'flex-start',
-    },
-    addIconText: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    bannerRow: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 8,
-    },
-    bannerOption: {
-        width: 48,
-        height: 32,
-        borderRadius: 6,
-    },
-    bannerOptionSelected: {
-        borderWidth: 3,
-        borderColor: '#000000',
-    },
-    button: {
-        backgroundColor: '#000000',
-        borderRadius: 8,
-        paddingVertical: 12,
-        alignItems: 'center',
-        width: 120,
-    },
-    buttonText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    previewContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    previewCard: {
-        width: 200,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        overflow: 'hidden',
-    },
-    previewBanner: {
-        height: 60,
-    },
-    previewAvatarContainer: {
-        position: 'absolute',
-        top: 35,
-        left: 12,
-        zIndex: 1,
-    },
-    previewAvatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 10,
-        backgroundColor: '#F3F4F6',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 3,
-        borderColor: '#FFFFFF',
-    },
-    previewAvatarImage: {
-        width: 48,
-        height: 48,
-        borderRadius: 10,
-        borderWidth: 3,
-        borderColor: '#FFFFFF',
-    },
-    previewAvatarText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#374151',
-    },
-    previewInfo: {
-        padding: 12,
-        paddingTop: 32,
-    },
-    previewName: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#111827',
-        marginBottom: 2,
-    },
-    previewSubtext: {
-        fontSize: 11,
-        color: '#9CA3AF',
-    },
-});
+const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: 'transparent',
+        },
+        header: {
+            backgroundColor: colors.glassBg,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.glassBorder,
+            paddingVertical: 12,
+            paddingHorizontal: 24,
+        },
+        headerTitle: {
+            color: colors.text,
+            fontSize: 14,
+            fontWeight: '500',
+        },
+        scrollContent: {
+            flexGrow: 1,
+            justifyContent: 'center',
+            padding: 24,
+        },
+        card: {
+            backgroundColor: colors.glassBg,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            padding: 24,
+            maxWidth: 700,
+            width: '100%',
+            alignSelf: 'center',
+        },
+        stepRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 32,
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        stepItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        stepDot: {
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: colors.glassBorder,
+        },
+        stepDotActive: {
+            backgroundColor: colors.primary,
+        },
+        stepDotCompleted: {
+            backgroundColor: colors.successText,
+        },
+        stepLabel: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        stepLabelActive: {
+            color: colors.text,
+            fontWeight: '500',
+        },
+        stepLine: {
+            width: 24,
+            height: 1,
+            backgroundColor: colors.glassBorder,
+        },
+        stepLineCompleted: {
+            backgroundColor: colors.successText,
+        },
+        logoutButton: {
+            marginLeft: 'auto',
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 6,
+            paddingVertical: 6,
+            paddingHorizontal: 12,
+        },
+        logoutText: {
+            fontSize: 12,
+            color: colors.textMuted,
+        },
+        contentRow: {
+            flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+            gap: 32,
+        },
+        formContainer: {
+            flex: 1,
+            maxWidth: 320,
+        },
+        title: {
+            fontSize: 18,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 4,
+        },
+        subtitle: {
+            fontSize: 13,
+            color: colors.textMuted,
+            marginBottom: 24,
+        },
+        inputGroup: {
+            marginBottom: 24,
+        },
+        label: {
+            fontSize: 13,
+            fontWeight: '500',
+            color: colors.text,
+            marginBottom: 4,
+        },
+        helperText: {
+            fontSize: 11,
+            color: colors.textSubtle,
+            marginBottom: 12,
+        },
+        addIconArea: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+        },
+        addIconPreview: {
+            width: 48,
+            height: 48,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+        },
+        bannerRow: {
+            flexDirection: 'row',
+            gap: 12,
+            marginTop: 8,
+        },
+        bannerOption: {
+            width: 48,
+            height: 32,
+            borderRadius: 6,
+        },
+        bannerOptionSelected: {
+            borderWidth: 3,
+            borderColor: colors.primary,
+        },
+        previewContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        previewCard: {
+            width: 200,
+            backgroundColor: colors.glassBg,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            overflow: 'hidden',
+        },
+        previewBanner: {
+            height: 60,
+        },
+        previewAvatarContainer: {
+            position: 'absolute',
+            top: 35,
+            left: 12,
+            zIndex: 1,
+        },
+        previewAvatar: {
+            width: 48,
+            height: 48,
+            borderRadius: 10,
+            backgroundColor: colors.glassBg,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 3,
+            borderColor: colors.glassBorder,
+        },
+        previewAvatarImage: {
+            width: 48,
+            height: 48,
+            borderRadius: 10,
+            borderWidth: 3,
+            borderColor: colors.glassBorder,
+        },
+        previewAvatarText: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        previewInfo: {
+            padding: 12,
+            paddingTop: 32,
+        },
+        previewName: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 2,
+        },
+        previewSubtext: {
+            fontSize: 11,
+            color: colors.textSubtle,
+        },
+    });

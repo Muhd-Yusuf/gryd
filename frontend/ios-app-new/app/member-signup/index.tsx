@@ -13,13 +13,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Sun, Moon } from 'lucide-react-native';
 import { validateInviteCode } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 
 export default function ServerCodeScreen() {
     const router = useRouter();
-    const { colors, mode, toggleTheme } = useTheme();
+    const { colors } = useTheme();
     const [serverCode, setServerCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -75,15 +74,6 @@ export default function ServerCodeScreen() {
                         contentContainerStyle={mobileStyles.scrollContent}
                         showsVerticalScrollIndicator={false}
                     >
-                        <View style={mobileStyles.topRow}>
-                            <TouchableOpacity style={mobileStyles.themeToggle} onPress={toggleTheme}>
-                                {mode === 'dark' ? (
-                                    <Sun color={colors.text} size={22} />
-                                ) : (
-                                    <Moon color={colors.text} size={22} />
-                                )}
-                            </TouchableOpacity>
-                        </View>
                         <View style={mobileStyles.formCard}>
                             <Text style={mobileStyles.title}>Server Code</Text>
                             <Text style={mobileStyles.subtitle}>
@@ -164,13 +154,6 @@ export default function ServerCodeScreen() {
                     </View>
 
                     <View style={webStyles.rightPanel}>
-                        <TouchableOpacity style={webStyles.themeToggle} onPress={toggleTheme}>
-                            {mode === 'dark' ? (
-                                <Sun color={colors.text} size={20} />
-                            ) : (
-                                <Moon color={colors.text} size={20} />
-                            )}
-                        </TouchableOpacity>
                         <View style={webStyles.formCard}>
                             <Text style={webStyles.title}>Server Code</Text>
                             <Text style={webStyles.subtitle}>
@@ -229,7 +212,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         shell: {
             flexGrow: 1,
@@ -238,7 +221,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         leftPanel: {
             flex: 1,
-            backgroundColor: '#000000',
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 32,
             paddingTop: 26,
             paddingBottom: 80,
@@ -303,11 +286,11 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         rightPanel: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
             padding: 48,
             justifyContent: 'center',
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
         },
         themeToggle: {
             position: 'absolute',
@@ -315,7 +298,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             right: 20,
             padding: 10,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         formCard: {
             maxWidth: 360,
@@ -345,9 +328,9 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             marginBottom: 8,
         },
         input: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 10,
             height: 40,
             paddingHorizontal: 12,
@@ -397,7 +380,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         scrollContent: {
             flexGrow: 1,
@@ -412,7 +395,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         formCard: {
             width: '100%',
@@ -441,9 +424,9 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             marginBottom: 8,
         },
         input: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 16,
             height: 56,
             paddingHorizontal: 16,

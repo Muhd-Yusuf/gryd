@@ -36,6 +36,7 @@ import {
     StakeholderBadge,
 } from '../lib/api';
 import { useSubgrids, useMembers, usePosts, useSubgridMessages } from '../hooks/queries';
+import { GlassBadge, GlassRail } from './glass';
 
 // Badge colors for stakeholders
 const STAKEHOLDER_BADGE_COLORS: Record<StakeholderBadge, string> = {
@@ -265,14 +266,14 @@ export default function TopContributorsScreen() {
     const styles = StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         topNav: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassNavBg,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
             paddingHorizontal: 16,
             height: 56,
         },
@@ -318,9 +319,9 @@ export default function TopContributorsScreen() {
         },
         iconRail: {
             width: 72,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassNavBg,
             borderRightWidth: 1,
-            borderRightColor: colors.border,
+            borderRightColor: colors.glassBorder,
             paddingTop: 12,
             alignItems: 'center',
         },
@@ -328,7 +329,7 @@ export default function TopContributorsScreen() {
             width: 48,
             height: 48,
             borderRadius: 24,
-            backgroundColor: '#1E3A5F',
+            backgroundColor: colors.glassActiveBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 8,
@@ -336,7 +337,7 @@ export default function TopContributorsScreen() {
         serverIconText: {
             fontSize: 10,
             fontWeight: '700',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         serverIconImage: {
             width: 48,
@@ -347,30 +348,30 @@ export default function TopContributorsScreen() {
             width: 48,
             height: 48,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 8,
         },
         railIconTextActive: {
-            color: colors.surface,
+            color: colors.glassActiveText,
         },
         divider: {
             width: 32,
             height: 2,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
             marginVertical: 8,
         },
         contributorsSidebar: {
             width: 240,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassNavBg,
             borderRightWidth: 1,
-            borderRightColor: colors.border,
+            borderRightColor: colors.glassBorder,
         },
         sidebarHeader: {
             padding: 16,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.glassBorder,
         },
         sidebarTitle: {
             fontSize: 14,
@@ -387,13 +388,15 @@ export default function TopContributorsScreen() {
             paddingLeft: 16,
         },
         contributorItemActive: {
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassActiveBg,
         },
         contributorAvatar: {
             width: 36,
             height: 36,
             borderRadius: 18,
-            backgroundColor: '#FBD8D3',
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
             marginRight: 12,
@@ -401,7 +404,7 @@ export default function TopContributorsScreen() {
         contributorAvatarText: {
             fontSize: 12,
             fontWeight: '600',
-            color: '#B45D51',
+            color: colors.text,
         },
         contributorInfo: {
             flex: 1,
@@ -430,7 +433,7 @@ export default function TopContributorsScreen() {
         badgeText: {
             fontSize: 9,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         profileBadgeRow: {
             flexDirection: 'row',
@@ -448,7 +451,7 @@ export default function TopContributorsScreen() {
         profileBadgeText: {
             fontSize: 11,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         companyText: {
             fontSize: 13,
@@ -458,7 +461,7 @@ export default function TopContributorsScreen() {
         },
         profileArea: {
             flex: 1,
-            backgroundColor: colors.surface,
+            backgroundColor: 'transparent',
         },
         profileBanner: {
             height: 200,
@@ -477,7 +480,9 @@ export default function TopContributorsScreen() {
             width: 36,
             height: 36,
             borderRadius: 18,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
             marginLeft: 8,
@@ -494,11 +499,11 @@ export default function TopContributorsScreen() {
             width: 100,
             height: 100,
             borderRadius: 50,
-            backgroundColor: '#E8D4C4',
+            backgroundColor: colors.glassBg,
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 4,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
             marginBottom: 16,
             overflow: 'hidden',
         },
@@ -510,7 +515,7 @@ export default function TopContributorsScreen() {
         profileAvatarText: {
             fontSize: 32,
             fontWeight: '600',
-            color: '#8B7355',
+            color: colors.text,
         },
         bannerImage: {
             width: '100%',
@@ -537,8 +542,10 @@ export default function TopContributorsScreen() {
             marginBottom: 24,
         },
         aboutCard: {
-            backgroundColor: colors.surfaceMuted,
-            borderRadius: 8,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 16,
             padding: 16,
         },
         aboutSection: {
@@ -569,8 +576,8 @@ export default function TopContributorsScreen() {
             paddingTop: 8,
             paddingBottom: bottomInset + 8,
             borderTopWidth: 1,
-            borderTopColor: colors.border,
-            backgroundColor: colors.surface,
+            borderTopColor: colors.glassBorder,
+            backgroundColor: colors.glassNavBg,
         },
         userAvatarContainer: {
             position: 'relative',
@@ -579,7 +586,9 @@ export default function TopContributorsScreen() {
             width: 32,
             height: 32,
             borderRadius: 16,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -597,7 +606,7 @@ export default function TopContributorsScreen() {
             borderRadius: 5,
             backgroundColor: '#22C55E',
             borderWidth: 2,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         userInfo: {
             flex: 1,
@@ -658,8 +667,8 @@ export default function TopContributorsScreen() {
             paddingTop: topInset + 12,
             paddingBottom: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: colors.glassNavBg,
             gap: 12,
         },
         mobileHeaderBrandRow: {
@@ -676,11 +685,11 @@ export default function TopContributorsScreen() {
             width: 28,
             height: 28,
             borderRadius: 6,
-            borderWidth: 2,
-            borderColor: colors.primary,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: colors.primary + '15',
+            backgroundColor: colors.glassBg,
         },
         mobileGrydLogoHash: {
             fontSize: 14,
@@ -708,22 +717,26 @@ export default function TopContributorsScreen() {
             width: 32,
             height: 32,
             borderRadius: 8,
-            backgroundColor: colors.primary,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
         mobileTopBarLogoText: {
             fontSize: 10,
             fontWeight: '700',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         mobileServerInfoRow: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 10,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             padding: 10,
-            borderRadius: 10,
+            borderRadius: 12,
         },
         mobileServerInfoText: {
             flex: 1,
@@ -746,13 +759,15 @@ export default function TopContributorsScreen() {
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 10,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
         },
         mobileNavTabActive: {
             paddingHorizontal: 16,
             paddingVertical: 10,
             borderRadius: 10,
-            backgroundColor: colors.primary,
+            backgroundColor: colors.glassActiveBg,
         },
         mobileNavTabText: {
             fontSize: 14,
@@ -762,7 +777,7 @@ export default function TopContributorsScreen() {
         mobileNavTabTextActive: {
             fontSize: 14,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.glassActiveText,
         },
         mobileTopBarRight: {
             flexDirection: 'row',
@@ -773,7 +788,9 @@ export default function TopContributorsScreen() {
             width: 34,
             height: 34,
             borderRadius: 8,
-            backgroundColor: colors.surfaceMuted,
+            backgroundColor: colors.glassBg,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -784,8 +801,8 @@ export default function TopContributorsScreen() {
             paddingTop: topInset + 12,
             paddingBottom: 12,
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            backgroundColor: colors.surface,
+            borderBottomColor: colors.glassBorder,
+            backgroundColor: colors.glassNavBg,
         },
         mobileBackButton: {
             marginRight: 8,
@@ -804,10 +821,10 @@ export default function TopContributorsScreen() {
                 <AlertCircle size={48} color={colors.textMuted} />
                 <Text style={{ color: colors.text, fontSize: 16, marginTop: 12, textAlign: 'center' }}>{error}</Text>
                 <TouchableOpacity
-                    style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.primary, borderRadius: 8 }}
+                    style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.glassActiveBg, borderRadius: 12, borderWidth: 1, borderColor: colors.glassBorder }}
                     onPress={() => router.push('/(main)')}
                 >
-                    <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Go to Community</Text>
+                    <Text style={{ color: colors.glassActiveText, fontWeight: '600' }}>Go to Community</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -839,33 +856,30 @@ export default function TopContributorsScreen() {
             <View style={styles.mainContent}>
                 {/* Icon Rail - hidden on mobile */}
                 {!isMobile && (
-                    <View style={styles.iconRail}>
-                        <TouchableOpacity style={[styles.serverIcon, activeSubgrid?.coverImageUrl && { backgroundColor: activeSubgrid.coverImageUrl }]} onPress={() => router.push('/admin')}>
-                            {activeSubgrid ? (
-                                activeSubgrid.logoUrl ? (
-                                    <Image source={{ uri: activeSubgrid.logoUrl }} style={styles.serverIconImage} cachePolicy="memory-disk" />
-                                ) : (
-                                    <Text style={styles.serverIconText}>
-                                        {(activeSubgrid.name || 'SV').substring(0, 4).toUpperCase()}
-                                    </Text>
-                                )
-                            ) : null}
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/messages')}>
-                            <MessageSquare size={18} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <View style={{ flex: 1 }} />
-                        <TouchableOpacity style={styles.railIconBtn} onPress={() => router.push('/admin/contributors')}>
-                            <Award size={18} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.railIconBtn} onPress={toggleTheme}>
-                            {mode === 'dark' ? (
-                                <Sun size={18} color={colors.textMuted} />
-                            ) : (
-                                <Moon size={18} color={colors.textMuted} />
-                            )}
-                        </TouchableOpacity>
-                    </View>
+                    <GlassRail
+                        serverLogo={{
+                            uri: activeSubgrid?.logoUrl,
+                            name: activeSubgrid?.name,
+                            onPress: () => router.push('/admin'),
+                        }}
+                        items={[
+                            {
+                                id: 'messages',
+                                icon: <MessageSquare size={20} color={colors.textMuted} />,
+                                activeIcon: <MessageSquare size={20} color={colors.glassActiveText} />,
+                                onPress: () => router.push('/admin/messages'),
+                                isActive: false,
+                            },
+                            {
+                                id: 'leaderboard',
+                                icon: <Award size={20} color={colors.textMuted} />,
+                                activeIcon: <Award size={20} color={colors.glassActiveText} />,
+                                onPress: () => {},
+                                isActive: true,
+                            },
+                        ]}
+                        onToggleTheme={toggleTheme}
+                    />
                 )}
 
                 {/* Contributors Sidebar - full width on mobile, hidden when viewing profile */}

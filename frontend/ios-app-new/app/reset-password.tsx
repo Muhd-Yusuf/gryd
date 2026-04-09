@@ -3,18 +3,18 @@ import {
     StyleSheet,
     Text,
     View,
-    TextInput,
     TouchableOpacity,
-    Alert
+    Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Lock, Eye, EyeOff } from 'lucide-react-native';
+import { Lock, Eye, EyeOff, Sun, Moon } from 'lucide-react-native';
 import OnboardingLayout from '../components/OnboardingLayout';
 import { useTheme } from '../lib/theme';
+import { GlassButton, GlassInput } from '../components/glass';
 
 const ResetPasswordScreen = () => {
     const router = useRouter();
-    const { colors } = useTheme();
+    const { colors, mode, toggleTheme } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
     const [otp, setOtp] = useState('');
     const [password, setPassword] = useState('');
@@ -43,65 +43,59 @@ const ResetPasswordScreen = () => {
             showBack
             onBack={() => router.back()}
         >
+            {/* Theme Toggle */}
+            <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme}>
+                {mode === 'dark' ? (
+                    <Sun size={20} color={colors.textMuted} />
+                ) : (
+                    <Moon size={20} color={colors.textMuted} />
+                )}
+            </TouchableOpacity>
+
             <View style={styles.formContainer}>
-                {/* OTP Input - Simplified for demo */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Verification Code</Text>
-                    <View style={styles.inputWrapper}>
-                        <TextInput
-                            style={[styles.input, { letterSpacing: 4, fontWeight: 'bold' }]}
-                            placeholder="0000"
-                            placeholderTextColor={colors.textSubtle}
-                            value={otp}
-                            onChangeText={setOtp}
-                            keyboardType="number-pad"
-                            maxLength={4}
-                        />
-                    </View>
-                </View>
+                {/* OTP Input */}
+                <GlassInput
+                    label="Verification Code"
+                    value={otp}
+                    onChangeText={setOtp}
+                    placeholder="0000"
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    inputStyle={{ letterSpacing: 4, fontWeight: 'bold' } as any}
+                />
 
                 {/* New Password */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>New password</Text>
-                    <View style={styles.inputWrapper}>
-                        <Lock size={20} color={colors.textSubtle} style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Enter new password"
-                            placeholderTextColor={colors.textSubtle}
-                            value={password}
-                            onChangeText={setPassword}
-                            secureTextEntry={!showPassword}
-                        />
-                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                            {showPassword ? (
-                                <EyeOff size={20} color={colors.textSubtle} />
-                            ) : (
-                                <Eye size={20} color={colors.textSubtle} />
-                            )}
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                <GlassInput
+                    label="New password"
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Enter new password"
+                    secureTextEntry={!showPassword}
+                    icon={<Lock size={18} color={colors.textSubtle} />}
+                    iconRight={
+                        showPassword
+                            ? <EyeOff size={18} color={colors.textSubtle} />
+                            : <Eye size={18} color={colors.textSubtle} />
+                    }
+                    onIconRightPress={() => setShowPassword(!showPassword)}
+                />
 
                 {/* Confirm Password */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Confirm password</Text>
-                    <View style={styles.inputWrapper}>
-                        <Lock size={20} color={colors.textSubtle} style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Confirm new password"
-                            placeholderTextColor={colors.textSubtle}
-                            value={confirmPassword}
-                            onChangeText={setConfirmPassword}
-                            secureTextEntry={!showPassword}
-                        />
-                    </View>
-                </View>
+                <GlassInput
+                    label="Confirm password"
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="Confirm new password"
+                    secureTextEntry={!showPassword}
+                    icon={<Lock size={18} color={colors.textSubtle} />}
+                />
 
-                <TouchableOpacity style={styles.submitBtn} onPress={handleReset}>
-                    <Text style={styles.submitBtnText}>Reset password</Text>
-                </TouchableOpacity>
+                <GlassButton
+                    label="Reset password"
+                    onPress={handleReset}
+                    variant="primary"
+                    fullWidth
+                />
             </View>
         </OnboardingLayout>
     );
@@ -109,51 +103,18 @@ const ResetPasswordScreen = () => {
 
 const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
+    themeToggle: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        padding: 8,
+        zIndex: 10,
+    },
     formContainer: {
         width: '100%',
         maxWidth: 400,
         alignSelf: 'center',
         gap: 20,
-    },
-    inputGroup: {
-        gap: 8,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: colors.text,
-    },
-    inputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        height: 48,
-        backgroundColor: colors.surfaceMuted,
-    },
-    inputIcon: {
-        marginRight: 10,
-    },
-    input: {
-        flex: 1,
-        fontSize: 15,
-        color: colors.text,
-        height: '100%',
-    },
-    submitBtn: {
-        backgroundColor: colors.primary,
-        height: 48,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 12,
-    },
-    submitBtnText: {
-        color: colors.primaryText,
-        fontSize: 16,
-        fontWeight: '600',
     },
 });
 

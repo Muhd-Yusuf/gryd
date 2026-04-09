@@ -12,12 +12,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { authLoginOtpVerify, authLoginOtpRequest, setAuthUser } from '../../lib/api';
+import { useTheme } from '../../lib/theme';
 
 export default function StakeholderVerifyOtpScreen() {
     const router = useRouter();
     const params = useLocalSearchParams<{
         email: string;
     }>();
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
 
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [loading, setLoading] = useState(false);
@@ -230,164 +233,165 @@ export default function StakeholderVerifyOtpScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#1F2937',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 16,
-    },
-    logoContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    logoText: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#FFFFFF',
-    },
-    stepIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    step: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: 'rgba(255,255,255,0.3)',
-    },
-    stepActive: {
-        backgroundColor: '#3B82F6',
-    },
-    stepCompleted: {
-        backgroundColor: '#22C55E',
-    },
-    stepLine: {
-        width: 20,
-        height: 2,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-    },
-    stepLineCompleted: {
-        backgroundColor: '#22C55E',
-    },
-    backButton: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-    },
-    backText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    keyboardView: {
-        flex: 1,
-    },
-    content: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 24,
-    },
-    card: {
-        width: '100%',
-        maxWidth: 450,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 32,
-    },
-    cardBackButton: {
-        marginBottom: 16,
-    },
-    cardBackText: {
-        color: '#6B7280',
-        fontSize: 14,
-    },
-    title: {
-        fontSize: 22,
-        fontWeight: '600',
-        color: '#111827',
-        marginBottom: 12,
-    },
-    subtitle: {
-        fontSize: 15,
-        color: '#6B7280',
-        marginBottom: 32,
-        lineHeight: 22,
-    },
-    emailText: {
-        fontWeight: '600',
-        color: '#111827',
-    },
-    otpContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 10,
-        marginBottom: 24,
-    },
-    otpInput: {
-        width: 48,
-        height: 56,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        backgroundColor: '#F9FAFB',
-        fontSize: 24,
-        fontWeight: '600',
-        textAlign: 'center',
-        color: '#111827',
-    },
-    otpInputFilled: {
-        borderColor: '#3B82F6',
-        backgroundColor: '#FFFFFF',
-    },
-    otpInputError: {
-        borderColor: '#EF4444',
-    },
-    resendContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    resendText: {
-        fontSize: 14,
-        color: '#6B7280',
-    },
-    resendLink: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#3B82F6',
-    },
-    countdownText: {
-        fontSize: 14,
-        color: '#9CA3AF',
-    },
-    errorText: {
-        color: '#EF4444',
-        fontSize: 14,
-        marginBottom: 16,
-        textAlign: 'center',
-    },
-    button: {
-        backgroundColor: '#3B82F6',
-        borderRadius: 30,
-        paddingVertical: 16,
-        alignItems: 'center',
-    },
-    buttonDisabled: {
-        opacity: 0.7,
-    },
-    buttonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-});
+const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: 'transparent',
+        },
+        header: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingHorizontal: 24,
+            paddingVertical: 16,
+        },
+        logoContainer: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        logoText: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        stepIndicator: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+        },
+        step: {
+            width: 10,
+            height: 10,
+            borderRadius: 5,
+            backgroundColor: colors.glassBorder,
+        },
+        stepActive: {
+            backgroundColor: colors.primary,
+        },
+        stepCompleted: {
+            backgroundColor: '#22C55E',
+        },
+        stepLine: {
+            width: 20,
+            height: 2,
+            backgroundColor: colors.glassBorder,
+        },
+        stepLineCompleted: {
+            backgroundColor: '#22C55E',
+        },
+        backButton: {
+            backgroundColor: colors.glassBg,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 8,
+        },
+        backText: {
+            color: colors.text,
+            fontSize: 14,
+            fontWeight: '500',
+        },
+        keyboardView: {
+            flex: 1,
+        },
+        content: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 24,
+        },
+        card: {
+            width: '100%',
+            maxWidth: 450,
+            backgroundColor: colors.glassBg,
+            borderRadius: 16,
+            padding: 32,
+        },
+        cardBackButton: {
+            marginBottom: 16,
+        },
+        cardBackText: {
+            color: colors.textMuted,
+            fontSize: 14,
+        },
+        title: {
+            fontSize: 22,
+            fontWeight: '600',
+            color: colors.text,
+            marginBottom: 12,
+        },
+        subtitle: {
+            fontSize: 15,
+            color: colors.textMuted,
+            marginBottom: 32,
+            lineHeight: 22,
+        },
+        emailText: {
+            fontWeight: '600',
+            color: colors.text,
+        },
+        otpContainer: {
+            flexDirection: 'row',
+            justifyContent: 'center',
+            gap: 10,
+            marginBottom: 24,
+        },
+        otpInput: {
+            width: 48,
+            height: 56,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+            borderRadius: 12,
+            backgroundColor: colors.glassBg,
+            fontSize: 24,
+            fontWeight: '600',
+            textAlign: 'center',
+            color: colors.text,
+        },
+        otpInputFilled: {
+            borderColor: colors.primary,
+            backgroundColor: colors.glassBg,
+        },
+        otpInputError: {
+            borderColor: colors.error,
+        },
+        resendContainer: {
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 24,
+        },
+        resendText: {
+            fontSize: 14,
+            color: colors.textMuted,
+        },
+        resendLink: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.primary,
+        },
+        countdownText: {
+            fontSize: 14,
+            color: colors.textSubtle,
+        },
+        errorText: {
+            color: colors.error,
+            fontSize: 14,
+            marginBottom: 16,
+            textAlign: 'center',
+        },
+        button: {
+            backgroundColor: colors.primary,
+            borderRadius: 30,
+            paddingVertical: 16,
+            alignItems: 'center',
+        },
+        buttonDisabled: {
+            opacity: 0.7,
+        },
+        buttonText: {
+            color: colors.primaryText,
+            fontSize: 16,
+            fontWeight: '600',
+        },
+    });

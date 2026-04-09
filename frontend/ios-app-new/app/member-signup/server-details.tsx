@@ -252,7 +252,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         shell: {
             flexGrow: 1,
@@ -261,7 +261,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         leftPanel: {
             flex: 1,
-            backgroundColor: '#000000',
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 32,
             paddingTop: 26,
             paddingBottom: 80,
@@ -327,11 +327,11 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         rightPanel: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
             padding: 48,
             justifyContent: 'center',
             borderLeftWidth: 1,
-            borderLeftColor: colors.border,
+            borderLeftColor: colors.glassBorder,
         },
         themeToggle: {
             position: 'absolute',
@@ -339,7 +339,7 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             right: 20,
             padding: 10,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         formCard: {
             maxWidth: 400,
@@ -360,10 +360,10 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             lineHeight: 16,
         },
         serverCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             overflow: 'hidden',
             marginBottom: 20,
         },
@@ -386,18 +386,18 @@ const createWebStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 48,
             height: 48,
             borderRadius: 10,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 3,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         avatarImage: {
             width: 48,
             height: 48,
             borderRadius: 10,
             borderWidth: 3,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         avatarText: {
             fontSize: 16,
@@ -484,7 +484,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         scrollContent: {
             padding: 30,
@@ -501,7 +501,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         header: {
             marginBottom: 40,
@@ -521,10 +521,10 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             gap: 20,
         },
         serverCard: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             overflow: 'hidden',
         },
         serverHeader: {
@@ -546,11 +546,11 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 56,
             height: 56,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 3,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.1,
@@ -562,7 +562,7 @@ const createMobileStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             height: 56,
             borderRadius: 12,
             borderWidth: 3,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
         },
         avatarText: {
             fontSize: 18,

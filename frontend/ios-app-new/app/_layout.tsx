@@ -1,8 +1,9 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { View, ActivityIndicator, useColorScheme } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { useEffect, useState } from 'react';
+import { ThemeProvider as NavThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { ThemeProvider, useTheme } from '../lib/theme';
 import { initAuth, getUserSubgrids, getAuthUser } from '../lib/api';
 import { queryClient, queryKeys } from '../lib/queryClient';
@@ -14,16 +15,26 @@ import { QueryProvider } from '../contexts/QueryProvider';
 import IncomingCallOverlay from '../components/IncomingCallOverlay';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { NetworkIndicator } from '../components/NetworkIndicator';
+import { GradientBackground } from '../components/glass';
 
 const RootStack = () => {
     const { colors, mode } = useTheme();
 
+    const navTheme = {
+        ...(mode === 'dark' ? DarkTheme : DefaultTheme),
+        colors: {
+            ...(mode === 'dark' ? DarkTheme.colors : DefaultTheme.colors),
+            background: 'transparent',
+        },
+    };
+
     return (
-        <>
+        <NavThemeProvider value={navTheme}>
+        <GradientBackground style={{ flex: 1 }}>
             <Stack
                 screenOptions={{
                     headerShown: false,
-                    contentStyle: { backgroundColor: colors.appBg },
+                    contentStyle: { backgroundColor: 'rgba(0,0,0,0)' },
                     animation: 'fade',
                 }}
             >
@@ -34,11 +45,14 @@ const RootStack = () => {
                 <Stack.Screen name="setup" />
                 <Stack.Screen name="stakeholder-signup" />
                 <Stack.Screen name="(main)" />
+                <Stack.Screen name="partner-dashboard" />
+                <Stack.Screen name="partner-apply" />
                 <Stack.Screen name="join" />
                 <Stack.Screen name="privacy-policy" />
             </Stack>
-            <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-        </>
+            <StatusBar style="light" />
+        </GradientBackground>
+        </NavThemeProvider>
     );
 };
 
@@ -50,7 +64,6 @@ export default function RootLayout() {
         Inter_700Bold,
     });
     const [authInitialized, setAuthInitialized] = useState(false);
-    const scheme = useColorScheme();
 
     // Initialize auth on app start and prefetch key data
     useEffect(() => {
@@ -89,8 +102,8 @@ export default function RootLayout() {
 
     if (!fontsLoaded || !authInitialized) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={scheme === 'dark' ? '#FFF' : '#111827'} />
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000000' }}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
             </View>
         );
     }

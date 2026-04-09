@@ -209,7 +209,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                                     color={isSelf ? 'rgba(255,255,255,0.8)' : colors.textMuted}
                                 />
                                 <Text
-                                    style={[styles.fileName, { color: isSelf ? '#FFFFFF' : colors.text }]}
+                                    style={[styles.fileName, { color: isSelf ? colors.primaryText : colors.text }]}
                                     numberOfLines={1}
                                 >
                                     {attachment.name || 'File'}
@@ -362,7 +362,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         badgeText: {
             fontSize: 9,
             fontWeight: '600',
-            color: '#FFFFFF',
+            color: colors.primaryText,
             textTransform: 'capitalize',
         },
         messageText: {
@@ -371,7 +371,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.text,
         },
         messageTextSelf: {
-            color: '#FFFFFF',
+            color: colors.primaryText,
         },
         timestampRow: {
             flexDirection: 'row',
@@ -395,7 +395,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         retryText: {
             fontSize: 11,
-            color: '#EF4444',
+            color: colors.error,
             fontWeight: '500',
         },
         deleteButton: {
@@ -448,7 +448,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: 'rgba(0, 0, 0, 0.05)',
+            backgroundColor: 'rgba(59,130,246,0.15)',
             justifyContent: 'center',
             alignItems: 'center',
         },

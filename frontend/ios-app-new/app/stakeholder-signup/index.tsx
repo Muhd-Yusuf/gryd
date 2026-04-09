@@ -10,14 +10,13 @@ import {
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sun, Moon } from 'lucide-react-native';
 import { validateStakeholderInvite, StakeholderBadge } from '../../lib/api';
 import { useTheme } from '../../lib/theme';
 
 export default function StakeholderServerDetailsScreen() {
     const router = useRouter();
     const params = useLocalSearchParams<{ token?: string; subgrid?: string }>();
-    const { colors, mode, toggleTheme } = useTheme();
+    const { colors } = useTheme();
     const styles = createStyles(colors);
 
     const [loading, setLoading] = useState(true);
@@ -118,13 +117,6 @@ export default function StakeholderServerDetailsScreen() {
                     <Text style={styles.logoText}>THE GRYD</Text>
                 </View>
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme}>
-                        {mode === 'dark' ? (
-                            <Sun color={colors.text} size={20} />
-                        ) : (
-                            <Moon color={colors.text} size={20} />
-                        )}
-                    </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.logoutButton}
                         onPress={() => router.replace('/login')}
@@ -207,7 +199,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         header: {
             flexDirection: 'row',
@@ -224,7 +216,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         logoContainer: {
             flexDirection: 'row',
@@ -237,7 +229,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.text,
         },
         logoutButton: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 16,
             paddingVertical: 8,
             borderRadius: 8,
@@ -268,7 +260,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         card: {
             width: '100%',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             padding: 32,
             alignItems: 'center',
@@ -282,10 +274,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         },
         serverCard: {
             width: '100%',
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             overflow: 'hidden',
             marginBottom: 24,
         },
@@ -308,11 +300,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 56,
             height: 56,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 3,
-            borderColor: colors.surface,
+            borderColor: colors.glassBorder,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.1,
@@ -378,9 +370,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             marginBottom: 8,
         },
         input: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
             paddingHorizontal: 16,
             paddingVertical: 16,
@@ -388,7 +380,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.text,
         },
         inputDisabled: {
-            backgroundColor: colors.appBg,
+            backgroundColor: colors.glassBg,
             color: colors.textMuted,
         },
         button: {

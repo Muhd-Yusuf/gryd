@@ -240,7 +240,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
     StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.appBg,
+            backgroundColor: 'transparent',
         },
         header: {
             flexDirection: 'row',
@@ -257,7 +257,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         themeToggle: {
             padding: 8,
             borderRadius: 20,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
         },
         logoContainer: {
             flexDirection: 'row',
@@ -277,7 +277,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             width: 10,
             height: 10,
             borderRadius: 5,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
         },
         stepActive: {
             backgroundColor: colors.primary,
@@ -285,10 +285,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         stepLine: {
             width: 20,
             height: 2,
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBorder,
         },
         logoutButton: {
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             paddingHorizontal: 16,
             paddingVertical: 8,
             borderRadius: 8,
@@ -310,7 +310,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
         card: {
             width: '100%',
             maxWidth: 450,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.glassBg,
             borderRadius: 16,
             padding: 32,
         },
@@ -335,9 +335,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             marginBottom: 8,
         },
         input: {
-            backgroundColor: colors.appBg,
+            backgroundColor: colors.glassBg,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.glassBorder,
             borderRadius: 12,
             paddingHorizontal: 16,
             paddingVertical: 16,
@@ -345,7 +345,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>['colors']) =>
             color: colors.text,
         },
         inputDisabled: {
-            backgroundColor: colors.border,
+            backgroundColor: colors.glassBg,
             color: colors.textMuted,
         },
         errorText: {
