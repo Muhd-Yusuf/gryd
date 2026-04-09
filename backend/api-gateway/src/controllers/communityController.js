@@ -747,6 +747,7 @@ exports.updateSubgrid = async (req, res) => {
             moderationRules,
             embedSettings,
             engagementSettings,
+            partnershipStatus,
         } = req.body;
 
         const subgrid = await getSubgrid(req, subgridId);
@@ -757,6 +758,9 @@ exports.updateSubgrid = async (req, res) => {
         const updates = {};
         if (name) {
             updates.name = name;
+        }
+        if (partnershipStatus && ['open', 'invite', 'closed'].includes(partnershipStatus)) {
+            updates.partnershipStatus = partnershipStatus;
         }
         if (slug) {
             updates.slug = slugify(slug);

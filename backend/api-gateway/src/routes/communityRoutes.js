@@ -138,6 +138,8 @@ router.post('/tenants/:tenantId/subgrids', requireUser, createSubgrid);
 router.get('/tenants/:tenantId/subgrids', requireUser, listTenantSubgrids);
 router.get('/subgrids/:subgridId', loadSubgrid, requireSubgridRead, getSubgridDetails);
 router.patch('/subgrids/:subgridId', requireUser, loadSubgrid, requireSubgridAdmin, updateSubgrid);
+router.patch('/subgrids/:subgridId/settings', requireUser, loadSubgrid, requireSubgridAdmin, updateSubgrid);
+router.get('/subgrids/:subgridId/settings', requireUser, loadSubgrid, requireSubgridAdmin, getSubgridDetails);
 router.post('/subgrids/:subgridId/members', requireUser, loadSubgrid, requireSubgridAdmin, addSubgridMember);
 router.get('/subgrids/:subgridId/members', requireUser, loadSubgrid, requireSubgridRead, listSubgridMembers);
 router.get('/subgrids/:subgridId/my-role', requireUser, getMySubgridRole);
@@ -270,5 +272,162 @@ router.post('/subgrids/:subgridId/presence', requireUser, loadSubgrid, requireSu
 router.get('/subgrids/:subgridId/presence', loadSubgrid, requireSubgridRead, getPresence);
 router.get('/subgrids/:subgridId/presence/:userId', loadSubgrid, requireSubgridRead, getUserPresence);
 router.delete('/subgrids/:subgridId/presence', requireUser, loadSubgrid, requireSubgridRead, setOffline);
+
+// ─── Partnership Forum ────────────────────────────────────────────────────────
+const PartnershipApplication = require('../models/PartnershipApplication');
+const mongoose = require('mongoose');
+
+// GET /partnership-forum/applications — CU admin: list apps for their subgrid
+// GET /partnership-forum/applications/all — super admin: list all apps
+router.get('/partnership-forum/applications/all', requireUser, async (req, res) => {
+    try {
+        const userRole = req.headers['x-user-role'];
+        if (!['admin', 'super_admin'].includes(userRole)) {
+            return res.status(403).json({ success: false, error: 'Super admin access required' });
+        }
+        const { status } = req.query;
+        const filter = status ? { status } : {};
+        const applications = await PartnershipApplication.find(filter).sort({ createdAt: -1 }).lean();
+        return res.json({ success: true, applications });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/partnership-forum/applications', requireUser, async (req, res) => {
+    try {
+        const userRole = req.headers['x-user-role'];
+        if (!['cu_admin', 'admin', 'super_admin'].includes(userRole)) {
+            return res.status(403).json({ success: false, error: 'CU admin access required' });
+        }
+        const { subgridId, status } = req.query;
+        const filter = {};
+        if (subgridId && mongoose.Types.ObjectId.isValid(subgridId)) {
+            filter.targetCuId = new mongoose.Types.ObjectId(subgridId);
+        }
+        if (status) filter.status = status;
+        const applications = await PartnershipApplication.find(filter).sort({ createdAt: -1 }).lean();
+        return res.json({ success: true, applications });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// PATCH /partnership-forum/applications/:id — approve/reject (CU admin or super admin)
+router.patch('/partnership-forum/applications/:id', requireUser, async (req, res) => {
+    try {
+        const userRole = req.headers['x-user-role'];
+        const userId = req.headers['x-user-id'];
+        if (!['cu_admin', 'admin', 'super_admin'].includes(userRole)) {
+            return res.status(403).json({ success: false, error: 'CU admin access required' });
+        }
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ success: false, error: 'Invalid application id' });
+        }
+        const { status, reviewNote } = req.body;
+        if (!status || !['approved', 'rejected', 'pending'].includes(status)) {
+            return res.status(400).json({ success: false, error: 'status must be approved, rejected or pending' });
+        }
+        const application = await PartnershipApplication.findById(req.params.id);
+        if (!application) return res.status(404).json({ success: false, error: 'Application not found' });
+        application.status = status;
+        if (reviewNote !== undefined) application.reviewNote = reviewNote;
+        application.reviewedBy = userId && mongoose.Types.ObjectId.isValid(userId) ? userId : null;
+        application.reviewedAt = new Date();
+        await application.save();
+        return res.json({ success: true, data: application });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /partnership-forum/communities — list all subgrids (any partnershipStatus, vendor sees open ones highlighted)
+router.get('/partnership-forum/communities', requireUser, async (req, res) => {
+    try {
+        const Subgrid = require('../models/Subgrid');
+        const subgrids = await Subgrid.find({ status: 'active' })
+            .select('name description logoUrl partnershipStatus location memberCount')
+            .sort({ name: 1 })
+            .lean();
+
+        const communities = subgrids.map(s => ({
+            id: s._id,
+            name: s.name || 'Unnamed Community',
+            description: s.description || '',
+            logoUrl: s.logoUrl || '',
+            partnershipStatus: s.partnershipStatus || 'closed',
+            location: s.location || '',
+            memberCount: s.memberCount || 0,
+        }));
+
+        return res.json({ success: true, communities });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /partnership-forum/my-applications — vendor's own submitted applications
+router.get('/partnership-forum/my-applications', requireUser, async (req, res) => {
+    try {
+        const userId = req.headers['x-user-id'];
+        const applications = await PartnershipApplication.find({ applicantUserId: userId })
+            .sort({ createdAt: -1 })
+            .lean();
+        return res.json({ success: true, applications });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST /partnership-forum/apply — vendor submits a partnership application to a CU
+router.post('/partnership-forum/apply', requireUser, async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        const userId = req.headers['x-user-id'];
+        const { businessName, contactEmail, contactName, website, businessType, pitch, targetCuId } = req.body;
+
+        if (!businessName || !contactEmail || !targetCuId) {
+            return res.status(400).json({ success: false, error: 'businessName, contactEmail and targetCuId are required' });
+        }
+        if (!mongoose.Types.ObjectId.isValid(targetCuId)) {
+            return res.status(400).json({ success: false, error: 'Invalid targetCuId' });
+        }
+
+        // Check CU accepts applications
+        const Subgrid = require('../models/Subgrid');
+        const subgrid = await Subgrid.findById(targetCuId).lean();
+        if (!subgrid) {
+            return res.status(404).json({ success: false, error: 'Community not found' });
+        }
+        if (subgrid.partnershipStatus !== 'open') {
+            return res.status(403).json({ success: false, error: 'This community is not accepting partner applications.' });
+        }
+
+        // Prevent duplicate pending applications
+        const existing = await PartnershipApplication.findOne({
+            applicantUserId: userId,
+            targetCuId,
+            status: 'pending',
+        }).lean();
+        if (existing) {
+            return res.status(409).json({ success: false, error: 'You already have a pending application to this community.' });
+        }
+
+        const application = new PartnershipApplication({
+            applicantUserId: userId,
+            businessName,
+            contactEmail,
+            contactName,
+            website,
+            businessType,
+            pitch,
+            targetCuId,
+        });
+        await application.save();
+        return res.status(201).json({ success: true, data: application });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 module.exports = router;

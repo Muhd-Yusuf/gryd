@@ -1116,3 +1116,42 @@ exports.suspendTeamMember = async (req, res) => {
         return res.status(500).json({ message: 'Failed to update team member status' });
     }
 };
+
+/**
+ * Update a user's role
+ * PATCH /api/super-admin/users/:userId/role
+ */
+exports.updateUserRole = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { role } = req.body;
+
+        if (!mongoose.isValidObjectId(userId)) {
+            return res.status(400).json({ message: 'Invalid user id' });
+        }
+
+        const allowedRoles = ['member', 'stakeholder', 'admin', 'super_admin'];
+        if (!role || !allowedRoles.includes(role)) {
+            return res.status(400).json({ message: `role must be one of: ${allowedRoles.join(', ')}` });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            userId,
+            { role, ...(role !== 'stakeholder' ? { stakeholderBadge: null } : {}) },
+            { new: true, select: '-password' }
+        );
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        return res.json({
+            success: true,
+            message: `User role updated to ${role}`,
+            data: { _id: user._id, email: user.email, role: user.role },
+        });
+    } catch (error) {
+        console.error('[superAdmin.updateUserRole] Error:', error.message);
+        return res.status(500).json({ message: 'Failed to update user role' });
+    }
+};

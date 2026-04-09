@@ -125,6 +125,17 @@ const mediaRoutes = require('./routes/mediaRoutes');
 app.use('/api/media', mediaRoutes);
 const notificationRoutes = require('./routes/notificationRoutes');
 app.use('/api/notifications', notificationRoutes);
+const marketplaceRoutes = require('./routes/marketplace');
+app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/community/marketplace', marketplaceRoutes); // communityGet('/marketplace/...')
+const revshareRoutes = require('./routes/revshare');
+app.use('/api/revshare', revshareRoutes);
+app.use('/api/community/revshare', revshareRoutes);       // communityGet('/revshare/...')
+const partnershipApplicationsRoutes = require('./routes/partnershipApplications');
+app.use('/api/partnership-applications', partnershipApplicationsRoutes);
+app.use('/api/community/partnership-applications', partnershipApplicationsRoutes); // communityGet('/partnership-applications/...')
+const walletRoutes = require('./routes/wallet');
+app.use('/api/wallet', walletRoutes);
 
 const webDistPath = path.resolve(__dirname, '../../../frontend/web-app/dist');
 const expoDistPath = path.resolve(__dirname, '../../../frontend/ios-app-new/dist');

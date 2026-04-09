@@ -17,6 +17,7 @@ const {
     inviteTeamMember,
     deleteTeamMember,
     suspendTeamMember,
+    updateUserRole,
 } = require('../controllers/superAdminController');
 const { attachUserContext, requireUser } = require('../middleware/authMiddleware');
 
@@ -78,6 +79,7 @@ router.patch('/config', requireSuperAdmin, updateConfiguration);
 // Users management - super_admin only
 router.get('/users', requireSuperAdmin, getUsers);
 router.post('/users/invite', requireSuperAdmin, inviteUser);
+router.patch('/users/:userId/role', requireSuperAdmin, updateUserRole);
 
 // Team Members management - super_admin only
 router.get('/team', requireAdmin, getTeamMembers); // Both can view team

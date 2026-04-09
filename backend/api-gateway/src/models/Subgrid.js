@@ -145,6 +145,21 @@ const subgridSchema = new mongoose.Schema({
             default: true,
         },
     },
+    // Partnership settings — controls whether vendors can apply to partner with this CU
+    partnershipStatus: {
+        type: String,
+        enum: ['open', 'invite', 'closed'],
+        default: 'closed',
+    },
+    location: {
+        type: String,
+        default: '',
+        trim: true,
+    },
+    memberCount: {
+        type: Number,
+        default: 0,
+    },
     // Invite code for members to join this CU community
     inviteCode: {
         type: String,
