@@ -1,0 +1,14 @@
+node_modules/
+ios/
+android/
+.expo/
+dist/
+web-build/
+test-export/
+*.apk
+*.aab
+*.orig.*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
