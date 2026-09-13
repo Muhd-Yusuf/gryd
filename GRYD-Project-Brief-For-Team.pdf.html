@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page { size: A4; margin: 0.8in; }
+body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5; color: #111; }
+h1 { font-size: 24pt; text-align: center; margin-bottom: 4pt; }
+h2 { font-size: 16pt; margin-top: 24pt; border-bottom: 2px solid #111; padding-bottom: 4pt; }
+h3 { font-size: 13pt; margin-top: 16pt; }
+p { margin-bottom: 8pt; text-align: justify; }
+ul { margin-bottom: 8pt; padding-left: 24pt; }
+li { margin-bottom: 4pt; }
+.subtitle { text-align: center; font-size: 14pt; color: #444; margin-bottom: 24pt; }
+table { width: 100%; border-collapse: collapse; margin: 12pt 0; font-size: 11pt; }
+th, td { border: 1pt solid #999; padding: 6pt 8pt; text-align: left; }
+th { background: #f0f0f0; font-weight: bold; }
+.section-label { font-size: 10pt; color: #888; text-transform: uppercase; letter-spacing: 1pt; margin-bottom: 2pt; }
+hr { border: none; border-top: 1px solid #ccc; margin: 20pt 0; }
+</style>
+</head>
+<body>
+
+<h1>THE GRYD</h1>
+<div class="subtitle">Project Brief for the Development Team</div>
+
+<hr>
+
+<h2>What is GRYD?</h2>
+
+<p>GRYD is a <strong>white-labeled community and member engagement platform built specifically for credit unions</strong>. Think of it as a private, branded version of Discord or Slack, but designed for credit union members instead of gamers or office workers.</p>
+
+<p>A credit union signs up with GRYD. Their members get a mobile app (iOS and Android) and web access that is branded to look like the credit union's own platform. Inside, members can chat, join channels, attend events, engage with content, message each other, and interact with local businesses (stakeholders/vendors). The credit union's admin team manages everything through an admin dashboard.</p>
+
+<p>The key insight: credit unions are built on community, but they have zero digital community infrastructure. Members only interact with their credit union to check balances or apply for loans. GRYD gives them a reason to engage every day.</p>
+
+<h2>How Credit Unions Are Involved</h2>
+
+<p>Credit unions are the <strong>customers</strong>. They are the ones paying for GRYD. Each credit union gets their own isolated instance of the platform with their own branding, their own members, and their own data.</p>
+
+<p>The relationship works like this:</p>
+
+<ul>
+    <li><strong>James (the client)</strong> is building GRYD as a company that sells to credit unions</li>
+    <li>Each credit union that signs up becomes a <strong>tenant</strong> on the platform</li>
+    <li>The credit union's staff become <strong>CU Admins</strong> who manage their community</li>
+    <li>The credit union's members become <strong>users</strong> of the app</li>
+    <li>Local businesses that want to reach CU members become <strong>stakeholders/vendors</strong></li>
+</ul>
+
+<p>James does not sell to individual people. He sells to credit union institutions. One sale to a credit union with 50,000 members means 50,000 users overnight.</p>
+
+<h2>User Roles in the System</h2>
+
+<table>
+<tr><th>Role</th><th>Who They Are</th><th>What They Do</th></tr>
+<tr><td><strong>Super Admin</strong></td><td>James / GRYD team</td><td>Manages the entire platform, creates tenants, oversees all credit unions</td></tr>
+<tr><td><strong>CU Admin</strong></td><td>Credit union staff</td><td>Manages their credit union's community: channels, members, content moderation, events, settings</td></tr>
+<tr><td><strong>Stakeholder / Vendor</strong></td><td>Local businesses</td><td>Posts products/services, engages with CU members, participates in marketplace</td></tr>
+<tr><td><strong>Member</strong></td><td>Credit union members</td><td>Joins channels, chats, attends events, browses marketplace, earns badges</td></tr>
+</table>
+
+<h2>Platform Architecture</h2>
+
+<table>
+<tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr>
+<tr><td>Mobile App</td><td>React Native (Expo)</td><td>iOS and Android app for members, CU admins, and stakeholders</td></tr>
+<tr><td>Web App</td><td>Expo Web (deployed on Vercel)</td><td>Same app accessible via browser at thegryd.io</td></tr>
+<tr><td>Backend API</td><td>Node.js / Express</td><td>REST API gateway that handles all business logic</td></tr>
+<tr><td>Database</td><td>MongoDB</td><td>Stores users, messages, channels, events, posts, settings</td></tr>
+<tr><td>Real-time</td><td>WebSocket (Socket.IO)</td><td>Live messaging, typing indicators, presence (online/offline)</td></tr>
+<tr><td>Media</td><td>Cloudinary</td><td>Image and file uploads</td></tr>
+<tr><td>Voice/Video</td><td>Agora</td><td>Voice channels and video calls</td></tr>
+<tr><td>Push Notifications</td><td>Expo Notifications</td><td>Message alerts, call notifications, event reminders</td></tr>
+<tr><td>Auth</td><td>JWT tokens</td><td>Login, signup, OTP verification, session management</td></tr>
+</table>
+
+<h2>Every Feature and Page in the App</h2>
+
+<h3>Member Dashboard (app/(main)/index.tsx)</h3>
+<p>The main screen members see after logging in. Contains:</p>
+<ul>
+    <li>Channel list for the credit union's community (text channels, announcement channels)</li>
+    <li>Content feed with posts from admins, stakeholders, and members</li>
+    <li>Real-time messaging in channels with text, images, files, voice messages</li>
+    <li>Like, comment, and reshare on posts</li>
+    <li>Pull-to-refresh for new content</li>
+    <li>Delivery status icons on sent messages (sending, sent, failed with tap-to-retry)</li>
+    <li>Typing indicators when others are typing</li>
+    <li>Infinite scroll for message history</li>
+</ul>
+
+<h3>CU Admin Dashboard (components/CreditUnionAdminScreen.tsx)</h3>
+<p>The main screen for credit union administrators. This is the largest and most complex screen in the app (11,000+ lines). Contains:</p>
+<ul>
+    <li><strong>Channel Management:</strong> Create, edit, delete text/announcement/voice channels. Organize into categories.</li>
+    <li><strong>Member Management:</strong> View all members, assign roles, ban/mute/suspend members, manage permissions</li>
+    <li><strong>Content Feed:</strong> Post announcements, articles, media. Pin important messages.</li>
+    <li><strong>Content Moderation:</strong> Automated word filters, manual review queue, prohibited words list, severity levels</li>
+    <li><strong>Events:</strong> Create and manage events and announcements with dates, locations, descriptions</li>
+    <li><strong>Server Settings:</strong> Change community name, logo, banner, description</li>
+    <li><strong>Invite System:</strong> Generate invite links and codes for new members</li>
+    <li><strong>Stakeholder Management:</strong> Invite vendors, assign badges (Gold/Silver/Bronze), manage their access</li>
+    <li><strong>Custom Roles:</strong> Create roles with specific permissions (can post, can moderate, can invite, etc.)</li>
+    <li><strong>Sub-communities (Subgrids):</strong> Create separate communities within the main CU community</li>
+    <li><strong>Voice Channels:</strong> Host live voice/video calls with mute, camera, and speaker controls</li>
+    <li><strong>Privacy Settings:</strong> Control member visibility, profile privacy, data sharing</li>
+    <li><strong>Notification Settings:</strong> Configure push notification preferences</li>
+    <li><strong>Engagement Settings:</strong> Leaderboard configuration, points system, badges</li>
+    <li><strong>Moderation Dashboard:</strong> Review flagged content, take action (warn, mute, ban)</li>
+    <li><strong>Theme Toggle:</strong> Light/dark mode</li>
+</ul>
+
+<h3>Direct Messages (app/(main)/direct-messages/index.tsx + components/DirectMessagesScreen.tsx)</h3>
+<ul>
+    <li>One-on-one private messaging between any two users</li>
+    <li>Text, images, files, voice messages</li>
+    <li>Delivery status and typing indicators</li>
+    <li>Online/offline presence indicators</li>
+    <li>Conversation list with last message preview</li>
+</ul>
+
+<h3>Sub-Channel View (app/(main)/sub-channel.tsx)</h3>
+<ul>
+    <li>Dedicated view for individual channels within a subgrid</li>
+    <li>Full messaging with all media types</li>
+    <li>Message pinning and moderation controls</li>
+    <li>Voice message recording and playback</li>
+</ul>
+
+<h3>Profile Page (app/(main)/profile.tsx)</h3>
+<ul>
+    <li>User profile with avatar, name, bio</li>
+    <li>Edit profile information</li>
+    <li>View engagement stats and badges</li>
+</ul>
+
+<h3>Top Contributors / Leaderboard (app/(main)/top-contributors.tsx)</h3>
+<ul>
+    <li>Ranked list of most active community members</li>
+    <li>Points breakdown by activity type</li>
+    <li>Badge showcase</li>
+</ul>
+
+<h3>Privacy Settings (app/(main)/privacy-settings.tsx)</h3>
+<ul>
+    <li>Control who can see your profile</li>
+    <li>Control who can send you direct messages</li>
+    <li>Visibility toggles for online status, activity, etc.</li>
+</ul>
+
+<h3>Authentication Pages</h3>
+<ul>
+    <li><strong>Login:</strong> Email/phone + OTP verification</li>
+    <li><strong>Signup Member:</strong> Join a credit union community with invite code</li>
+    <li><strong>Signup Stakeholder:</strong> Register as a vendor/business</li>
+    <li><strong>Super Admin Signup:</strong> Protected registration for platform administrators</li>
+    <li><strong>Join via Link:</strong> Accept invite link to join a specific community (app/join/[token].tsx)</li>
+</ul>
+
+<h3>Incoming Calls (components/IncomingCallOverlay.tsx)</h3>
+<ul>
+    <li>Full-screen overlay when someone calls you</li>
+    <li>Ringtone audio playback</li>
+    <li>Accept/decline buttons</li>
+    <li>Caller information display</li>
+</ul>
+
+<h2>Key Backend Endpoints</h2>
+
+<table>
+<tr><th>Area</th><th>What It Handles</th></tr>
+<tr><td>Auth Routes</td><td>Login, signup (member, stakeholder, super admin), OTP verify, password change, token refresh, logout</td></tr>
+<tr><td>Community Routes</td><td>CRUD for subgrids, channels, posts, messages, events, categories, members, roles, invites, moderation, privacy</td></tr>
+<tr><td>WebSocket Service</td><td>Real-time messaging, typing indicators, presence tracking, call signaling</td></tr>
+</table>
+
+<h2>Key Middleware</h2>
+
+<ul>
+    <li><strong>Auth Middleware:</strong> JWT token verification on all protected routes</li>
+    <li><strong>Subgrid Access:</strong> Ensures users can only access communities they belong to</li>
+    <li><strong>Privacy Middleware:</strong> Enforces member visibility and privacy settings</li>
+    <li><strong>Rate Limiting:</strong> Protects against brute force on signup/login endpoints</li>
+</ul>
+
+<h2>What is Being Built Next</h2>
+
+<table>
+<tr><th>Feature</th><th>Status</th><th>Description</th></tr>
+<tr><td>Marketplace</td><td>Planned</td><td>Stakeholders list products, members purchase. Stripe Connect for card payments, crypto wallet (USDC on Polygon) as optional payment</td></tr>
+<tr><td>Embed SDK</td><td>Planned</td><td>API/SDK so credit unions can embed GRYD community features directly into their existing mobile banking app</td></tr>
+<tr><td>AI Insights</td><td>Future</td><td>Engagement recommendations, member sentiment analysis, predictive retention, benchmarking across CUs</td></tr>
+<tr><td>Glassmorphism UI</td><td>In Progress</td><td>iOS 26-style frosted glass design for CU Admin dashboard (currently testing)</td></tr>
+</table>
+
+<h2>Business Model (How James Makes Money)</h2>
+
+<ul>
+    <li><strong>Monthly retainer per credit union</strong> (not per user). Flat fee based on CU size.</li>
+    <li><strong>No per-seat pricing.</strong> If 50,000 members join, the price stays the same.</li>
+    <li><strong>Managed service included:</strong> Onboarding, training, monthly optimization reports, ongoing support.</li>
+    <li><strong>Future revenue:</strong> Marketplace transaction fees, premium analytics, custom integrations.</li>
+    <li><strong>Positioning:</strong> GRYD is sold as a "member engagement solution," not as software. James is not selling a tool. He is selling the outcome of engaged, loyal members.</li>
+</ul>
+
+<h2>Quick Reference: File Structure</h2>
+
+<table>
+<tr><th>Path</th><th>What It Contains</th></tr>
+<tr><td>frontend/ios-app-new/</td><td>The entire React Native (Expo) app: mobile + web</td></tr>
+<tr><td>frontend/ios-app-new/app/</td><td>All screens/pages (Expo Router file-based routing)</td></tr>
+<tr><td>frontend/ios-app-new/components/</td><td>Reusable components (CU Admin, DM screen, overlays, skeletons)</td></tr>
+<tr><td>frontend/ios-app-new/contexts/</td><td>React contexts (WebSocket, Notifications)</td></tr>
+<tr><td>frontend/ios-app-new/hooks/</td><td>React Query hooks for all API calls</td></tr>
+<tr><td>frontend/ios-app-new/lib/</td><td>Utilities (API client, theme, haptics, message queue)</td></tr>
+<tr><td>backend/api-gateway/</td><td>Node.js/Express backend</td></tr>
+<tr><td>backend/api-gateway/src/controllers/</td><td>Business logic (auth, community, billing)</td></tr>
+<tr><td>backend/api-gateway/src/middleware/</td><td>Auth, privacy, rate limiting, access control</td></tr>
+<tr><td>backend/api-gateway/src/routes/</td><td>API route definitions</td></tr>
+<tr><td>backend/api-gateway/src/services/</td><td>WebSocket service</td></tr>
+</table>
+
+<hr>
+<p style="text-align: center; color: #888; font-size: 10pt;">Prepared for the GRYD development team. Confidential.</p>
+
+</body>
+</html>
